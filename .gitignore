@@ -1,0 +1,12 @@
+bin/
+obj/
+dist/
+logs/
+.vs/
+*.user
+*.suo
+TestResults/
+graphify-out/cache/
+graphify-out/*.json
+graphify-out/*.html
+DONE.flag.tmp

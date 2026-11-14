@@ -20,6 +20,7 @@ One line each: decision — why.
   settings class and migration for every small module option.
 - No NuGet packages in the app so far. Tests: xunit, xunit.runner.visualstudio, Microsoft.NET.Test.Sdk (standard test stack).
 - `logs/` is git-ignored — it holds the owner's run logs and my verification screenshots (`logs/shots`).
+- graphify: the preinstalled CLI shim was broken and pip could not build it on Python 3.15, so it was reinstalled with `uv tool install graphifyy --python 3.12`. Graph is rebuilt with `graphify update .` (AST only, no LLM, seconds); only `GRAPH_REPORT.md` is committed, the rest of `graphify-out/` is regenerated locally. `.graphifyignore` excludes bin/obj/dist/logs.
 
 ## Performance measurements
 | When | State | Working set | Private | CPU |

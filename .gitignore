@@ -6,7 +6,6 @@ logs/
 *.user
 *.suo
 TestResults/
-graphify-out/cache/
-graphify-out/*.json
-graphify-out/*.html
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
 DONE.flag.tmp

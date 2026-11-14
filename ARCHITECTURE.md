@@ -23,7 +23,8 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   - `.Content.cs` — pill (`Pill` = `Core/PillQueue`; primary view + compact secondary), tabs (`AddTab(TabInfo)`,
     `RemoveTab`, `SelectTab`, `RequestTab`; views created lazily, `ITabView.OnShown/OnHidden`), "more" overlay, `ShowToast`.
   - `.Snapshot.cs` — `--snapshot <state|all> <out.png|dir> [--theme] [--lang] [--scale]`; `SnapshotStates` registry.
-  Public members used by modules: `Pill`, `Hotkeys`, `Watcher`, `IdleView`, tab API, `ShowToast`, `ExpandedChanged`.
+  Public members used by modules: `Pill`, `Hotkeys`, `Watcher`, `IdleView`, tab API (`TabViewFor`), `ShowToast`,
+  `Pulse`, `ExpandedChanged`. `PillItem.HoverExpands = false` for banners with buttons.
 - **Native** (`Native.cs`) — P/Invoke declarations only.
 
 ## Core (`src/Isle/Core`)
@@ -62,6 +63,12 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **Lyrics** (`lyrics`, `Modules/Lyrics`) — `LyricsService` (LRCLIB get→search, memory + disk cache in
   `%AppData%\Isle\lyrics\<hash>.json`, lazy HttpClient disposed after 2 min idle, `ILyricsHttp` seam), `Lrc` parser,
   `LyricsTracker` (lyrics for the current track, fetched only on demand).
+- **Timers & reminders** (`timers`, `Modules/Timers`, `Modules/Reminders`) — `TimersController` (all operations,
+  `Submit(text)` → timer or reminder, persistence to `timers.json` / `reminders.json`, `FormatDue/FormatRepeat`),
+  `TimersModule` (wake-up timer aimed at `NextWake`, pill item `timer`, banners `t:<id>` / `r:<id>`, sound + pulse,
+  publishes `TimerFinished`). Pure logic: `DurationParser`, `TimerBook` (+ stopwatch), `ReminderParser` (EN/UK rules),
+  `RepeatRule`, `ReminderBook`. Views: `Views/Timers/TimersView`, `TimerPill` (+ `Ring`), `TimerDoneBanner`, `ReminderBanner`.
+  The command bar (M8) uses `Controller.AddTimer` / `AddReminder`.
 - **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
   `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
   Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.

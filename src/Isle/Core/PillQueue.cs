@@ -36,6 +36,9 @@ public sealed class PillItem
     /// <summary>Banners (taller than the plain pill, or flagged) never share the pill.</summary>
     public bool IsBanner { get; init; }
 
+    /// <summary>False for banners with their own buttons: hovering must not expand the island (click still does).</summary>
+    public bool HoverExpands { get; init; } = true;
+
     /// <summary>Slide out from the screen edge to show this item even in auto-hide mode.</summary>
     public bool Peek { get; init; }
 

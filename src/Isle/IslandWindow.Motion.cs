@@ -107,6 +107,24 @@ public partial class IslandWindow
         PanelScale.ScaleX = PanelScale.ScaleY = scale;
     }
 
+    /// <summary>Attention pulse: the shape bounces <paramref name="times"/> times (finished timer, reminder).</summary>
+    public void Pulse(int times = 3)
+    {
+        if (_snapshotMode) return;
+        for (var i = 0; i < times; i++)
+        {
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30 + 420 * i) };
+            t.Tick += (_, _) =>
+            {
+                t.Stop();
+                _w.Velocity += 260;
+                _h.Velocity += 70;
+                SetTargets();
+            };
+            t.Start();
+        }
+    }
+
     static void SetShadow(RectangleGeometry g, Rect rect, double r, double inflate, double dy)
     {
         var s = rect;

@@ -66,7 +66,7 @@ public partial class IslandWindow
             _outsideSince = 0;
             if (_insideSince == 0) _insideSince = now;
             _sticky = false;
-            if (!_expanded && now - _insideSince >= HoverIntentMs) Expand();
+            if (!_expanded && now - _insideSince >= HoverIntentMs && Pill.Primary?.HoverExpands != false) Expand();
             return;
         }
 

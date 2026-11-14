@@ -46,6 +46,17 @@ One line each: decision — why.
 - Equalizer animates at 20 fps (each frame repaints the whole layered window); measured cost while music plays collapsed: ~0.35 % of the machine.
 - Live testing without sound: `scratch/fake-session.ps1` (outside the repo) creates a real SMTC session with a silent WAV at volume 0 and display properties set on a `MediaPlaybackItem`.
 
+## M3
+- Timers and reminders are one module (`timers`) with one tab — they share the input box ("10m" starts a timer, "tomorrow 9:00 …" sets a reminder), so separate modules would only duplicate plumbing.
+- Timer input: a bare number means minutes ("90" = 1 h 30 min), "1:30" means m:ss, "1:02:03" h:mm:ss; trailing words become the label ("25m focus").
+- No polling: one DispatcherTimer aimed at the next end/due moment (capped at 30 min, re-checked on resume from sleep and on system time change); a 1 s display tick only while a countdown is running.
+- Absolute end/due timestamps in `timers.json` / `reminders.json`; anything that ended while Isle was closed is shown as finished/fired at start.
+- Reminder parser: own table-driven regex rules (no NLP library), EN + UK, 60+ phrases tested at a fixed UTC clock. Defaults: date without a time → 09:00; "morning" 09:00, "afternoon" 14:00, "evening" 19:00, "tonight" 20:00, "night" 21:00; "at 5" without am/pm → the next of 05:00/17:00 (with a day given, hours ≤ 7 mean pm).
+- Ukrainian "за" is "in" only when nothing else fixes the time ("за 10 хвилин …"); with an explicit time it is ordinary text ("звіт за тиждень").
+- Finished-timer and reminder banners don't expand on hover (`PillItem.HoverExpands = false`) so their buttons can be clicked in the collapsed pill; clicking the banner background opens the tab.
+- Attention: `MessageBeep` (asterisk for timers, exclamation for reminders) + `IslandWindow.Pulse(3)` (velocity kicks on the shape springs); `TimerFinished` is published on the EventBus for the characters (M14).
+- Snooze moves the due time; "Done" on a repeating reminder advances it with `RepeatRule.Next` (wall-clock arithmetic in the local zone, DST-safe).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

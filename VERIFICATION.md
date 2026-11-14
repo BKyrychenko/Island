@@ -39,3 +39,11 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Lyrics: LRC parser, LRCLIB get→search fallback, caching (incl. not-found expiry), title cleaning | auto-test (17 tests) | ok |
 | Lyrics: live fetch + current line in pill | live (LRCLIB, real track metadata) | ok — correct line shown in time |
 | Lyrics view in the Music tab (synced, plain, not found, instrumental, error, off) | snapshot (`music-lyrics`, `music-lyrics-notfound`) | ok |
+| Timers: duration input formats, presets, labels, pause/resume/cancel, +1 min, stopwatch, survive restart | auto-test (TimerBook, DurationParser) + snapshot (`timers-tab`) | ok |
+| Timer in pill (ring + remaining), shared with music in the side slot | snapshot (`timer-pill`, `timer-shared`) + live | ok |
+| Timer finished: banner, sound, pulse ×3, Dismiss / +1 min | live (seeded timer, screenshot) + snapshot | banner ok; sound/pulse: manual-needed — start a 10 s timer (type `10s`), wait: a short system sound plays and the island bounces 3 times |
+| Reminder NL parser EN + UK (≥ 40 phrases) | auto-test (62 phrases + negatives) | ok |
+| Repeat rules (daily, weekly days, weekdays, monthly with clamping, every N days/hours/minutes) | auto-test | ok |
+| Reminder banner Done / Snooze 5 min / 1 h / Tomorrow; clickable without expanding | live (seeded reminder, real click on Done) | ok |
+| Missed reminders/timers fire at next start | auto-test + live (seeded files) | ok |
+| Reminders list / edit (loads the original phrase) / delete | snapshot + manual-needed | Open Timers tab, press the pencil on a reminder, change the time, Enter |

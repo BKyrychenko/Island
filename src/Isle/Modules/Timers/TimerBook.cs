@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Isle.Modules.Timers;
 
 /// <summary>One countdown. Times are absolute so timers survive collapse and restarts.</summary>
@@ -13,8 +15,8 @@ public sealed class TimerItem
     /// <summary>Set when it reached zero (and not yet dismissed).</summary>
     public DateTimeOffset? FinishedAt { get; set; }
 
-    public bool IsPaused => EndsAt is null && PausedRemaining is not null && FinishedAt is null;
-    public bool IsRunning => EndsAt is not null && FinishedAt is null;
+    [JsonIgnore] public bool IsPaused => EndsAt is null && PausedRemaining is not null && FinishedAt is null;
+    [JsonIgnore] public bool IsRunning => EndsAt is not null && FinishedAt is null;
 
     public TimeSpan Remaining(DateTimeOffset now) =>
         FinishedAt is not null ? TimeSpan.Zero
@@ -32,7 +34,7 @@ public sealed class StopwatchState
     public bool Active { get; set; }
     public TimeSpan Accumulated { get; set; }
     public DateTimeOffset? RunningSince { get; set; }
-    public bool IsRunning => RunningSince is not null;
+    [JsonIgnore] public bool IsRunning => RunningSince is not null;
     public TimeSpan Elapsed(DateTimeOffset now) => Accumulated + (RunningSince is { } s && now > s ? now - s : TimeSpan.Zero);
 }
 

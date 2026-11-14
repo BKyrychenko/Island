@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M0 Skeleton
 - [x] M1 Expand/collapse & shell (+ perf measurement)
 - [x] M2 Music + lyrics
-- [~] M3 Timers & reminders — logic done (DurationParser, TimerBook, ReminderParser EN+UK, RepeatRule, ReminderBook; 165 tests); UI next
+- [x] M3 Timers & reminders
 - [ ] M4 Notes
 - [ ] M5 Control Center
 - [ ] M6 Live events + pill priority queue (+ perf measurement)
@@ -21,19 +21,18 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [ ] M15 Polish & release
 
 ## Last action
-M2 complete: Media module (GSMTC, pill art + equalizer, track banner, Music tab with transport/seek/progress, art accent,
-missing-art gradient, marquee) and Lyrics module (LRCLIB client, LRC parser, disk cache, lyrics view, optional lyric line
-in the pill). 69 tests green. Verified live with a real (silent) SMTC session: banner, pill, tab, synced lyric in pill.
-Snapshots in logs/shots/m2 (all states × themes × languages).
+M3 complete: timers (input + presets + labels, pause/resume/cancel, +1 min, stopwatch, pill ring, finished banner with
+sound + pulse) and reminders (EN/UK parser, repeats, banner with Done/Snooze, list/edit/delete, missed at start).
+165 tests green. Live-verified with seeded timers.json/reminders.json: pill, done banner, reminder banner, real click on Done.
+Snapshots in logs/shots/m3.
 
 ## Next step
-Start M3 (Timers & reminders): `Modules/Timers` — timer model with absolute end timestamps + injectable clock (tests),
-duration parser (`90`, `1:30`, `1h30m`, `45s`, `2m 30s`), presets 5/10/15/25/45, labels, pause/resume/cancel, stopwatch,
-persistence (timers.json), pill item (soonest timer + progress ring), finished state (pulse ×3, system sound, Done / +1 min).
-`Modules/Reminders` — NL parser EN+UK (≥40 phrases tested, table-driven), repeat rules, reminders.json, banner with
-Done / Snooze (5 min, 1 h, tomorrow), missed reminders fire at start, list/edit/delete in the tab. Tab "timers" Order 20.
-Live helpers (outside the repo, in `..\scratch`): `live-m1.ps1` (hover + idle perf), `live-m2.ps1` + `fake-session.ps1`
-(silent media session), `measure-play.ps1`.
+Start M4 (Notes): `Modules/Notes` — NotesStore (notes.json: id, title, folder, pinned, XAML FlowDocument text + plain
+shadow, created/updated; atomic save; corruption recovery; tests: CRUD, search, folders, pins), Notes tab: list with search
++ folder dropdown + pinned first, RichTextBox editor (Ctrl+B/I/U, bullets, numbered, checkbox items, 2 heading sizes),
+autosave debounced 500 ms, delete with 5-s undo toast (`IslandWindow.ShowToast`), quick-capture hotkey Win+Alt+N (new
+note, caret focused via `AcquireFocus`). Tab "notes" Order 30.
+Live helpers (outside the repo, `..\scratch`): live-m1/m2/m3.ps1, fake-session.ps1, measure-play.ps1.
 
 ## Known blockers
 - none

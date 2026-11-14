@@ -99,6 +99,12 @@ internal static partial class Native
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
 
+    public const uint MB_ICONASTERISK = 0x40, MB_ICONEXCLAMATION = 0x30;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool MessageBeep(uint uType);
+
     // ---- cursor / monitors / DPI ----
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }

@@ -70,7 +70,10 @@ public partial class IslandWindow
             PillPrimary.Content = null;
             PillSecondary.Content = null;
         }
-        _pillW = (primary?.Width ?? 120) + (secondary is null ? 0 : secondary.CompactWidth);
+        // the side slot gets its declared width, inset from the rounded end so its content is never clipped
+        PillSecondary.Width = secondary is null ? double.NaN : secondary.CompactWidth;
+        PillSecondary.Margin = secondary is null ? new Thickness(0) : new Thickness(0, 0, 8, 0);
+        _pillW = (primary?.Width ?? 120) + (secondary is null ? 0 : secondary.CompactWidth + 8);
         _pillH = primary?.Height ?? 32;
         PillLayer.Width = _pillW;
         PillLayer.Height = _pillH;
@@ -106,6 +109,9 @@ public partial class IslandWindow
     }
 
     public IReadOnlyList<TabInfo> TabList => _tabs;
+
+    /// <summary>The view of a tab if it has been created.</summary>
+    public FrameworkElement? TabViewFor(string id) => _views.GetValueOrDefault(id);
     public string? CurrentTab => _currentTab;
 
     /// <summary>Asks for this tab to be shown the next time the island expands (e.g. Music after a track change).</summary>

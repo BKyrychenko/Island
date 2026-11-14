@@ -12,10 +12,18 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 ## Shell
 - **App** (`App.xaml.cs`) — start-up/shutdown, single instance (`Local\Isle.SingleInstance.*` mutex), global exception
   logging, `ToggleIsland()`, `Quit()`, repositions the island on resume from sleep.
-- **IslandWindow** (`IslandWindow.xaml(.cs)`) — the only always-present window. Fixed size (`BaseWidth×BaseHeight` × UI
-  scale), transparent, topmost, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, optional `WS_EX_TRANSPARENT` (click-through
-  setting). `Reposition()` puts it top-centre of the selected monitor in physical pixels; called on display/DPI/setting
-  changes. UI scale is a `LayoutTransform` on the root grid.
+- **IslandWindow** (`IslandWindow.xaml(.cs)` + partials) — the only always-present window. Fixed size (`BaseWidth×BaseHeight`
+  × UI scale), transparent, topmost, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, optional `WS_EX_TRANSPARENT` (click-through).
+  `Reposition()` puts it top-centre of the selected monitor (physical pixels). Partials:
+  - `.Motion.cs` — springs (`Core/Spring`) for width/height/expansion/edge-shift stepped on `CompositionTarget.Rendering`
+    only while moving; `ApplyShape()` writes the clip, shadow paths and content opacities (no layout, no window resize).
+  - `.Hover.cs` — 30 ms cursor timer (runs only while engaged), hover intent/leave delay, `Expand(tab, sticky)`,
+    `Collapse()`, `Toggle()`, `HoldOpen/ReleaseOpen(key)`, keyboard focus hand-over (`AcquireFocus`, `PasteTarget`),
+    edge auto-hide, `SetHidden(reason, bool)` (user / fullscreen / excluded), foreground checks.
+  - `.Content.cs` — pill (`Pill` = `Core/PillQueue`; primary view + compact secondary), tabs (`AddTab(TabInfo)`,
+    `RemoveTab`, `SelectTab`, `RequestTab`; views created lazily, `ITabView.OnShown/OnHidden`), "more" overlay, `ShowToast`.
+  - `.Snapshot.cs` — `--snapshot <state|all> <out.png|dir> [--theme] [--lang] [--scale]`; `SnapshotStates` registry.
+  Public members used by modules: `Pill`, `Hotkeys`, `Watcher`, `IdleView`, tab API, `ShowToast`, `ExpandedChanged`.
 - **Native** (`Native.cs`) — P/Invoke declarations only.
 
 ## Core (`src/Isle/Core`)
@@ -30,9 +38,24 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   (`Sync()`), stopped/disposed when disabled; a throwing module becomes `Failed` without affecting others.
 - **Screens** — monitor enumeration (physical pixels, DPI scale); `Selected(index)`.
 - **Autostart** — `HKCU\...\Run` value `Isle`.
+- **Theme** — Dark/Light/System palette as brushes in `Application.Resources` (`BgBrush`, `FgBrush`, `FgDimBrush`,
+  `SurfaceBrush`, `AccentBrush`, …), `Apply()` swaps them live; `SetAccent(color)` animates the accent (album art).
+- **Spring** — damped spring value used by the island's motion.
+- **PillQueue / PillItem / PillPriority** — what the collapsed pill shows; pure `Select()` rule (tested).
+- **TabInfo / ITabView** — tab registration record and the shown/hidden callbacks for tab views.
+- **ForegroundWatcher** — `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`; `LastExternal` (paste target), `IsFullscreen`, `ProcessName`.
 - **Memory** — `TrimSoon()`: GC + `EmptyWorkingSet` after start-up and after heavy features.
 
+## Styles / Views
+- `Styles/Theme.xaml` — the flat control set (FlatButton, AccentButton, GhostButton, IconButton, Switch, Chip, slider,
+  FlatTextBox, scrollbars, FlatList, TabButton, Card, text styles). `Styles/Icons.xaml` — original 24×24 line icons.
+- `Views/Icon` (draws an icon geometry), `Views/TabBar` (tab strip + sliding indicator + more + gear), `Views/IdlePillView`
+  (optional clock, left/right slots for mascot and weather).
+
 ## Modules (`src/Isle/Modules`)
+- **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
+  `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
+  Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.
 - **Tray** (`tray`) — notification-area icon (`Shell_NotifyIcon`, hidden message window), native menu:
   Show/Hide, Settings, Start with Windows, Quit. Icon drawn by `TrayIcon.Render`. Re-adds itself on `TaskbarCreated`.
 

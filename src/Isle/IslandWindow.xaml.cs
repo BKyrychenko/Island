@@ -1,30 +1,50 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Isle.Core;
+using Isle.Modules.Hotkeys;
 
 namespace Isle;
 
 /// <summary>
 /// The island: a fixed-size, transparent, topmost, non-activating tool window at the top-centre of the
-/// selected monitor. The window never resizes during animation; only the inner shape changes.
+/// selected monitor. The window never resizes during animation; only the inner shape (a clip) changes.
+/// Split into partials: this file (window + native plumbing), Motion (springs/shape), Hover (pointer, focus,
+/// visibility rules) and Content (pill queue, tabs, toast).
 /// </summary>
 public partial class IslandWindow : Window
 {
-    /// <summary>Window size at 100% UI scale (DIPs): room for the largest expanded state plus shadow.</summary>
+    /// <summary>Window size at 100% UI scale (DIPs): room for the largest expanded state plus overshoot and shadow.</summary>
     public const double BaseWidth = 640, BaseHeight = 300;
+    public const double ExpandedWidth = 520, ExpandedHeight = 220, TopGap = 6, MaxRadius = 30;
+    const int EscHotkeyId = 0x3FF0;
 
     IntPtr _hwnd;
     HwndSource? _source;
+    readonly bool _snapshotMode;
+    DispatcherTimer? _housekeeping;
 
-    public IslandWindow()
-    {
-        InitializeComponent();
-        ApplyScale();
-        SourceInitialized += OnSourceInitialized;
-    }
-
+    public PillQueue Pill { get; } = new();
+    public HotkeyService Hotkeys { get; } = new();
+    public ForegroundWatcher Watcher { get; } = new();
     public IntPtr Handle => _hwnd;
+
+    /// <param name="snapshotMode">True for the --snapshot renderer: no hooks, timers or hover logic.</param>
+    public IslandWindow(bool snapshotMode = false)
+    {
+        _snapshotMode = snapshotMode;
+        InitializeComponent();
+        InitMotion();
+        InitContent();
+        ApplyScale();
+        if (snapshotMode) return;
+
+        SourceInitialized += OnSourceInitialized;
+        InitHover();
+        Settings.Changed += OnSettingsChanged;
+        Theme.Changed += OnThemeChanged;
+    }
 
     void ApplyScale()
     {
@@ -41,9 +61,36 @@ public partial class IslandWindow : Window
         _source?.AddHook(WndProc);
         ApplyExStyle();
         Reposition();
+        Hotkeys.Attach(_hwnd);
+        Watcher.Changed += OnForegroundChanged;
+        Watcher.Start();
+        UpdateHousekeeping();
     }
 
-    /// <summary>Tool window (no taskbar/Alt+Tab), never activates; optionally fully click-through.</summary>
+    void OnSettingsChanged(string what)
+    {
+        try
+        {
+            Strings.Language = Settings.Current.Language;
+            Theme.Apply();
+            if (Math.Abs(UiScale.ScaleX - Settings.Current.Scale) > 0.001)
+            {
+                ApplyScale();
+                Dispatcher.BeginInvoke(Reposition, DispatcherPriority.Loaded);
+            }
+            else if (what is "Monitor" or "") Reposition();
+            ApplyExStyle();
+            UpdateIdlePill();
+            UpdateHousekeeping();
+            CheckForeground();
+            UpdateEdgeHide();
+        }
+        catch (Exception ex) { Logger.Error("apply settings", ex); }
+    }
+
+    void OnThemeChanged() => ApplyShape();
+
+    /// <summary>Tool window (no taskbar/Alt+Tab), never activated by clicks; optionally fully click-through.</summary>
     public void ApplyExStyle()
     {
         if (_hwnd == IntPtr.Zero) return;
@@ -54,13 +101,16 @@ public partial class IslandWindow : Window
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
     }
 
+    /// <summary>The monitor the island currently lives on.</summary>
+    public ScreenInfo Screen => Screens.Selected(Settings.Current.Monitor);
+
     /// <summary>Places the window at the top-centre of the selected monitor (physical pixels, mixed-DPI safe).</summary>
     public void Reposition()
     {
         if (_hwnd == IntPtr.Zero) return;
         try
         {
-            var screen = Screens.Selected(Settings.Current.Monitor);
+            var screen = Screen;
             const uint flags = Native.SWP_NOSIZE | Native.SWP_NOACTIVATE;
             // First move onto the monitor so WPF adopts its DPI, then centre using the resulting pixel width.
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, screen.Left, screen.Top, 0, 0, flags);
@@ -78,11 +128,22 @@ public partial class IslandWindow : Window
             case Native.WM_MOUSEACTIVATE:
                 handled = true;
                 return new IntPtr(Native.MA_NOACTIVATE);
+            case Native.WM_HOTKEY:
+                var id = wParam.ToInt32();
+                if (id == EscHotkeyId) Collapse();
+                else Hotkeys.HandleHotkey(id);
+                handled = true;
+                break;
             case Native.WM_DISPLAYCHANGE:
             case Native.WM_DPICHANGED:
+                Dispatcher.BeginInvoke(Reposition, DispatcherPriority.Background); // after WPF's own handling
+                break;
             case Native.WM_SETTINGCHANGE:
-                // let WPF finish its own handling first
-                Dispatcher.BeginInvoke(Reposition, System.Windows.Threading.DispatcherPriority.Background);
+                Dispatcher.BeginInvoke(() =>
+                {
+                    Theme.Apply();   // "System" theme follows Windows live
+                    Reposition();    // work area / taskbar changes
+                }, DispatcherPriority.Background);
                 break;
         }
         return IntPtr.Zero;
@@ -90,6 +151,13 @@ public partial class IslandWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        Settings.Changed -= OnSettingsChanged;
+        Theme.Changed -= OnThemeChanged;
+        _housekeeping?.Stop();
+        _hoverTimer?.Stop();
+        StopAnimation();
+        Hotkeys.Detach();
+        Watcher.Dispose();
         _source?.RemoveHook(WndProc);
         base.OnClosed(e);
     }

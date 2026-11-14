@@ -19,6 +19,13 @@ public partial class App : Application
         base.OnStartup(e);
         HookExceptionHandlers();
 
+        if (e.Args.Length > 0 && e.Args[0] == "--snapshot")
+        {
+            System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+            Shutdown(IslandWindow.RunSnapshot(e.Args));
+            return;
+        }
+
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
         if (!isFirst)
         {
@@ -29,6 +36,7 @@ public partial class App : Application
         }
 
         Strings.Language = Settings.Current.Language;
+        Theme.Apply();
 
         // Software rendering keeps the GPU driver (~80 MB) out of the process; see DECISIONS.md.
         if (!Settings.Current.OptBool("render.hardware"))
@@ -45,11 +53,12 @@ public partial class App : Application
         try
         {
             Host.Register("tray", () => new TrayModule(
-                isIslandVisible: () => Island?.IsVisible == true,
+                isIslandVisible: () => Island?.IsHiddenByUser == false,
                 toggleIsland: ToggleIsland,
                 openSettings: () => { /* settings panel arrives in a later milestone */ },
                 quit: Quit));
             Host.Sync();
+            Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
             Logger.Info($"Isle started, {Host.Ids.Count} module(s) registered");
@@ -67,8 +76,7 @@ public partial class App : Application
     public static void ToggleIsland()
     {
         if (Island is null) return;
-        if (Island.IsVisible) Island.Hide();
-        else Island.Show();
+        Island.SetHidden("user", !Island.IsHiddenByUser);
     }
 
     public static void Quit() => Current.Shutdown(0);

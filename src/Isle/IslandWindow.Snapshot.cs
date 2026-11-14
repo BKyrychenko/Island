@@ -1,0 +1,126 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Isle.Core;
+
+namespace Isle;
+
+// Debug renderer: `Isle.exe --snapshot <state|all> <out.png|dir> [--theme Dark|Light] [--lang en|uk] [--scale 1.25]`.
+// Builds the island off-screen in snapshot mode (no hooks/timers), puts it into the named state and saves a PNG.
+public partial class IslandWindow
+{
+    /// <summary>Registered snapshot states: name → setup. Modules add their own states in later milestones.</summary>
+    internal static readonly Dictionary<string, Action<IslandWindow>> SnapshotStates = new()
+    {
+        ["idle"] = _ => { },
+        ["idle-clock"] = w => { Settings.Current.ShowClock = true; w.UpdateIdlePill(); },
+        ["expanded-empty"] = w => w.Expand(),
+        ["expanded"] = w => { w.AddDemoTabs(); w.Expand("timers"); },
+        ["expanded-toast"] = w => { w.AddDemoTabs(); w.Expand("music"); w.ShowToast(Strings.T("snap.toast"), Strings.T("common.undo")); },
+        ["more"] = w => { w.AddDemoTabs(extra: 3); w.Expand("music"); w.ShowMoreOverlay(w.Tabs.Hidden); },
+        ["edge-hidden"] = w => { w._edgeHidden = true; w.SetTargets(immediate: true); },
+    };
+
+    static readonly (string Id, string Icon)[] DemoTabs =
+    [
+        ("music", "Icon.Music"), ("timers", "Icon.Timer"), ("notes", "Icon.Notes"), ("clipboard", "Icon.Clipboard"),
+        ("shelf", "Icon.Shelf"), ("control", "Icon.Control"), ("tools", "Icon.Tools"), ("weather", "Icon.Weather"),
+        ("ai", "Icon.Ai"), ("agents", "Icon.Agents"),
+    ];
+
+    void AddDemoTabs(int extra = 0)
+    {
+        var order = 10;
+        foreach (var (id, icon) in DemoTabs)
+            AddTab(new TabInfo(id, "tab." + id, icon, () => DemoView(id), order += 10));
+        for (var i = 0; i < extra; i++)
+            AddTab(new TabInfo("extra" + i, "tab.tools", "Icon.Tools", () => DemoView("tools"), order += 10));
+    }
+
+    static FrameworkElement DemoView(string id)
+    {
+        var t = new TextBlock { Text = Strings.T("tab." + id), FontSize = 20, HorizontalAlignment = HorizontalAlignment.Center };
+        t.SetResourceReference(StyleProperty, "TextTitle");
+        return new Grid { Children = { t } };
+    }
+
+    /// <summary>Entry point for --snapshot. Returns the process exit code.</summary>
+    public static int RunSnapshot(string[] args)
+    {
+        try
+        {
+            if (args.Length < 3) { Console.Error.WriteLine("usage: --snapshot <state|all> <out.png|dir> [--theme Dark|Light] [--lang en|uk] [--scale s]"); return 2; }
+            var state = args[1];
+            var output = args[2];
+            string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");
+            var scale = double.TryParse(Arg(args, "--scale"), System.Globalization.CultureInfo.InvariantCulture, out var sc) ? sc : 1.0;
+
+            if (state == "all")
+            {
+                Directory.CreateDirectory(output);
+                foreach (var name in SnapshotStates.Keys)
+                foreach (var th in new[] { "Dark", "Light" })
+                foreach (var lg in new[] { "en", "uk" })
+                    RenderOne(name, Path.Combine(output, $"{name}.{th.ToLowerInvariant()}.{lg}.png"), th, lg, scale);
+                return 0;
+            }
+            if (!SnapshotStates.ContainsKey(state)) { Console.Error.WriteLine($"unknown state '{state}'. Known: {string.Join(", ", SnapshotStates.Keys)}"); return 2; }
+            RenderOne(state, output, theme ?? "Dark", lang ?? "en", scale);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("snapshot", ex);
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
+    }
+
+    static string? Arg(string[] args, string name)
+    {
+        var i = Array.IndexOf(args, name);
+        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+    }
+
+    static void RenderOne(string state, string path, string theme, string lang, double scale)
+    {
+        // in-memory only: snapshot never saves settings
+        var s = Settings.Current;
+        s.Theme = theme;
+        s.Language = lang;
+        s.Scale = scale;
+        s.ShowClock = false;
+        Strings.Language = lang;
+        Theme.Apply(theme);
+
+        var w = new IslandWindow(snapshotMode: true);
+        SnapshotStates[state](w);
+        w.SetTargets(immediate: true);
+
+        var root = w.Root;
+        var size = new Size(BaseWidth * scale, BaseHeight * scale);
+        root.Measure(size);
+        root.Arrange(new Rect(size));
+        root.UpdateLayout();
+        w.Tabs.UpdateLayout(); // indicator position is computed after layout
+        root.UpdateLayout();
+
+        const double dpi = 192; // 2× so details are visible when inspecting
+        var bmp = new RenderTargetBitmap((int)(size.Width * 2), (int)(size.Height * 2), dpi, dpi, PixelFormats.Pbgra32);
+        // checkerboard-free backdrop: mid grey so both themes and the shadow are visible
+        var backdrop = new DrawingVisual();
+        using (var dc = backdrop.RenderOpen())
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x7A, 0x84, 0x90)), null, new Rect(size));
+        bmp.Render(backdrop);
+        bmp.Render(root);
+
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(bmp));
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (dir is not null) Directory.CreateDirectory(dir);
+        using var fs = File.Create(path);
+        enc.Save(fs);
+        w.Close();
+    }
+}

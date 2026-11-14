@@ -5,7 +5,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 ## Milestones
 - [x] M0 Skeleton
 - [x] M1 Expand/collapse & shell (+ perf measurement)
-- [ ] M2 Music + lyrics
+- [x] M2 Music + lyrics
 - [ ] M3 Timers & reminders
 - [ ] M4 Notes
 - [ ] M5 Control Center
@@ -21,17 +21,19 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [ ] M15 Polish & release
 
 ## Last action
-M1 complete: hover logic, spring expand/collapse, tab bar (+more overlay, gear), toast, Styles/Theme.xaml + Icons.xaml,
-Dark/Light/System themes, UI scale, edge auto-hide, click-through, fullscreen auto-hide, excluded apps, HotkeyService
-(Win+Alt+Space toggle), pill priority queue, `--snapshot` tool (all states × themes × languages looked at in logs/shots/m1).
-31 tests green. Live: hover expand/collapse verified by script screenshots; idle 38.7 MB WS, 0.009 % CPU; start 457 ms.
+M2 complete: Media module (GSMTC, pill art + equalizer, track banner, Music tab with transport/seek/progress, art accent,
+missing-art gradient, marquee) and Lyrics module (LRCLIB client, LRC parser, disk cache, lyrics view, optional lyric line
+in the pill). 69 tests green. Verified live with a real (silent) SMTC session: banner, pill, tab, synced lyric in pill.
+Snapshots in logs/shots/m2 (all states × themes × languages).
 
 ## Next step
-Start M2 (Music + lyrics): `Modules/Media` — GSMTC session manager (event-driven), pill item (art + equalizer, title for 2 s
-on track change), Music tab view (art, title/artist/app, progress + seek, transport), dominant colour → `Theme.SetAccent`,
-missing-art gradient, marquee. `Modules/Lyrics` — LRCLIB client (User-Agent, get → search fallback), LRC parser (tests),
-disk cache, lyrics view with current-line highlight. Register tab "music" (Order 10) and snapshot states for it.
-Live helper used for M1 checks: `..\scratch\live-m1.ps1` (outside the repo; launches the exe, moves the cursor, screenshots, measures CPU/RAM).
+Start M3 (Timers & reminders): `Modules/Timers` — timer model with absolute end timestamps + injectable clock (tests),
+duration parser (`90`, `1:30`, `1h30m`, `45s`, `2m 30s`), presets 5/10/15/25/45, labels, pause/resume/cancel, stopwatch,
+persistence (timers.json), pill item (soonest timer + progress ring), finished state (pulse ×3, system sound, Done / +1 min).
+`Modules/Reminders` — NL parser EN+UK (≥40 phrases tested, table-driven), repeat rules, reminders.json, banner with
+Done / Snooze (5 min, 1 h, tomorrow), missed reminders fire at start, list/edit/delete in the tab. Tab "timers" Order 20.
+Live helpers (outside the repo, in `..\scratch`): `live-m1.ps1` (hover + idle perf), `live-m2.ps1` + `fake-session.ps1`
+(silent media session), `measure-play.ps1`.
 
 ## Known blockers
 - none

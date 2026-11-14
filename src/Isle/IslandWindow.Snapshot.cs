@@ -51,6 +51,7 @@ public partial class IslandWindow
         try
         {
             if (args.Length < 3) { Console.Error.WriteLine("usage: --snapshot <state|all> <out.png|dir> [--theme Dark|Light] [--lang en|uk] [--scale s]"); return 2; }
+            Modules.Media.MediaSnapshots.Register(SnapshotStates);
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");
@@ -91,8 +92,10 @@ public partial class IslandWindow
         s.Language = lang;
         s.Scale = scale;
         s.ShowClock = false;
+        s.Options.Remove("lyrics.inPill");
         Strings.Language = lang;
         Theme.Apply(theme);
+        Theme.SetAccent(null);
 
         var w = new IslandWindow(snapshotMode: true);
         SnapshotStates[state](w);

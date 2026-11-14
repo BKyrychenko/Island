@@ -1,0 +1,110 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using Isle.Modules.Lyrics;
+using Isle.Modules.Media;
+using MediaState = Isle.Modules.Media.MediaState;
+
+namespace Isle.Views.Music;
+
+/// <summary>Collapsed-pill music view: art on the left, equalizer on the right, optional current lyric line between.</summary>
+public sealed class MusicPill : Grid, IDisposable
+{
+    public const double PlainWidth = 168, LyricWidth = 340;
+
+    readonly IMediaSource _media;
+    readonly Func<LyricsTracker?> _lyrics;
+    readonly ArtImage _art = new(22, 6) { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(7, 0, 0, 0) };
+    readonly Equalizer _eq = new() { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 13, 0) };
+    readonly TextBlock _line = new()
+    {
+        FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(38, 0, 40, 0),
+    };
+    readonly List<Equalizer> _compacts = [];
+    DispatcherTimer? _lyricTimer;
+    int _lineIndex = -2;
+    readonly Func<DateTimeOffset> _now;
+
+    public MusicPill(IMediaSource media, Func<LyricsTracker?> lyrics, Func<DateTimeOffset>? now = null)
+    {
+        _media = media;
+        _lyrics = lyrics;
+        _now = now ?? (() => DateTimeOffset.Now);
+        Children.Add(_art);
+        Children.Add(_line);
+        Children.Add(_eq);
+        IsVisibleChanged += (_, _) => UpdateLyricTimer();
+    }
+
+    /// <summary>Pill width: wider when a lyric line is shown.</summary>
+    public double PillWidth => MediaModule.LyricsInPill ? LyricWidth : PlainWidth;
+
+    public void Update(MediaState s)
+    {
+        _art.Set(s);
+        _eq.Playing = s.IsPlaying;
+        foreach (var c in _compacts) c.Playing = s.IsPlaying;
+        UpdateLyric();
+    }
+
+    /// <summary>Small equalizer for the pill's side slot when something more important owns the pill.</summary>
+    public FrameworkElement CreateCompact()
+    {
+        var eq = new Equalizer(12, 2.5) { HorizontalAlignment = HorizontalAlignment.Center, Playing = _media.Current?.IsPlaying == true };
+        _compacts.Add(eq);
+        if (_compacts.Count > 4) _compacts.RemoveAt(0);
+        return eq;
+    }
+
+    public void UpdateLyric()
+    {
+        var show = MediaModule.LyricsInPill && _lyrics()?.ForCurrent is { Status: LyricsStatus.Synced };
+        _line.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        _lineIndex = -2;
+        Tick();
+        UpdateLyricTimer();
+    }
+
+    // the line only changes every few seconds; 250 ms resolution only while visible, playing and enabled
+    void UpdateLyricTimer()
+    {
+        var needed = IsVisible && _line.Visibility == Visibility.Visible && _media.Current?.IsPlaying == true;
+        if (!needed) { _lyricTimer?.Stop(); return; }
+        _lyricTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => Tick(), Dispatcher);
+        _lyricTimer.Start();
+    }
+
+    void Tick()
+    {
+        if (_line.Visibility != Visibility.Visible || _media.Current is not { } cur || _lyrics()?.ForCurrent is not { } r) return;
+        var i = Lrc.IndexAt(r.Lines, cur.PositionAt(_now()));
+        if (i == _lineIndex) return;
+        _lineIndex = i;
+        _line.Text = i >= 0 ? r.Lines[i].Text : "";
+    }
+
+    public void Dispose() => _lyricTimer?.Stop();
+}
+
+/// <summary>Short banner shown on a track change: art, title and artist.</summary>
+public sealed class TrackBanner : Grid
+{
+    public const double BannerWidth = 300, BannerHeight = 48;
+
+    public TrackBanner(MediaState s)
+    {
+        var art = new ArtImage(34, 9) { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(7, 0, 0, 0) };
+        art.Set(s);
+        var title = new TextBlock { Text = s.Title, FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
+        var artist = new TextBlock { Text = s.Artist, TextTrimming = TextTrimming.CharacterEllipsis };
+        artist.SetResourceReference(StyleProperty, "TextDim");
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(50, 0, 40, 0) };
+        text.Children.Add(title);
+        if (s.Artist.Length > 0) text.Children.Add(artist);
+        var eq = new Equalizer { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 16, 0), Playing = s.IsPlaying };
+        Children.Add(art);
+        Children.Add(text);
+        Children.Add(eq);
+    }
+}

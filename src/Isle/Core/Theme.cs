@@ -80,10 +80,19 @@ public static class Theme
         _accentOverride = color;
         var res = Application.Current?.Resources;
         if (res is null || _accentBrush is null) return;
-        _accentBrush.BeginAnimation(SolidColorBrush.ColorProperty,
-            new ColorAnimation(Accent, TimeSpan.FromMilliseconds(400)) { EasingFunction = new QuadraticEase() });
-        if (res["AccentSoftBrush"] is SolidColorBrush soft && !soft.IsFrozen)
-            soft.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(WithAlpha(Accent, 0.22), TimeSpan.FromMilliseconds(400)));
+        // Application resources freeze what is put into them, and frozen brushes cannot animate. So: new brushes every time,
+        // animation started before they enter the dictionary (an animated Freezable cannot be frozen).
+        var from = _accentBrush.Color;
+        _accentBrush = new SolidColorBrush(App.IsSnapshot ? Accent : from);
+        var soft = new SolidColorBrush(WithAlpha(App.IsSnapshot ? Accent : from, 0.22));
+        if (!App.IsSnapshot)
+        {
+            var d = TimeSpan.FromMilliseconds(400);
+            _accentBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Accent, d) { EasingFunction = new QuadraticEase() });
+            soft.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(WithAlpha(Accent, 0.22), d) { EasingFunction = new QuadraticEase() });
+        }
+        res["AccentBrush"] = _accentBrush;
+        res["AccentSoftBrush"] = soft;
     }
 
     static void Set(ResourceDictionary res, string key, Color c)

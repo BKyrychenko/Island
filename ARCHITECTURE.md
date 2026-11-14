@@ -53,6 +53,15 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   (optional clock, left/right slots for mascot and weather).
 
 ## Modules (`src/Isle/Modules`)
+- **Media** (`media`, `Modules/Media`) — `MediaSession` wraps GSMTC (manager + chosen session events, marshalled to
+  the UI thread) and exposes `IMediaSource` (`Current: MediaState`, `Changed`, `PlayPause/Next/Previous/Seek`).
+  `MediaModule` puts the `music` pill item (`Views/Music/MusicPill`, compact equalizer for the side slot), the
+  `music.track` banner, registers the Music tab (`Views/Music/MusicView`), sets `Theme.SetAccent` from the art, and owns
+  the `LyricsTracker`. Pure helpers: `PlaybackMath` (extrapolation, formatting, app names, session choice), `ArtColors`.
+  `FakeMediaSource` + `MediaSnapshots` provide snapshot states. Options: `lyrics.inPill`, `lyrics.alwaysFetch`.
+- **Lyrics** (`lyrics`, `Modules/Lyrics`) — `LyricsService` (LRCLIB get→search, memory + disk cache in
+  `%AppData%\Isle\lyrics\<hash>.json`, lazy HttpClient disposed after 2 min idle, `ILyricsHttp` seam), `Lrc` parser,
+  `LyricsTracker` (lyrics for the current track, fetched only on demand).
 - **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
   `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
   Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.

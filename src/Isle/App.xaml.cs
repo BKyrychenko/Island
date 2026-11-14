@@ -13,6 +13,8 @@ public partial class App : Application
 
     public static ModuleHost Host { get; } = new();
     public static IslandWindow? Island { get; private set; }
+    /// <summary>True while running the --snapshot renderer.</summary>
+    public static bool IsSnapshot { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -21,6 +23,7 @@ public partial class App : Application
 
         if (e.Args.Length > 0 && e.Args[0] == "--snapshot")
         {
+            IsSnapshot = true;
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             Shutdown(IslandWindow.RunSnapshot(e.Args));
             return;
@@ -57,6 +60,8 @@ public partial class App : Application
                 toggleIsland: ToggleIsland,
                 openSettings: () => { /* settings panel arrives in a later milestone */ },
                 quit: Quit));
+            Host.Register("lyrics", () => new Modules.Lyrics.LyricsModule());
+            Host.Register("media", () => new Modules.Media.MediaModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

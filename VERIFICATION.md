@@ -31,3 +31,11 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | --snapshot tool | live | `Isle.exe --snapshot all <dir>` renders every state × theme × language |
 | Start-up to visible pill | live | 457 ms to input-idle |
 | Idle budget (M1) | live | 38.7 MB WS / 41.3 MB private / 0.009 % CPU over 60 s |
+| Music: GSMTC session follow, pill (art + equalizer), banner on track start, tab (title/artist/source, progress extrapolation) | live (real SMTC session from a helper process, screenshots) + snapshot | ok |
+| Music: prev / play-pause / next / seek by click or drag | manual-needed | Play a song in Spotify or a browser, open the Music tab, press the buttons and click/drag the progress bar |
+| Music: multiple sessions (prefer playing, else current/recent) | auto-test (`PlaybackMath.Choose`) | ok |
+| Music: missing art gradient, dominant colour, accent transition | auto-test + snapshot (`music-tab-noart`) + live | ok |
+| Music: long title marquee on hover | manual-needed | Play a track with a long title, hover the title in the Music tab — it scrolls |
+| Lyrics: LRC parser, LRCLIB get→search fallback, caching (incl. not-found expiry), title cleaning | auto-test (17 tests) | ok |
+| Lyrics: live fetch + current line in pill | live (LRCLIB, real track metadata) | ok — correct line shown in time |
+| Lyrics view in the Music tab (synced, plain, not found, instrumental, error, off) | snapshot (`music-lyrics`, `music-lyrics-notfound`) | ok |

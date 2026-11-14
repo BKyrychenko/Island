@@ -47,3 +47,8 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Reminder banner Done / Snooze 5 min / 1 h / Tomorrow; clickable without expanding | live (seeded reminder, real click on Done) | ok |
 | Missed reminders/timers fire at next start | auto-test + live (seeded files) | ok |
 | Reminders list / edit (loads the original phrase) / delete | snapshot + manual-needed | Open Timers tab, press the pencil on a reminder, change the time, Enter |
+| Notes: CRUD, search (all words, case-insensitive), folders, pins, atomic save, corrupt file backup | auto-test (8 tests) | ok |
+| Notes: formatting round trip (bold/underline/heading/numbered list) | auto-test (STA) | ok |
+| Notes tab: list, editor toolbar, checkbox glyphs, empty state, delete toast with Undo | snapshot (dark/light × en/uk) | ok |
+| Quick capture Win+Alt+N: opens a new note with the caret in it, typing autosaves, Esc collapses and returns focus | live (simulated hotkey + typing, UIA focus check, notes.json check) | ok |
+| Notes: Ctrl+B/I/U, bullets/numbers, click on ☐ toggles, Undo after delete | manual-needed | In the Notes tab: select a word, press Ctrl+B; press the ☐ button, click the box; delete the note and press Undo within 5 s |

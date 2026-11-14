@@ -95,7 +95,10 @@ public partial class IslandWindow : Window
     {
         if (_hwnd == IntPtr.Zero) return;
         var ex = (long)Native.GetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE);
-        ex |= Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE;
+        ex |= Native.WS_EX_TOOLWINDOW;
+        // no-activate always, except while a text box inside the island owns the keyboard
+        if (_hasFocus) ex &= ~(long)Native.WS_EX_NOACTIVATE;
+        else ex |= Native.WS_EX_NOACTIVATE;
         if (Settings.Current.ClickThrough) ex |= Native.WS_EX_TRANSPARENT;
         else ex &= ~(long)Native.WS_EX_TRANSPARENT;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));

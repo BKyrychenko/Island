@@ -69,6 +69,9 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   publishes `TimerFinished`). Pure logic: `DurationParser`, `TimerBook` (+ stopwatch), `ReminderParser` (EN/UK rules),
   `RepeatRule`, `ReminderBook`. Views: `Views/Timers/TimersView`, `TimerPill` (+ `Ring`), `TimerDoneBanner`, `ReminderBanner`.
   The command bar (M8) uses `Controller.AddTimer` / `AddReminder`.
+- **Notes** (`notes`, `Modules/Notes`) — `NotesStore` (notes.json: notes with XAML + plain shadow, one-level folders,
+  pins, `Search`, `Delete`/`Restore` for Undo), `NotesModule` (tab, hotkey `newNote` = Win+Alt+N → `QuickCapture`).
+  View `Views/Notes/NotesView` (list + RichTextBox editor; `Serialize`/`Load` helpers; autosave 500 ms).
 - **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
   `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
   Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.

@@ -57,6 +57,13 @@ One line each: decision — why.
 - Attention: `MessageBeep` (asterisk for timers, exclamation for reminders) + `IslandWindow.Pulse(3)` (velocity kicks on the shape springs); `TimerFinished` is published on the EventBus for the characters (M14).
 - Snooze moves the due time; "Done" on a repeating reminder advances it with `RepeatRule.Next` (wall-clock arithmetic in the local zone, DST-safe).
 
+## M4
+- Notes content is stored as WPF's own XAML clipboard format (`TextRange.Save(..., DataFormats.Xaml)`) inside notes.json plus a plain-text shadow; on load the editor's inherited colour/font/margins written by `TextRange.Save` are cleared so theme changes apply to old notes (heading sizes kept). Round trip tested (bold, underline, heading, numbered list).
+- Checkbox items are text glyphs ☐/☒ at the start of a paragraph (click toggles, Enter continues the list, Enter on an empty item ends it) — survives XAML/plain-text round trips and search without embedded controls. ☑ is avoided because WPF falls back to the colour emoji font for it.
+- Folder picker and "move to folder" are an in-panel overlay list (no WPF Popup/ComboBox windows, which would fight the non-activating island).
+- Keyboard focus for text boxes: `AcquireFocus` removes `WS_EX_NOACTIVATE` while a text box is in use (restored on collapse/deactivation), then SetForegroundWindow + Activate + SetFocus; the editor is focused only once it is actually visible (the panel is collapsed during the first frames of the expand animation). Found live: with NOACTIVATE kept, the window came to the front but key presses never reached it.
+- Autosave 500 ms after the last edit, also on note switch, tab hide and module stop; the last opened note is remembered (`notes.last`).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

@@ -63,6 +63,7 @@ public partial class App : Application
             Host.Register("lyrics", () => new Modules.Lyrics.LyricsModule());
             Host.Register("media", () => new Modules.Media.MediaModule(Island!));
             Host.Register("timers", () => new Modules.Timers.TimersModule(Island!));
+            Host.Register("notes", () => new Modules.Notes.NotesModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

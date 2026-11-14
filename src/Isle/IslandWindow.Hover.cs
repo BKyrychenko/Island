@@ -186,14 +186,17 @@ public partial class IslandWindow
         var fg = Native.GetForegroundWindow();
         if (fg != _hwnd) _previousForeground = fg;
         _hasFocus = true;
+        ApplyExStyle(); // drop WS_EX_NOACTIVATE so Windows gives the window real keyboard focus
         Native.SetForegroundWindow(_hwnd);
         Activate();
+        Native.SetFocus(_hwnd);
     }
 
     void ReleaseFocus(bool restore)
     {
         if (!_hasFocus) return;
         _hasFocus = false;
+        ApplyExStyle();
         Keyboard.ClearFocus();
         if (restore && _previousForeground != IntPtr.Zero && Native.IsWindow(_previousForeground) && Native.GetForegroundWindow() == _hwnd)
             Native.SetForegroundWindow(_previousForeground);
@@ -203,6 +206,7 @@ public partial class IslandWindow
     {
         if (!_hasFocus) return;
         _hasFocus = false;      // the user clicked another window: focus is already gone, do not pull it back
+        ApplyExStyle();
         Keyboard.ClearFocus();
         if (_expanded && !IsCursorInside() && _holdOpen.Count == 0) Collapse();
     }

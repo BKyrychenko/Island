@@ -6,7 +6,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M0 Skeleton
 - [x] M1 Expand/collapse & shell (+ perf measurement)
 - [x] M2 Music + lyrics
-- [ ] M3 Timers & reminders
+- [~] M3 Timers & reminders — logic done (DurationParser, TimerBook, ReminderParser EN+UK, RepeatRule, ReminderBook; 165 tests); UI next
 - [ ] M4 Notes
 - [ ] M5 Control Center
 - [ ] M6 Live events + pill priority queue (+ perf measurement)

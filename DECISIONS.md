@@ -64,6 +64,15 @@ One line each: decision — why.
 - Keyboard focus for text boxes: `AcquireFocus` removes `WS_EX_NOACTIVATE` while a text box is in use (restored on collapse/deactivation), then SetForegroundWindow + Activate + SetFocus; the editor is focused only once it is actually visible (the panel is collapsed during the first frames of the expand animation). Found live: with NOACTIVATE kept, the window came to the front but key presses never reached it.
 - Autosave 500 ms after the last edit, also on note switch, tab hide and module stop; the last opened note is remembered (`notes.last`).
 
+## M5
+- NuGet `System.Management` (Microsoft) for WMI brightness (`WmiMonitorBrightness` / `WmiSetBrightness`) — the spec names WMI and there is no WinRT brightness API for desktop apps; loaded only when the Control tab opens; writes are coalesced during slider drags. Works on this laptop (read 43 %).
+- Core Audio volume via hand-written `[ComImport]` interfaces (no NAudio for this part): `IAudioEndpointVolume` + `IAudioEndpointVolumeCallback` for external changes + `IMMNotificationClient` for default-device changes; our own changes use a context GUID so they don't echo.
+- Bluetooth headphones: Windows has no public "connect" API for audio profiles (`AudioPlaybackConnection` is for the PC acting as a speaker). Implemented the approach the Settings app uses: find the audio endpoint whose KS filter id contains `BTH…` + the device address, then `IKsControl.KsProperty(KSPROPSETID_BtAudio, ONESHOT_RECONNECT / ONESHOT_DISCONNECT)`. Paired devices are listed with WinRT (`BluetoothDevice`). Connect/disconnect not exercised here (would hijack the owner's audio) → manual-needed.
+- VPN: Windows profiles from `rasphone.pbk` (user + all users) with `rasdial` connect/disconnect and status from an up PPP adapter of the same name (no PowerShell `Get-VpnConnection`, which costs ~1 s per call). Clients detected by install path and adapter name/description; CLI toggles for Tailscale (`up/down`), Cloudflare WARP (`warp-cli connect/disconnect`), Mullvad (`mullvad connect/disconnect`), NordVPN (`-c/-d`); WireGuard, OpenVPN and Proton are status + "Open app". Elevation errors are detected (exit code 5 / 740 / "administrator" in output) and shown as a message, never retried elevated.
+- Control services (audio COM objects, radios, WMI) are created on the first open of the tab, not at start-up.
+- Fullscreen detection fixed (found live): a maximized Chrome/Edge window has no `WS_CAPTION`, so the old "covers the screen and has no caption" rule hid the island behind every maximized browser. Now: `SHQueryUserNotificationState` busy/D3D/presentation → hide; otherwise only a non-maximized (`IsZoomed` false) window covering the whole monitor counts.
+- Tab restore: the remembered last tab wins over whichever tab registered first, until the user picks a tab in this session (found live: modules register tabs one by one).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

@@ -72,6 +72,11 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **Notes** (`notes`, `Modules/Notes`) — `NotesStore` (notes.json: notes with XAML + plain shadow, one-level folders,
   pins, `Search`, `Delete`/`Restore` for Undo), `NotesModule` (tab, hotkey `newNote` = Win+Alt+N → `QuickCapture`).
   View `Views/Notes/NotesView` (list + RichTextBox editor; `Serialize`/`Load` helpers; autosave 500 ms).
+- **Control Center** (`control`, `Modules/ControlCenter`) — `ControlModule` (tab; `NetworkChanged` from
+  `NetworkChange.NetworkAddressChanged`), `ControlServices` (lazy: `AudioVolume` Core Audio COM, `Radios` WinRT,
+  `Brightness` WMI, VPN environment), `WindowsTheme` (HKCU Personalize + WM_SETTINGCHANGE broadcast),
+  `BluetoothDevices` (WinRT list + KS one-shot reconnect/disconnect), `VpnDetector` (pbk profiles, client detection, CLI
+  runner). COM interfaces in `CoreAudio.cs`. View `Views/Control/ControlView` (tiles, sliders, in-panel overlay lists).
 - **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
   `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
   Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.

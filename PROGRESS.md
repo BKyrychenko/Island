@@ -8,7 +8,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M2 Music + lyrics
 - [x] M3 Timers & reminders
 - [x] M4 Notes
-- [ ] M5 Control Center
+- [x] M5 Control Center
 - [ ] M6 Live events + pill priority queue (+ perf measurement)
 - [ ] M7 Clipboard + File shelf
 - [ ] M8 Command bar
@@ -21,20 +21,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [ ] M15 Polish & release
 
 ## Last action
-M4 complete: Notes module (store with folders/pins/search, rich-text editor with B/I/U, bullets, numbers, checkbox items,
-2 heading sizes, autosave, delete + Undo toast, quick capture Win+Alt+N). Fixed text-box focus for the non-activating
-island (drop WS_EX_NOACTIVATE while editing; focus after the panel is visible) — verified live with typing + UIA.
-173 tests green. Snapshots in logs/shots/m4.
+M5 complete: Control tab with Wi-Fi/Bluetooth radios, Bluetooth device list + KS reconnect/disconnect, Windows dark mode,
+VPN detection (pbk + clients) with CLI toggles, master volume + mute (Core Audio COM, event-driven), WMI brightness.
+Verified live on this laptop. Also fixed: fullscreen detection hid the island behind maximized browsers; remembered tab
+restore. 177 tests green. Snapshots in logs/shots/m5.
 
 ## Next step
-Start M5 (Control Center): `Modules/ControlCenter` — tiles: Wi-Fi + Bluetooth radios (Windows.Devices.Radios, degrade if
-denied), dark theme toggle (HKCU Personalize AppsUseLightTheme + SystemUsesLightTheme, broadcast WM_SETTINGCHANGE
-"ImmersiveColorSet"), master volume + mute (Core Audio IAudioEndpointVolume via COM interop, reflect external changes via
-IAudioEndpointVolumeCallback), brightness (WMI WmiMonitorBrightness/Methods, hide if unsupported); Bluetooth paired devices
-list + connect/disconnect audio (try AudioPlaybackConnection / BluetoothDevice; record what works in DECISIONS.md); VPN list
-(Get-VpnConnection / rasdial) + client detection (WireGuard, OpenVPN, Tailscale, Proton, WARP, Nord, Mullvad) with CLI
-connect/disconnect where available; refresh on open and on radio/network/audio events. Tab "control" Order 60.
-Live helpers (outside the repo, `..\scratch`): live-m1..m4.ps1, fake-session.ps1, measure-play.ps1.
+Start M6 (Live events + pill priority queue, then perf measurement): `Modules/LiveEvents` — one small class per source,
+each with a fake for tests, started only when enabled: Downloads (FileSystemWatcher on Downloads for *.crdownload / *.part /
+*.tmp, size growth + speed; Chrome partial-download detector tested), mic/camera in use (CapabilityAccessManager
+ConsentStore registry, incl. NonPackaged; RegNotifyChangeKeyValue, not polling), Windows notifications
+(UserNotificationListener — likely needs package identity: try, otherwise mark unavailable), OBS WebSocket v5 (recording
+state + elapsed), Steam (libraryfolders.vdf + appmanifest_*.acf parser tested; watch manifests), VPN transient indicator
+(ControlModule.NetworkChanged + VpnDetector), keyboard layout (EVENT_SYSTEM_FOREGROUND + 500 ms check while on),
+Caps Lock (WH_KEYBOARD_LL, tiny callback). Pill items use PillPriority constants. Then measure idle CPU/RAM over 60 s with
+all modules enabled and record in DECISIONS.md (idle WS was ~21–106 MB right after start before trim — check trim timing).
+Live helpers (outside the repo, `..\scratch`): live-m1..m5.ps1, fake-session.ps1, measure-play.ps1.
 
 ## Known blockers
 - none

@@ -48,6 +48,16 @@ internal static partial class Native
     public static extern IntPtr SetFocus(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsZoomed(IntPtr hWnd);
+
+    public static readonly IntPtr HWND_BROADCAST = new(0xFFFF);
+    public const uint SMTO_ABORTIFHUNG = 0x0002;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]

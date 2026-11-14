@@ -13,6 +13,7 @@ public partial class IslandWindow
     readonly List<TabInfo> _tabs = [];
     readonly Dictionary<string, FrameworkElement> _views = [];
     string? _currentTab, _requestedTab;
+    bool _tabChosen; // the user (or a module) picked a tab this session; until then the remembered tab wins
     IdlePillView? _idleView;
     DispatcherTimer? _toastTimer;
     Action? _toastAction;
@@ -22,7 +23,7 @@ public partial class IslandWindow
 
     void InitContent()
     {
-        Tabs.TabSelected += id => ShowTab(id, animate: true);
+        Tabs.TabSelected += id => { _tabChosen = true; ShowTab(id, animate: true); };
         Tabs.MoreRequested += ShowMoreOverlay;
         Tabs.SettingsRequested += () => SettingsRequested?.Invoke();
         ToastAction.Click += (_, _) =>
@@ -119,7 +120,8 @@ public partial class IslandWindow
 
     void RefreshTabs()
     {
-        var wanted = _currentTab ?? Settings.Current.LastTab;
+        var last = Settings.Current.LastTab;
+        var wanted = !_tabChosen && _tabs.Any(t => t.Id == last) ? last : _currentTab ?? last;
         Tabs.SetTabs(_tabs, wanted);
         EmptyText.Visibility = _tabs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyText.Text = Strings.T("panel.empty");
@@ -129,6 +131,7 @@ public partial class IslandWindow
     public void SelectTab(string id, bool animate = false)
     {
         if (_tabs.All(t => t.Id != id)) return;
+        _tabChosen = true;
         Tabs.Select(id, animate);
         ShowTab(id, animate);
     }

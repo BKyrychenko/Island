@@ -69,16 +69,14 @@ public sealed class ForegroundWatcher : IDisposable
     public static bool IsFullscreen(IntPtr hwnd, ScreenInfo screen)
     {
         if (hwnd == IntPtr.Zero || IsOwn(hwnd)) return false;
-        if (Native.SHQueryUserNotificationState(out var state) == 0 && state == 3) return true; // exclusive D3D fullscreen
+        // Windows' own verdict: 2 = busy (full-screen app), 3 = D3D exclusive full screen, 4 = presentation mode
+        if (Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4) return true;
         var cls = ClassName(hwnd);
         if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "XamlExplorerHostIslandWindow" or "Windows.UI.Core.CoreWindow") return false;
+        // a maximized window (browsers draw their own title bar, so no WS_CAPTION) is not full screen
+        if (Native.IsZoomed(hwnd)) return false;
         if (!Native.GetWindowRect(hwnd, out var r)) return false;
-        var covers = r.Left <= screen.Left && r.Top <= screen.Top && r.Right >= screen.Left + screen.Width && r.Bottom >= screen.Top + screen.Height;
-        if (!covers) return false;
-        var style = (long)Native.GetWindowLongPtr(hwnd, Native.GWL_STYLE);
-        const long WS_CAPTION = 0x00C00000, WS_MAXIMIZE = 0x01000000;
-        var maximizedNormalWindow = (style & WS_MAXIMIZE) != 0 && (style & WS_CAPTION) == WS_CAPTION;
-        return !maximizedNormalWindow;
+        return r.Left <= screen.Left && r.Top <= screen.Top && r.Right >= screen.Left + screen.Width && r.Bottom >= screen.Top + screen.Height;
     }
 
     public void Dispose()

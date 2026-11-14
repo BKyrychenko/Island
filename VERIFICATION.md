@@ -52,3 +52,10 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Notes tab: list, editor toolbar, checkbox glyphs, empty state, delete toast with Undo | snapshot (dark/light × en/uk) | ok |
 | Quick capture Win+Alt+N: opens a new note with the caret in it, typing autosaves, Esc collapses and returns focus | live (simulated hotkey + typing, UIA focus check, notes.json check) | ok |
 | Notes: Ctrl+B/I/U, bullets/numbers, click on ☐ toggles, Undo after delete | manual-needed | In the Notes tab: select a word, press Ctrl+B; press the ☐ button, click the box; delete the note and press Undo within 5 s |
+| Control: Wi-Fi / Bluetooth radio state, dark-mode state, volume + mute state, brightness (WMI) | live (real machine, screenshot) + snapshot | ok — reads match the system (brightness 43 %) |
+| Control: toggling Wi-Fi / Bluetooth / dark mode, moving volume and brightness sliders | manual-needed | Open the Control tab, click each tile and drag both sliders; Windows' own quick settings should follow |
+| Control: volume follows external changes | manual-needed | With the Control tab open, press the keyboard volume keys — the slider moves |
+| Bluetooth devices list + connect/disconnect audio (KS one-shot reconnect) | snapshot + manual-needed | Click the chevron on the Bluetooth tile; with paired headphones nearby press Connect, then Disconnect |
+| VPN: profile/client detection | auto-test (4 tests) + live (none installed on this machine) | ok |
+| VPN connect/disconnect (rasdial / tailscale / warp-cli / mullvad / nordvpn) | manual-needed | Open the VPN tile, press Connect on a listed VPN; if admin rights are needed a message says so |
+| Fullscreen auto-hide vs maximized browser | live | island stays visible over a maximized Chrome window (was hidden before the fix) |

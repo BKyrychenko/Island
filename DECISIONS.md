@@ -216,6 +216,6 @@ One line each: decision — why.
 | M14 | same with the character in the idle pill (awake, breathing/blinking/eyes) | 45.7 MB | 51.7 MB | 734 ms over 60 s (1.2 % of one core, ~0.1 % of machine) |
 | M15 | published `dist\Isle\Isle.exe`, idle pill, all modules (16), fresh data, 60 s | 25.1 MB | 38.3 MB | 172 ms over 60 s (0.29 % of one core, 0.024 % of machine) |
 | M15 | published self-contained exe, same, 30 s | 22.9 MB | 62.0 MB | 94 ms over 30 s (0.31 % of one core) |
-| M15 | start-up to input-idle, published exe | — | — | 382–527 ms warm; 1.39 s on the very first (cold-disk) launch after publishing |
+| M15 | start-up to input-idle, published exe | — | — | 365–527 ms; first launch of a freshly built exe 6 s (framework-dependent) / 29 s (self-contained) — the new file is scanned by Windows security once |
 | M15 | Whisper from both published variants (`--transcribe`, 6 s speech) | peak 392–418 MB | — | 2.1–2.4 s per run |
 | M15 | 10-min soak (77 cycles, every tab, music, timers, notes, clipboard, settings) | 14.8 MB 20 s after the end | 64 MB (range 55–86, no trend) | managed heap 7 MB after trims; no errors |

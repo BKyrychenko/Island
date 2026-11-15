@@ -18,25 +18,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M12 Voice to text
 - [x] M13 Agents integration
 - [x] M14 Characters
-- [~] M15 Polish & release
+- [x] M15 Polish & release
 
 ## Last action
-M15 step 2 done: Ukrainian strings reviewed (pill wording, папка consistency, ’ apostrophes), `--snapshot all` (104 states × Dark/Light × EN/UK) rendered and inspected as contact sheets — no layout problems. Step 1: settings panel inside the island (`Views/SettingsPanel/SettingsView` + snapshots + tests), opened by the
-gear and the tray "Settings" (`App.OpenSettings`). Sections: General (theme, language, size slider with live preview,
-monitor, clock, fullscreen/edge/click-through, autostart, excluded apps), Modules (16 switches → `Host.Sync`),
-Options (lyrics, weather, live sources, OBS port/password, downloads folder, clipboard limit/excluded apps, shelf,
-command-bar folders, recording audio, AI link, voice model/language, agents approvals/timeout/hooks link, character
-gallery link), Hotkeys (click + press keys, reset, failures shown; global hotkeys suspended while recording), About.
-Live-checked with UI Automation (`..\scratch\live-m15.ps1`).
+M15 done: settings panel in the island (gear + tray), Ukrainian review, all 104 snapshot states × themes × languages
+inspected, `build.ps1` (tests green, both variants in `dist\`, Whisper works from both after keeping natives loose),
+published exes launched (pill shown, 365–527 ms start-up), idle perf 0.29 % of one core / 25 MB, 10-min soak clean
+(77 cycles, no errors, memory steady; trim after collapse added), README / ARCHITECTURE / VERIFICATION / DECISIONS
+updated, graph updated. Definition of Done verified → DONE.flag created.
 
 ## Next step
-M15 remaining:
-full perf measurement (idle 60 s, all modules); 10-min soak test (script: music fake session, timers, notes,
-clipboard copies, control toggles, tab switching; watch log + working set); README.md, VERIFICATION.md (add settings
-panel rows), ARCHITECTURE.md (add Live events / Clipboard / Shelf / Command bar / Screen tools / Settings panel
-paragraphs — missing now); build.ps1 run + launch dist exe (both variants). Then DONE.flag + final message in Ukrainian.
-Notes: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the self-contained
-build loads whisper.dll.
+Nothing left in SPEC.md. Owner: see VERIFICATION.md `manual-needed` rows (2-minute checks).
 
 ## Known blockers
 - none

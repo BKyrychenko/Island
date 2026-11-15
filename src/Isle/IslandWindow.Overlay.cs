@@ -31,4 +31,10 @@ public partial class IslandWindow
         o.Visibility = Visibility.Collapsed;
         Safe(() => (o as ITabView)?.OnHidden(), "overlay hidden");
     }
+
+    /// <summary>Keeps the island out of screen captures (our own screenshots/recordings) while <paramref name="on"/>.</summary>
+    public void ExcludeFromCapture(bool on)
+    {
+        if (_hwnd != IntPtr.Zero) Native.SetWindowDisplayAffinity(_hwnd, on ? Native.WDA_EXCLUDEFROMCAPTURE : Native.WDA_NONE);
+    }
 }

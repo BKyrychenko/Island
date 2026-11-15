@@ -69,6 +69,7 @@ public partial class App : Application
             Host.Register("clipboard", () => new Modules.Clipboard.ClipboardModule(Island!));
             Host.Register("shelf", () => new Modules.Shelf.ShelfModule(Island!));
             Host.Register("commands", () => new Modules.Commands.CommandModule(Island!, () => Host.Get<Modules.Timers.TimersModule>("timers")?.Controller));
+            Host.Register("tools", () => new Modules.Tools.ToolsModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

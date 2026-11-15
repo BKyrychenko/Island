@@ -9,7 +9,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M3 Timers & reminders
 - [x] M4 Notes
 - [x] M5 Control Center
-- [ ] M6 Live events + pill priority queue (+ perf measurement)
+- [~] M6 Live events + pill priority queue (+ perf measurement)
 - [ ] M7 Clipboard + File shelf
 - [ ] M8 Command bar
 - [ ] M9 Screen tools
@@ -21,21 +21,14 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [ ] M15 Polish & release
 
 ## Last action
-M5 complete: Control tab with Wi-Fi/Bluetooth radios, Bluetooth device list + KS reconnect/disconnect, Windows dark mode,
-VPN detection (pbk + clients) with CLI toggles, master volume + mute (Core Audio COM, event-driven), WMI brightness.
-Verified live on this laptop. Also fixed: fullscreen detection hid the island behind maximized browsers; remembered tab
-restore. 177 tests green. Snapshots in logs/shots/m5.
+M6 part 1: `Modules/LiveEvents` — sources for downloads, mic/camera (RegNotifyChangeKeyValue), OBS v5, Steam, VPN flash,
+keyboard layout, Caps Lock (WH_KEYBOARD_LL), Windows notifications (UserNotificationListener attempt); `LiveEventsModule`
+("live", per-source options `live.<name>`), `PillSink` (flash items), `Core/Secret` (DPAPI). 223 tests green.
 
 ## Next step
-Start M6 (Live events + pill priority queue, then perf measurement): `Modules/LiveEvents` — one small class per source,
-each with a fake for tests, started only when enabled: Downloads (FileSystemWatcher on Downloads for *.crdownload / *.part /
-*.tmp, size growth + speed; Chrome partial-download detector tested), mic/camera in use (CapabilityAccessManager
-ConsentStore registry, incl. NonPackaged; RegNotifyChangeKeyValue, not polling), Windows notifications
-(UserNotificationListener — likely needs package identity: try, otherwise mark unavailable), OBS WebSocket v5 (recording
-state + elapsed), Steam (libraryfolders.vdf + appmanifest_*.acf parser tested; watch manifests), VPN transient indicator
-(ControlModule.NetworkChanged + VpnDetector), keyboard layout (EVENT_SYSTEM_FOREGROUND + 500 ms check while on),
-Caps Lock (WH_KEYBOARD_LL, tiny callback). Pill items use PillPriority constants. Then measure idle CPU/RAM over 60 s with
-all modules enabled and record in DECISIONS.md (idle WS was ~21–106 MB right after start before trim — check trim timing).
+M6 part 2: run live — check the notifications source result in log.txt (expected unavailable: no package identity) and
+record it in VERIFICATION.md; drive a fake download into Downloads, Caps Lock, layout switch; snapshots of the live pills
+(add LiveSnapshots like ControlSnapshots); then the 60 s idle perf measurement with all modules → DECISIONS.md; commit M6.
 Live helpers (outside the repo, `..\scratch`): live-m1..m5.ps1, fake-session.ps1, measure-play.ps1.
 
 ## Known blockers

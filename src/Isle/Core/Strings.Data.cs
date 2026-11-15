@@ -125,6 +125,15 @@ public sealed partial class Strings
         ["music.lyricsInstrumental"] = "Instrumental — no lyrics.",
         ["music.lyricsError"] = "Lyrics are unavailable right now (no connection?).",
         ["music.lyricsOff"] = "Lyrics are turned off in Settings.",
+        ["live.downloading"] = "Downloading",
+        ["live.downloaded"] = "Downloaded",
+        ["live.vpnOn"] = "VPN connected",
+        ["live.vpnOff"] = "VPN disconnected",
+        ["live.capsOn"] = "Caps Lock on",
+        ["live.capsOff"] = "Caps Lock off",
+        ["live.micInUse"] = "Microphone in use",
+        ["live.camInUse"] = "Camera in use",
+        ["live.notification"] = "Notification",
         ["snap.toast"] = "Note deleted",
     };
 
@@ -251,6 +260,15 @@ public sealed partial class Strings
         ["music.lyricsInstrumental"] = "Інструментал — без слів.",
         ["music.lyricsError"] = "Текст зараз недоступний (немає з'єднання?).",
         ["music.lyricsOff"] = "Тексти пісень вимкнено в налаштуваннях.",
+        ["live.downloading"] = "Завантаження",
+        ["live.downloaded"] = "Завантажено",
+        ["live.vpnOn"] = "VPN під'єднано",
+        ["live.vpnOff"] = "VPN від'єднано",
+        ["live.capsOn"] = "Caps Lock увімк.",
+        ["live.capsOff"] = "Caps Lock вимк.",
+        ["live.micInUse"] = "Мікрофон використовується",
+        ["live.camInUse"] = "Камера використовується",
+        ["live.notification"] = "Сповіщення",
         ["snap.toast"] = "Нотатку видалено",
     };
 }

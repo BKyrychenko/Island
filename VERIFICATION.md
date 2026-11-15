@@ -88,3 +88,10 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Command bar: timers/reminders ("timer 10m", "remind me in 5 min to stretch", "нагадай ...") | manual-needed (parsers auto-tested in M3) | Alt+Space -> "timer 10m" -> Enter -> timer pill appears |
 | Command bar: URL / g search / ? AI | manual-needed | "github.com" Enter opens the browser; "g wpf spring" searches; "? ..." goes to AI chat after M11 |
 | Command bar: configurable folders | manual-needed | Set option `cmd.folders` to e.g. `C:\Users\you\Documents` -> file names appear after the background index |
+| Screen selection overlay (dim, frame, size label, click-window, Enter = monitor, Esc) | live (screenshot m9/1-overlay) | ok; mixed-DPI multi-monitor: manual-needed (only one monitor here) — connect a second monitor with another scale and select on each |
+| Screenshot markup (tools, colours, widths, undo/redo, copy/save/copy path) | live (editor opened on the selection, m9/5-markup) + auto-test (arrow geometry) | ok; drawing/saving by hand: manual-needed — Win+Alt+S, drag, draw, Save → file in Pictures\Isle |
+| OCR (Windows.Media.Ocr, language chips, clipboard + toast) | live (test window → "Island OCR check 4721" exact) + snapshot | ok |
+| QR / barcode reading (ZXing.Net), Open only for web links | auto-test (roundtrip incl. UTF-8, inverted, none, URL filter) + snapshot | ok; live with a real code: manual-needed — show a QR on screen, Win+Alt+Q, drag over it |
+| Colour picker (loupe, HEX/RGB, click copies, history) | live (#129AE3 picked exactly) + snapshot | ok |
+| Screen recording (WGC + MediaTranscoder MP4, system audio, REC pill, stop, save to Videos\Isle) | live (9 s MP4 with AAC audio track, pill, saved, memory released) | ok; microphone mixing and region recording: manual-needed — enable "Microphone" in the Tools tab, press Record, drag a region, speak, stop |
+| Hotkey Win+Alt+R | unavailable on this PC | Xbox Game Bar owns it; rebind via settings (Hotkeys.record) or use the Record button |

@@ -25,6 +25,7 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
                 () => Run(Screenshot), () => Run(() => Recognize(qr: false, ocr: true)), () => Run(() => Recognize(qr: true, ocr: false)), () => Run(PickColor), ToggleRecording,
                 Copy, OpenUrl, SetOcrLanguage);
             v.ShowColors(Colors());
+            v.SetRecording(_recorder is not null);
             return _view = v;
         }, 70));
         island.Hotkeys.Register("screenshot", "hotkey.screenshot", "Win+Alt+S", () => Run(Screenshot));
@@ -111,9 +112,90 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
 
     static List<string> Colors() => [.. Settings.Current.Opt("tools.colors").Split(',', StringSplitOptions.RemoveEmptyEntries)];
 
-    void ToggleRecording()
+    Recorder? _recorder;
+    System.Windows.Threading.DispatcherTimer? _recTick;
+    Views.Live.IndicatorPill? _recPill;
+    const string RecPillId = "rec";
+
+    async void ToggleRecording()
     {
-        // screen recording arrives in M9 part 3
+        if (_recorder is not null) { await StopRecording(); return; }
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            island.Collapse();
+            var sel = await Select(SelectMode.Region);
+            if (sel is null) return;
+            var region = new PxRect(sel.Rect.X - sel.Monitor.Left, sel.Rect.Y - sel.Monitor.Top, sel.Rect.Width, sel.Rect.Height);
+            var opts = new RecordOptions(sel.Monitor, region, Settings.Current.OptBool("rec.systemAudio", true), Settings.Current.OptBool("rec.mic"));
+            var rec = new Recorder(opts, ScreenGrab.SaveFolder("Videos"));
+            island.ExcludeFromCapture(true); // the REC pill must not end up in the video
+            try { await rec.StartAsync(); }
+            catch
+            {
+                rec.Dispose();
+                island.ExcludeFromCapture(false);
+                try { File.Delete(rec.FilePath); } catch { }
+                throw;
+            }
+            _recorder = rec;
+            Logger.Info($"recording started {region.Width}x{region.Height}");
+            ShowRecPill();
+            _view?.SetRecording(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("recording start", ex);
+            island.Expand(TabId, sticky: true);
+            island.ShowToast(Strings.T("tools.recordFailed"));
+        }
+        finally { _busy = false; }
+    }
+
+    async Task StopRecording()
+    {
+        var rec = _recorder;
+        if (rec is null) return;
+        _recorder = null;
+        _recTick?.Stop();
+        island.Pill.Remove(RecPillId);
+        _view?.SetRecording(false);
+        await rec.StopAsync();
+        island.ExcludeFromCapture(false);
+        Logger.Info("recording saved");
+        GC.Collect();
+        Memory.TrimSoon(2);
+        var path = rec.FilePath;
+        island.Pill.Set(new PillItem
+        {
+            Id = "rec.saved", Priority = PillPriority.Transient, Width = 250, Peek = true,
+            View = () => new Views.Live.IndicatorPill("Icon.Check", Strings.T("tools.recordSaved"), Path.GetFileName(path)),
+            Click = () => { try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")); } catch { } island.Pill.Remove("rec.saved"); },
+        });
+        var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        t.Tick += (_, _) => { t.Stop(); island.Pill.Remove("rec.saved"); };
+        t.Start();
+    }
+
+    void ShowRecPill()
+    {
+        _recPill = new Views.Live.IndicatorPill(null, "REC", "0:00", "DangerBrush");
+        island.Pill.Set(new PillItem
+        {
+            Id = RecPillId, Priority = PillPriority.Recording, Width = 150, Peek = true, HoverExpands = false,
+            View = () => _recPill!, Compact = () => new Views.Live.IndicatorPill(null, "", "", "DangerBrush", center: true), CompactWidth = 30,
+            Click = () => _ = StopRecording(),
+        });
+        _recTick ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _recTick.Tick -= OnRecTick;
+        _recTick.Tick += OnRecTick;
+        _recTick.Start();
+    }
+
+    void OnRecTick(object? s, EventArgs e)
+    {
+        if (_recorder is { } r) _recPill?.Set(null, "REC", Timers.DurationParser.Format(r.Elapsed), "DangerBrush");
     }
 
     void SetOcrLanguage(string tag)
@@ -137,6 +219,7 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
 
     public void Stop()
     {
+        if (_recorder is not null) { _ = StopRecording(); }
         foreach (var id in new[] { "screenshot", "capture", "colorPicker", "record" }) island.Hotkeys.Unregister(id);
         island.RemoveTab(TabId);
         _view = null;

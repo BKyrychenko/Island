@@ -56,6 +56,11 @@ public sealed class ToolsView : Grid
             colors.Children.Add(sw);
         }
         var stack = new StackPanel();
+        var rec = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        rec.Children.Add(Caption("tools.recordAudio"));
+        rec.Children.Add(OptionChip("tools.systemAudio", "rec.systemAudio", true));
+        rec.Children.Add(OptionChip("tools.microphone", "rec.mic", false));
+        stack.Children.Add(rec);
         var title = Caption(history.Count > 0 ? "tools.colorHistory" : "tools.hint");
         stack.Children.Add(title);
         if (history.Count > 0) stack.Children.Add(colors);
@@ -112,6 +117,14 @@ public sealed class ToolsView : Grid
             stack.Children.Add(row);
         }
         _result.Content = stack;
+    }
+
+    static ToggleButton OptionChip(string key, string option, bool fallback)
+    {
+        var chip = new ToggleButton { Content = Strings.T(key), Margin = new Thickness(6, 0, 0, 0), IsChecked = Settings.Current.OptBool(option, fallback) };
+        chip.SetResourceReference(StyleProperty, "Chip");
+        chip.Click += (_, _) => { Settings.Current.SetOpt(option, chip.IsChecked == true); Settings.Current.Save("Options"); };
+        return chip;
     }
 
     static TextBlock Caption(string key)

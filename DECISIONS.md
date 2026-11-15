@@ -105,6 +105,18 @@ One line each: decision — why.
 - Currency: National Bank of Ukraine rates (`bank.gov.ua ... exchange?json`, free, no key) instead of Frankfurter/ECB because ECB has no UAH and the owner's main pair is UAH; all conversions go through UAH. Cached in `rates.json` for 12 h; offline -> cache of any age; the rate's date is shown. HTTP via `Core/IdleHttp` (lazy client, disposed after 2 min idle).
 - `? question` publishes `AskAi` on the EventBus (the AI module subscribes in M11); until then the row says AI chat is not set up and does nothing.
 
+## M9
+- Selection: everything works on a frozen GDI capture (BitBlt + CAPTUREBLT, physical pixels; the process is PerMonitorV2). One borderless topmost window per monitor, placed with SetWindowPos in physical pixels; its content is a Canvas in that monitor's pixels inside a `Viewbox Stretch=Fill`, so 1 canvas unit = 1 physical pixel whatever WPF thinks the DPI is (mixed-DPI safe). A selection stays inside the monitor where it started. Drag = region, click = topmost window under the cursor (DWM extended frame bounds, cloaked windows skipped), Enter = whole monitor, Esc/right-click = cancel.
+- The island is excluded from our own captures with `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` only while capturing/recording (so other tools can still screenshot it).
+- Colour picker reads pixels from the frozen capture (no live GetPixel); loupe = 11×11 px magnified with nearest-neighbour; last 12 colours in option `tools.colors`.
+- OCR: `Windows.Media.Ocr` with the language from option `ocr.lang` (chips for every installed recognizer language), else the user-profile languages; selections smaller than 300 px are upscaled ×2; engine created per use. Win+Alt+Q tries QR first and falls back to OCR; the Tools tab has separate Text and QR buttons.
+- QR: ZXing.Net (managed, Apache-2.0), TryHarder + inverted. Content is shown first; "Open link" exists only for http(s) and opens only on click.
+- Markup: own window per screenshot (not inside the island — it needs real keyboard focus and can be large), image at 1:1 physical pixels unless it does not fit (85 % of the monitor). Annotations are WPF shapes in image-pixel space; export = RenderTargetBitmap of the canvas at 96 dpi (exact pixels). Pixelate replaces the area with a 1/12-scale copy drawn nearest-neighbour. Saves to `Pictures\Isle\Isle yyyy-MM-dd HH.mm.ss.png`.
+- Recording: ScreenRecorderLib was tried first and rejected — its package is a .NET Framework 4.8 C++/CLI assembly that cannot load in .NET 10. Own pipeline instead: Windows.Graphics.Capture (monitor item via `IGraphicsCaptureItemInterop`) → region copied into a D3D11 texture (Vortice.Direct3D11, MIT) → pooled copies as `MediaStreamSample`s → `MediaTranscoder` (H.264 + AAC in MP4). Audio: NAudio.Wasapi (MIT) loopback + default communications mic, resampled to 48 kHz stereo and mixed, 20 ms PCM blocks paced to the clock. 30 fps, output scaled to ≤ 1080 p, bitrate ≈ w·h·fps/8 (2–12 Mbit/s). On this PC the transcoder rejects hardware-accelerated processing ("Unknown") → automatic fallback to its software processing path.
+- Recording cost here (1920×1080, system audio): ~38–44 % of one core (of 16), peak working set ~580–600 MB (only 3 × 8 MB textures are ours, the rest is Media Foundation's software path); after Stop the process is back at ~19 MB (GC + trim). Spec allows heavy use only while active; the release is verified.
+- Win+Alt+R is owned by Xbox Game Bar on this machine (registration fails, logged, non-fatal); the Tools tab Record button and a rebinding (Settings.Hotkeys["record"]) work. Win+Alt+S/Q/C register fine.
+- Windows.Graphics.Capture on Windows 11 draws a yellow border around the captured monitor while recording (`IsBorderRequired` is not in the 19041 projection) — acceptable as a recording indicator.
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|
@@ -117,3 +129,5 @@ One line each: decision — why.
 | M2 | same with lyric line in the pill | 42 MB | — | 1219 ms / 20 s (0.51 %) |
 | M2 | music tab expanded while playing | 55–60 MB | — | — |
 | M6 | idle pill, all modules + all live sources on (notifications unavailable), 60 s after a download/Caps Lock run | 55.5 MB | 48.7 MB | 172 ms over 60 s (0.29 % of one core, ~0.04 % of machine) |
+| M9 | recording 1920×1080 @30 fps + system audio (software MF path) | peak 580–600 MB | — | 38–44 % of one core |
+| M9 | 4 s after recording stopped | 19 MB | — | — |

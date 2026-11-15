@@ -14,26 +14,25 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M8 Command bar
 - [x] M9 Screen tools
 - [x] M10 Weather
-- [~] M11 AI chat + text actions (+ perf measurement)
+- [x] M11 AI chat + text actions (+ perf measurement)
 - [ ] M12 Voice to text
 - [ ] M13 Agents integration
 - [ ] M14 Characters
 - [ ] M15 Polish & release
 
 ## Last action
-M11 part 2: `AiModule` (registered as "ai") + `Views/AiChat/AiChatView` (chat list overlay, new/delete chat, per-chat
-system prompt, streaming bubbles with Stop + Copy, Markdown renderer with code cards, provider settings overlay with
-DPAPI key + Test connection, attachments: picker + Ctrl+V image, PDF text via PdfPig, docx/xlsx via Open XML zip).
-11 `ai-*` snapshot states checked (dark/light, en/uk). 436 tests green. Module starts live (13 modules).
+M11 done. Part 3: text actions (Win+Alt+A → `ClipboardOps.CopySelectionAsync` → `AiPopupView` with Summarise /
+→ EN·UK·NL / Fix / Explain / Reply, Copy / Replace selection) and command bar `? question` (streamed short answer,
+Open in chat). Clipboard paste code shared via `Core/ClipboardOps` (+ quiet window for the history). Live-tested with a
+local fake SSE server (`..\scratch\live-m11.ps1`, `live-m11b.ps1`): selection → stream → replace, clipboard restored,
+history untouched; `?` → popup → Open in chat → follow-up with history. Perf measured (DECISIONS). 442 tests green.
 
 ## Next step
-M11 part 3: text actions (hotkey `textActions` Win+Alt+A: save clipboard, SendInput Ctrl+C, read selection, restore
-clipboard; popup overlay in the island with Summarise / Translate EN·UK·NL / Fix grammar / Explain / Reply; streamed
-result via `AiModule.StreamInto`; Copy / Replace selection = clipboard + Ctrl+V into `PasteTarget`, restore clipboard —
-reuse the clipboard module's paste helper if it is reusable) and the command bar `?` prefix (subscribe `AskAi`, stream a
-short answer inline in the command bar, "Open in chat" button). Then snapshots, perf measurement (§6, incl. peak RAM
-while streaming with a fake local SSE server), VERIFICATION rows, docs, commit, mark M11 done.
-Never run real API calls (owner's money) — use fakes; real call = manual-needed in VERIFICATION.
+M12 Voice to text (§4.16): hold-to-talk hotkey `voice` (Win+Alt+V, `HotkeyService.Register(..., released)`), NAudio
+WASAPI capture 16 kHz mono with a level/waveform pill, Whisper.net (+ runtime) loaded on demand and unloaded after 2 min
+idle, model download (ggml `base` multilingual from the official Hugging Face whisper.cpp repo) into
+`%AppData%\Isle\models\` with progress + SHA check if published, paste via `ClipboardOps.PasteTextAsync` into the
+previous window. Clear messages for no mic / no model. Tests with fakes; record peak RAM while transcribing.
 
 ## Known blockers
 - none

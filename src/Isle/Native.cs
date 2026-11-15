@@ -306,7 +306,7 @@ internal static partial class Native
     public static extern UIntPtr GlobalSize(IntPtr hMem);
 
     public const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 2;
-    public const ushort VK_CONTROL = 0x11, VK_V = 0x56, VK_SHIFT = 0x10, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
+    public const ushort VK_CONTROL = 0x11, VK_V = 0x56, VK_C = 0x43, VK_SHIFT = 0x10, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }

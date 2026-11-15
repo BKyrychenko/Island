@@ -21,6 +21,8 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
     DispatcherTimer? _idle;
     CancellationTokenSource? _run;
     Conversation? _current;
+    AiPopupView? _popup;
+    IDisposable? _askSub;
 
     public string Id => "ai";
     public ChatStore Store => _store ??= store ?? new ChatStore(Paths.File("chats.json"));
@@ -37,6 +39,62 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
             _view.ShowChat(CurrentOrLatest());
             return _view;
         }, 90));
+        island.Hotkeys.Register("textActions", "hotkey.textActions", "Win+Alt+A", () => _ = TextActionHotkey());
+        _askSub = EventBus.Subscribe<Isle.Modules.Commands.AskAi>(q => island.Dispatcher.BeginInvoke(() => Ask(q.Question)));
+    }
+
+    AiPopupView Popup => _popup ??= new AiPopupView(this);
+
+    // ---- text actions / quick questions ----
+
+    async Task TextActionHotkey()
+    {
+        try
+        {
+            var own = new System.Windows.Interop.WindowInteropHelper(island).Handle;
+            var target = Native.GetForegroundWindow();
+            if (target == own || target == IntPtr.Zero) target = island.PasteTarget;
+            var text = await ClipboardOps.CopySelectionAsync();
+            if (text.Trim().Length == 0)
+            {
+                island.ShowToast(Strings.T("ta.noSelection"));
+                return;
+            }
+            Logger.Info($"text action: selection of {text.Length} chars");
+            island.SetHidden("user", false);
+            Popup.ShowSelection(text, target);
+            island.ShowOverlay(Popup);
+        }
+        catch (Exception ex) { Logger.Error("text actions", ex); }
+    }
+
+    /// <summary>Command bar `? question`: a short streamed answer in the popup.</summary>
+    public void Ask(string question)
+    {
+        if (question.Trim().Length == 0) return;
+        island.SetHidden("user", false);
+        island.ShowOverlay(Popup);
+        Popup.ShowQuestion(question.Trim());
+    }
+
+    /// <summary>Opens the AI tab with its provider settings (from the popup's "no key" error).</summary>
+    public void OpenSettings()
+    {
+        island.HideOverlay();
+        island.Expand(TabId, sticky: true);
+        island.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _view?.ShowSettings());
+    }
+
+    /// <summary>Continues a quick question as a stored chat in the AI tab.</summary>
+    public void OpenInChat(string question, ChatMessage answer)
+    {
+        var c = Store.New();
+        c.Messages.Add(new ChatMessage { Role = "user", Text = question });
+        c.Messages.Add(new ChatMessage { Role = "assistant", Text = answer.Text, Note = answer.Note, Stopped = answer.Stopped });
+        Store.Touch(c);
+        Select(c);
+        island.HideOverlay();
+        island.Expand(TabId, sticky: true);
     }
 
     Conversation? CurrentOrLatest()
@@ -193,6 +251,11 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
     public void Stop()
     {
         Cancel();
+        _askSub?.Dispose();
+        _askSub = null;
+        island.Hotkeys.Unregister("textActions");
+        if (_popup is not null) island.HideOverlay();
+        _popup = null;
         _idle?.Stop();
         _idle = null;
         island.RemoveTab(TabId);

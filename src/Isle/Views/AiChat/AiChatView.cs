@@ -84,6 +84,7 @@ public sealed class AiChatView : Grid, ITabView
         DockPanel.SetDock(_send, Dock.Right);
         row.Children.Add(_send);
         _input.SetResourceReference(StyleProperty, "FlatTextBox");
+        System.Windows.Automation.AutomationProperties.SetName(_input, "ai-input");
         _input.PreviewKeyDown += OnInputKey;
         _input.TextChanged += (_, _) => UpdatePlaceholder();
         _placeholder.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
@@ -289,6 +290,7 @@ public sealed class AiChatView : Grid, ITabView
         var busy = _m.Busy;
         _send.Content = MarkdownView.SmallIcon(busy ? "Icon.Stop" : "Icon.Send", 15, "AccentFgBrush");
         _send.ToolTip = Strings.T(busy ? "ai.stop" : "ai.send");
+        System.Windows.Automation.AutomationProperties.SetName(_send, Strings.T(busy ? "ai.stop" : "ai.send"));
     }
 
     void UpdatePlaceholder()
@@ -601,6 +603,7 @@ public sealed class AiChatView : Grid, ITabView
     static Button IconAction(string icon, string tipKey, Action click)
     {
         var b = new Button { Width = 28, Height = 28, ToolTip = Strings.T(tipKey), Content = MarkdownView.SmallIcon(icon, 15) };
+        System.Windows.Automation.AutomationProperties.SetName(b, Strings.T(tipKey));
         b.SetResourceReference(StyleProperty, "IconButton");
         b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("ai action", ex); } };
         return b;

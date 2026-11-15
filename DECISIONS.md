@@ -141,6 +141,11 @@ One line each: decision — why.
 - A failure after part of an answer arrived keeps the partial text and shows the error under it (`ChatMessage.Note`); Stop keeps the partial text marked "Stopped".
 - The streaming HttpClient (10-min timeout, shared by both providers) is created on the first request and disposed 2 min after the last one; `Memory.TrimSoon` after each answer.
 - "Test connection" sends one real tiny message ("Reply with the single word OK.") with the saved settings — the only reliable check across both provider kinds.
+- Text actions and command-bar questions share one full-panel overlay (`AiPopupView`, same slot as the command bar): the `?` answer replaces the bar in place, which is the closest thing to "inline" in a 520×220 panel. "Open in chat" turns the question + answer into a stored chat.
+- Selection capture (`Core/ClipboardOps.CopySelectionAsync`): wait until the hotkey's modifiers are physically released (no synthetic Win/Alt key-ups that could open Start or a menu bar), snapshot the clipboard, Ctrl+C, wait for the clipboard sequence number to change (≤ 700 ms), read, restore. `ClipboardOps.Quiet` makes the clipboard history skip these borrowed copies. The clipboard module's paste code moved into the same helper.
+- Text-action results are pasted as returned (prompts ask for the bare result, so Fix/Translate come back as plain text); "Replace selection" is the default button for Fix/Translate, "Copy" for Summarise/Explain/Reply.
+- Closing the popup (Esc/×/collapse) cancels a running answer; the panel is held open while an answer streams.
+- One request at a time across the tab and the popup (`AiModule.Busy`); the popup says so instead of queueing.
 
 ## Performance measurements
 | When | State | Working set | Private | CPU |
@@ -156,3 +161,8 @@ One line each: decision — why.
 | M6 | idle pill, all modules + all live sources on (notifications unavailable), 60 s after a download/Caps Lock run | 55.5 MB | 48.7 MB | 172 ms over 60 s (0.29 % of one core, ~0.04 % of machine) |
 | M9 | recording 1920×1080 @30 fps + system audio (software MF path) | peak 580–600 MB | — | 38–44 % of one core |
 | M9 | 4 s after recording stopped | 19 MB | — | — |
+| M11 | idle pill, all modules (13), 60 s | 22.7 MB | 35.9 MB | 234 ms over 60 s (0.39 % of one core) |
+| M11 | start-up to input-idle | — | — | 442 ms |
+| M11 | AI text action streaming (fake local server) | peak 92 MB | — | — |
+| M11 | AI chat tab streaming, tab open | peak 116 MB | — | — |
+| M11 | 6–8 s after an answer (trim) | 9–23 MB | — | — |

@@ -84,6 +84,7 @@ public sealed class ClipboardService : IDisposable
         {
             var seq = Native.GetClipboardSequenceNumber();
             if (seq == _ignoreSequence && seq != 0) return; // our own write
+            if (ClipboardOps.IsQuiet) return;              // another Isle feature is borrowing the clipboard
             if (IsPrivate()) return;
             var owner = Native.GetClipboardOwner();
             var app = owner != IntPtr.Zero ? ForegroundWatcher.ProcessName(owner) : "";
@@ -154,14 +155,14 @@ public sealed class ClipboardService : IDisposable
     /// restores the previous clipboard content (text/image/files) half a second later.</summary>
     public void Paste(ClipEntry e)
     {
-        var previous = SnapshotClipboard();
+        var previous = ClipboardOps.Snapshot();
         if (!SetClipboard(e)) return;
         var target = _pasteTarget();
         if (target != IntPtr.Zero && Native.GetForegroundWindow() != target) Native.SetForegroundWindow(target);
         // let the target take focus, then paste; then restore
         After(TimeSpan.FromMilliseconds(90), () =>
         {
-            SendCtrlV();
+            ClipboardOps.SendCtrl(Native.VK_V);
             After(TimeSpan.FromMilliseconds(600), () => Restore(previous));
         });
     }
@@ -189,49 +190,9 @@ public sealed class ClipboardService : IDisposable
         catch (Exception ex) { Logger.Error("clipboard set", ex); return false; }
     }
 
-    static DataObject? SnapshotClipboard()
-    {
-        try
-        {
-            var d = new DataObject();
-            var any = false;
-            if (System.Windows.Clipboard.ContainsText()) { d.SetText(System.Windows.Clipboard.GetText()); any = true; }
-            if (System.Windows.Clipboard.ContainsImage() && System.Windows.Clipboard.GetImage() is { } img) { d.SetImage(img); any = true; }
-            if (System.Windows.Clipboard.ContainsFileDropList()) { d.SetFileDropList(System.Windows.Clipboard.GetFileDropList()); any = true; }
-            return any ? d : null;
-        }
-        catch { return null; }
-    }
-
     void Restore(DataObject? previous)
     {
-        if (previous is null) return;
-        try
-        {
-            System.Windows.Clipboard.SetDataObject(previous, true);
-            _ignoreSequence = Native.GetClipboardSequenceNumber();
-        }
-        catch (Exception ex) { Logger.Warn($"clipboard restore: {ex.GetType().Name}"); }
-    }
-
-    static void SendCtrlV()
-    {
-        var inputs = new List<Native.INPUT>();
-        // release modifiers that are physically held (e.g. the command-bar hotkey) so the target sees a clean Ctrl+V
-        foreach (var vk in new[] { Native.VK_SHIFT, Native.VK_MENU, Native.VK_LWIN, Native.VK_RWIN })
-            if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) inputs.Add(Key(vk, up: true));
-        inputs.Add(Key(Native.VK_CONTROL, false));
-        inputs.Add(Key(Native.VK_V, false));
-        inputs.Add(Key(Native.VK_V, true));
-        inputs.Add(Key(Native.VK_CONTROL, true));
-        if (Native.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<Native.INPUT>()) == 0)
-            Logger.Warn($"SendInput failed ({Marshal.GetLastWin32Error()})");
-
-        static Native.INPUT Key(ushort vk, bool up) => new()
-        {
-            type = Native.INPUT_KEYBOARD,
-            u = new Native.InputUnion { ki = new Native.KEYBDINPUT { wVk = vk, dwFlags = up ? Native.KEYEVENTF_KEYUP : 0 } },
-        };
+        if (previous is not null && ClipboardOps.Restore(previous)) _ignoreSequence = Native.GetClipboardSequenceNumber();
     }
 
     void After(TimeSpan delay, Action action)

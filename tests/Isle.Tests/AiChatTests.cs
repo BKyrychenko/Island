@@ -179,3 +179,62 @@ public class AttachmentTests
         Assert.Equal("", Attachments.PdfText(Encoding.ASCII.GetBytes("%PDF-1.4 garbage")));
     }
 }
+
+public class TextActionTests
+{
+    [Fact]
+    public void EveryActionHasPromptAndTitle()
+    {
+        foreach (var a in TextActions.All)
+        {
+            Assert.StartsWith("ta.", TextActions.TitleKey(a));
+            Assert.False(string.IsNullOrWhiteSpace(TextActions.SystemPrompt(a, "en")));
+        }
+        Assert.Equal(7, TextActions.All.Length);
+    }
+
+    [Fact]
+    public void BuildsOneOffConversation()
+    {
+        var c = TextActions.Build(TextAction.TranslateNl, "Привіт", "uk");
+        Assert.Contains("Dutch", c.SystemPrompt);
+        var m = Assert.Single(c.ForRequest());
+        Assert.Equal("user", m.Role);
+        Assert.Equal("Привіт", m.Text);
+    }
+
+    [Fact]
+    public void SummaryFollowsUiLanguageAndLongSelectionIsCut()
+    {
+        Assert.Contains("Ukrainian", TextActions.SystemPrompt(TextAction.Summarise, "uk"));
+        Assert.Contains("English", TextActions.SystemPrompt(TextAction.Explain, "en"));
+        var c = TextActions.Build(TextAction.Fix, new string('a', TextActions.MaxChars + 50), "en");
+        Assert.Equal(TextActions.MaxChars, c.Messages[0].Text.Length);
+    }
+
+    [Fact]
+    public void ReplacingActions()
+    {
+        Assert.True(TextActions.Replaces(TextAction.Fix));
+        Assert.True(TextActions.Replaces(TextAction.TranslateUk));
+        Assert.False(TextActions.Replaces(TextAction.Explain));
+        Assert.False(TextActions.Replaces(TextAction.Summarise));
+    }
+
+    [Fact]
+    public void QuestionAsksForShortAnswer()
+    {
+        var c = TextActions.Question("why is the sky blue?", "en");
+        Assert.Contains("briefly", c.SystemPrompt);
+        Assert.Equal("why is the sky blue?", c.Messages[0].Text);
+    }
+
+    [Fact]
+    public void ClipboardQuietWindow()
+    {
+        Isle.Core.ClipboardOps.Quiet(TimeSpan.FromSeconds(5));
+        Assert.True(Isle.Core.ClipboardOps.IsQuiet);
+        Isle.Core.ClipboardOps.Quiet(TimeSpan.Zero);
+        Assert.False(Isle.Core.ClipboardOps.IsQuiet);
+    }
+}

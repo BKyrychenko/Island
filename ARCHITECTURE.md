@@ -45,6 +45,8 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **PillQueue / PillItem / PillPriority** — what the collapsed pill shows; pure `Select()` rule (tested).
 - **TabInfo / ITabView** — tab registration record and the shown/hidden callbacks for tab views.
 - **ForegroundWatcher** — `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`; `LastExternal` (paste target), `IsFullscreen`, `ProcessName`.
+- **ClipboardOps** — snapshot/restore the clipboard, `SendCtrl(vk)`, `CopySelectionAsync`, `PasteTextAsync`, and
+  `Quiet(span)` (clipboard history ignores changes meanwhile). Used by the clipboard module and AI text actions.
 - **Memory** — `TrimSoon()`: GC + `EmptyWorkingSet` after start-up and after heavy features.
 
 ## Styles / Views
@@ -96,6 +98,9 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   (options `ai.provider`, `ai.anthropic.model/key`, `ai.openai.base/model/key`, keys DPAPI), `Attachments` (file →
   image/PDF/text attachment, docx/xlsx via Open XML zip, PDF text via PdfPig), `Markdown` (block + inline parser).
   Views `Views/AiChat/AiChatView` (header, bubbles, chips, input, overlays) and `MarkdownView` (renderer).
+  Text actions: hotkey `textActions` (Win+Alt+A) → `ClipboardOps.CopySelectionAsync` → `AiPopupView` (island overlay)
+  with `TextActions` prompts; Copy / Replace (`ClipboardOps.PasteTextAsync` into the previous window). Command bar
+  `? question` → `AskAi` on the EventBus → `AiModule.Ask` → the same popup; "Open in chat" stores it as a chat.
 
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

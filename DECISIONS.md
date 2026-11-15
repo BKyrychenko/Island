@@ -126,6 +126,13 @@ One line each: decision — why.
 - Weather icons: original line drawings (`Wx.*` geometries in Icons.xaml) drawn with the shared `Icon` control.
 - Cache `weather.json` (JsonStore, corrupt → backup + ignored) for offline display; offline state shows "Offline · Updated HH:mm" in the warning colour.
 
+## M11
+- Anthropic provider uses the official `Anthropic` NuGet SDK (13.8.0, MIT) — typed streaming events, typed errors (401/429/529 → readable messages), SDK retries for 429/5xx; it is loaded only when a chat request is made. The OpenAI-compatible provider is a small raw-HTTP SSE client (`/chat/completions`, `stream: true`) because it must work with any compatible server (OpenAI, OpenRouter, LM Studio, Ollama /v1).
+- Default Anthropic model `claude-opus-5-5` (editable field). Requests go to the beta endpoint; for models that support it (Opus 5.5/5, Sonnet 5.5, Fable 5.2/5.1) `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01` are sent so a policy refusal is re-served by a fallback model; a remaining `stop_reason: refusal` shows a readable message. Thinking is left at the model default (adaptive), max_tokens 32000 (streaming).
+- Attachments: images → base64 image blocks (OpenAI: data-URL `image_url`), PDF → base64 document block on Anthropic and extracted text on OpenAI-compatible, other files → extracted text wrapped in `<file name="…">`. History sent = alternating user/assistant (errors and empty turns dropped, same-role turns merged).
+- Keys stored DPAPI-protected in `Settings.Options` (`ai.anthropic.key`, `ai.openai.key`); errors carry only a status-derived key + the server's short `error.message`, never keys or bodies.
+- Conversations in `chats.json` (plain JSON via JsonStore, newest first, max 100); title = first user line (≤ 48 chars).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

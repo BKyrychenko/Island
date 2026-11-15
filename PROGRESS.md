@@ -14,22 +14,24 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M8 Command bar
 - [x] M9 Screen tools
 - [x] M10 Weather
-- [ ] M11 AI chat + text actions (+ perf measurement)
+- [~] M11 AI chat + text actions (+ perf measurement)
 - [ ] M12 Voice to text
 - [ ] M13 Agents integration
 - [ ] M14 Characters
 - [ ] M15 Polish & release
 
 ## Last action
-M10 complete: Weather module (Open-Meteo forecast + geocoding, optional geojs.io IP location, 30-min refresh only once
-a place is set, weather.json offline cache, temperature in idle pill, once-per-event rain banner, original Wx.* icons).
-Snapshots weather-* checked in dark/light, en/uk; 384 tests green; live API probe OK.
+M11 part 1: AI core in `Modules/AiChat` — `AiModels` (Conversation/ChatMessage/ChatAttachment, `AiConfig` from settings
+with DPAPI keys, `AiException` readable error keys), `AnthropicProvider` (official SDK, beta endpoint + refusal fallbacks),
+`OpenAiProvider` (raw SSE), `ChatStore` (chats.json). `ai.err.*` strings EN/UK. 412 tests green (incl. SDK stream via fake HTTP).
 
 ## Next step
-Start M11 (AI chat + text actions, spec 4.13): BYOK Anthropic / OpenAI-compatible, DPAPI keys, SSE streaming, multiple
-chats, markdown rendering, attachments (images, PDF, docx/xlsx via Open XML, text), text-actions hotkey Win+Alt+A,
-`?` prefix in the command bar. Read the current Anthropic Messages API docs before writing the client. Measure perf (§6).
-Live scripts must guard focus and never act on the owner's real windows (see memory + ..\scratch\live-m9.ps1 abort).
+M11 part 2: `AiModule` + `Views/AiChat/AiChatView` (chat list, new/delete chat, per-chat system prompt, streaming
+bubbles with Stop + Copy, simple markdown renderer: code blocks, lists, bold; provider settings panel with key fields +
+"Test connection"; attachments with size limits — PDF text via a PDF library for OpenAI, docx/xlsx via Open XML).
+Then part 3: text actions (Win+Alt+A, Ctrl+C capture/restore, popup with Summarise/Translate/Fix/Explain/Reply, Copy /
+Replace) and the command bar `?` prefix (stream a short answer inline). Snapshots, perf measurement (§6), docs.
+Never run real API calls (owner's money) — use fakes; real call = manual-needed in VERIFICATION.
 
 ## Known blockers
 - none

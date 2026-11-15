@@ -22,6 +22,7 @@ public partial class IslandWindow
         HideMoreOverlay();
         view.Visibility = Visibility.Visible;
         if (!_expanded) Expand(sticky: true);
+        view.Dispatcher.BeginInvoke(ApplyExStyle, System.Windows.Threading.DispatcherPriority.Loaded);
         Safe(() => (view as ITabView)?.OnShown(), "overlay shown");
     }
 
@@ -29,6 +30,7 @@ public partial class IslandWindow
     {
         if (_overlay is not { Visibility: Visibility.Visible } o) return;
         o.Visibility = Visibility.Collapsed;
+        ApplyExStyle();
         Safe(() => (o as ITabView)?.OnHidden(), "overlay hidden");
     }
 

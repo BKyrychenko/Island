@@ -65,7 +65,7 @@ public partial class App : Application
             Host.Register("tray", () => new TrayModule(
                 isIslandVisible: () => Island?.IsHiddenByUser == false,
                 toggleIsland: ToggleIsland,
-                openSettings: () => { /* settings panel arrives in a later milestone */ },
+                openSettings: () => OpenSettings(),
                 quit: Quit));
             Host.Register("lyrics", () => new Modules.Lyrics.LyricsModule());
             Host.Register("media", () => new Modules.Media.MediaModule(Island!));
@@ -83,6 +83,7 @@ public partial class App : Application
             Host.Register("agents", () => new Modules.Agents.AgentsModule(Island!));
             Host.Register("characters", () => new Modules.Characters.CharactersModule(Island!));
             Host.Sync();
+            if (Island is not null) Island.SettingsRequested += () => OpenSettings();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -102,6 +103,51 @@ public partial class App : Application
     {
         if (Island is null) return;
         Island.SetHidden("user", !Island.IsHiddenByUser);
+    }
+
+    static Views.SettingsPanel.SettingsView? _settings;
+
+    /// <summary>Shows the settings panel inside the island (gear button, tray menu).</summary>
+    public static void OpenSettings(string? section = null)
+    {
+        if (Island is not { } w) return;
+        try
+        {
+            w.SetHidden("user", false);
+            _settings ??= new Views.SettingsPanel.SettingsView(new Views.SettingsPanel.SettingsActions(
+                Hotkeys: () => w.Hotkeys.List(),
+                Rebind: (id, g) => w.Hotkeys.Rebind(id, g),
+                SuspendHotkeys: on => w.Hotkeys.Suspend(on),
+                StateOf: Host.StateOf,
+                SyncModules: Host.Sync,
+                RestartModule: id => { if (!Host.IsEnabled(id)) return; Host.Stop(id); Host.Start(id); },
+                Open: OpenFromSettings,
+                Close: w.HideOverlay));
+            if (section is not null) _settings.ShowSection(section);
+            w.ShowOverlay(_settings);
+        }
+        catch (Exception ex) { Logger.Error("open settings", ex); }
+    }
+
+    static void OpenFromSettings(string target)
+    {
+        if (Island is not { } w) return;
+        var done = target switch
+        {
+            "weather" when Host.IsEnabled("weather") => Do(() => { w.HideOverlay(); w.Expand("weather", sticky: true); }),
+            "ai" => Do(Host.Get<Modules.AiChat.AiModule>("ai") is { } ai ? ai.OpenSettings : null),
+            "hooks" => Do(Host.Get<Modules.Agents.AgentsModule>("agents") is { } ag ? ag.OpenHooks : null),
+            "characters" => Do(Host.Get<Modules.Characters.CharactersModule>("characters") is { } ch ? ch.OpenGallery : null),
+            _ => false,
+        };
+        if (!done) w.ShowToast(Strings.T("set.moduleOff"));
+
+        static bool Do(Action? a)
+        {
+            if (a is null) return false;
+            a();
+            return true;
+        }
     }
 
     public static void Quit() => Current.Shutdown(0);

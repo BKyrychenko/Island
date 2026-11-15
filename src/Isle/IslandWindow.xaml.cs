@@ -100,7 +100,8 @@ public partial class IslandWindow : Window
         // no-activate always, except while a text box inside the island owns the keyboard
         if (_hasFocus) ex &= ~(long)Native.WS_EX_NOACTIVATE;
         else ex |= Native.WS_EX_NOACTIVATE;
-        if (Settings.Current.ClickThrough) ex |= Native.WS_EX_TRANSPARENT;
+        // click-through, except while the settings panel is open (otherwise it could never be switched off there)
+        if (Settings.Current.ClickThrough && !(_expanded && _overlay is Views.SettingsPanel.SettingsView { IsVisible: true })) ex |= Native.WS_EX_TRANSPARENT;
         else ex &= ~(long)Native.WS_EX_TRANSPARENT;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
     }

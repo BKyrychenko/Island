@@ -112,6 +112,17 @@ public sealed class HotkeyService
         Changed?.Invoke();
     }
 
+    /// <summary>Temporarily releases every hotkey (while the settings panel records a new combination) and takes them back.</summary>
+    public void Suspend(bool suspended)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        foreach (var e in _entries.Values)
+        {
+            if (suspended) Unbind(e);
+            else Bind(e);
+        }
+    }
+
     public void Detach()
     {
         foreach (var e in _entries.Values) Unbind(e);

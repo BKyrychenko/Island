@@ -64,6 +64,7 @@ public partial class IslandWindow
             Modules.Voice.VoiceSnapshots.Register(SnapshotStates);
             Modules.Agents.AgentSnapshots.Register(SnapshotStates);
             Modules.Characters.CharacterSnapshots.Register(SnapshotStates);
+            Views.SettingsPanel.SettingsSnapshots.Register(SnapshotStates);
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");

@@ -45,6 +45,14 @@ public sealed class AgentsModule(IslandWindow island) : IModule, IDisposable
         Settings.Changed += OnSettingsChanged;
     }
 
+    /// <summary>Opens the Agents tab with the hooks install/remove panel (from the settings panel).</summary>
+    public void OpenHooks()
+    {
+        island.HideOverlay();
+        island.Expand(TabId, sticky: true);
+        island.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () => _view?.ShowHooks());
+    }
+
     internal AgentsActions Actions() => new(
         Allow: r => Answer(r, HookProtocol.Reply("allow")),
         Deny: r => Answer(r, HookProtocol.Reply("deny", Strings.T("agents.deniedMessage"))),

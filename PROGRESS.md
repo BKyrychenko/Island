@@ -18,22 +18,25 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M12 Voice to text
 - [x] M13 Agents integration
 - [x] M14 Characters
-- [ ] M15 Polish & release
+- [~] M15 Polish & release
 
 ## Last action
-M14 done: `Modules/Characters` (CreatureBrain, CreatureDesign Pebb/Sprig/Kubo, CharactersModule, CharacterSnapshots),
-`Views/Characters` (CreatureView, CharacterGallery), tab-bar mascot slot (`TabBar.Mascot`), `MusicPlaying` event from
-media, strings EN/UK, `CharacterTests`. Perf: idle 0.26 % of one core (default), 1.2 % with the pill mascot on.
-(M13 committed before: agents integration, pipe cancel race fixed.)
+M15 step 1 done: settings panel inside the island (`Views/SettingsPanel/SettingsView` + snapshots + tests), opened by the
+gear and the tray "Settings" (`App.OpenSettings`). Sections: General (theme, language, size slider with live preview,
+monitor, clock, fullscreen/edge/click-through, autostart, excluded apps), Modules (16 switches → `Host.Sync`),
+Options (lyrics, weather, live sources, OBS port/password, downloads folder, clipboard limit/excluded apps, shelf,
+command-bar folders, recording audio, AI link, voice model/language, agents approvals/timeout/hooks link, character
+gallery link), Hotkeys (click + press keys, reset, failures shown; global hotkeys suspended while recording), About.
+Live-checked with UI Automation (`..\scratch\live-m15.ps1`).
 
 ## Next step
-M15 Polish & release (§8.15): settings panel inside the island (gear → overlay: theme, scale, language, monitor,
-auto-hide, click-through, excluded apps, per-module toggles, module options incl. weather/AI/voice/agents/characters
-gallery, hook install/remove link, hotkey table with rebinding), Ukrainian strings review, snapshots of every state in
-both themes/languages, full perf measurement, 10-min soak test, README.md, VERIFICATION.md, ARCHITECTURE.md, build.ps1
-run + launch the published exe. Then DONE.flag (+ final message in Ukrainian).
+M15 remaining: Ukrainian strings review; every-state snapshots in both themes/languages (`--snapshot all`) and look
+at them; full perf measurement (idle 60 s, all modules); 10-min soak test (script: music fake session, timers, notes,
+clipboard copies, control toggles, tab switching; watch log + working set); README.md, VERIFICATION.md (add settings
+panel rows), ARCHITECTURE.md (add Live events / Clipboard / Shelf / Command bar / Screen tools / Settings panel
+paragraphs — missing now); build.ps1 run + launch dist exe (both variants). Then DONE.flag + final message in Ukrainian.
 Notes: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the self-contained
-build loads whisper.dll. `IslandWindow.SettingsRequested` has no handler yet (tray "Settings" too?).
+build loads whisper.dll.
 
 ## Known blockers
 - none

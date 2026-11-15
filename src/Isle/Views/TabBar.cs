@@ -89,6 +89,7 @@ public sealed class TabBar : Grid
         icon.SetResourceReference(Icon.ForegroundProperty, "FgDimBrush");
         b.Content = icon;
         b.SetBinding(ToolTipProperty, new System.Windows.Data.Binding($"[{tipKey}]") { Source = Strings.Instance });
+        b.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, new System.Windows.Data.Binding($"[{tipKey}]") { Source = Strings.Instance });
         return b;
     }
 

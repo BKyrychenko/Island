@@ -177,6 +177,15 @@ One line each: decision — why.
 - Placement: a 28-px character in the tab bar next to the gear (it takes room from the tab strip; click opens the gallery overlay), and optionally a 22-px one in the idle pill's left slot (option `chars.inPill`, **off by default** so the default idle cost stays ~0). Gallery = full-panel overlay (pick, "show in idle pill", nap delay); the M15 settings panel can reuse it.
 - Overlapping parts (stem + leaves, antenna stem + ball) use non-zero fill — even-odd punched holes (found in the snapshot sheet).
 
+## M15
+- Settings live inside the island as a full-panel overlay (`Views/SettingsPanel/SettingsView`), not a separate window: the spec allows either and the island already hosts full-panel overlays (command bar, gallery). Left section list (General · Modules · Options · Hotkeys · About), scrolling page on the right; opened by the gear and the tray menu.
+- Simple settings are written by the panel itself (`Settings.Save(name)` → existing `Settings.Changed` handlers apply them live); options a module reads only at start (clipboard limit, command-bar folders, OBS port/password, downloads folder, weather units/pill/alerts) restart that one module (`Host.Stop` + `Start`). Links open the existing in-module UIs instead of duplicating them: AI provider/key (AI tab settings), agent hooks (Agents tab hooks panel), character gallery, weather place (Weather tab).
+- UI-scale slider: 80–200 % in 5 % steps, applied 160 ms after the thumb rests (live preview without re-laying out the window on every pixel).
+- Click-through is ignored while the settings panel is open (otherwise it could not be switched off there); the tray "Settings" item is the way in when click-through is on.
+- Hotkey rebinding: click the box, press the combination (bare or Shift-only letters are refused, F-keys allowed alone), Backspace/Delete turns it off, the reset icon goes back to the default. All global hotkeys are released while the box records (`HotkeyService.Suspend`) so pressing one of Isle's own combinations records it instead of firing it. A combination taken by another app is reported in the panel.
+- Notifications source switch is shown disabled with the reason (unavailable for unpackaged apps, see VERIFICATION).
+- Known snapshot artefact: switches created already "on" render "off" in `--snapshot` PNGs because the switch template moves the thumb with a storyboard that does not run during off-screen rendering; live they are correct (checked with screenshots).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

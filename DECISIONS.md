@@ -184,6 +184,10 @@ One line each: decision — why.
 - Click-through is ignored while the settings panel is open (otherwise it could not be switched off there); the tray "Settings" item is the way in when click-through is on.
 - Hotkey rebinding: click the box, press the combination (bare or Shift-only letters are refused, F-keys allowed alone), Backspace/Delete turns it off, the reset icon goes back to the default. All global hotkeys are released while the box records (`HotkeyService.Suspend`) so pressing one of Isle's own combinations records it instead of firing it. A combination taken by another app is reported in the panel.
 - Notifications source switch is shown disabled with the reason (unavailable for unpackaged apps, see VERIFICATION).
+- Self-contained publish no longer bundles native DLLs into the single file (`IncludeNativeLibrariesForSelfExtract` dropped): a bundled `whisper.dll` is extracted to a temp folder where Whisper.net's loader does not look ("Native Library not found"). Native files now sit next to the exe; `build.ps1` deletes the unused `runtimes\win-arm64` / `win-x86` Whisper natives (~3.5 MB). Self-contained folder ≈ 326 MB (R2R + full runtime), framework-dependent exe 69 MB — left as is; compression would cost start-up time and RAM.
+- Icon-only buttons and tabs get their tooltip as UI Automation name (style setter) — screen readers, and the live/soak scripts find them by name.
+- Default Win+Alt+R stays as the spec says although Xbox Game Bar usually owns it; the conflict is shown in Settings → Hotkeys and the README says to rebind it.
+- Memory is trimmed 5 s after the panel collapses (tab views paged in while open go back out). The trim timer runs at Background priority: at ApplicationIdle it never fired while the music equalizer animated every frame (found in the soak test, trims logged since).
 - Known snapshot artefact: switches created already "on" render "off" in `--snapshot` PNGs because the switch template moves the thumb with a storyboard that does not run during off-screen rendering; live they are correct (checked with screenshots).
 
 ## Performance measurements
@@ -210,3 +214,8 @@ One line each: decision — why.
 | M12 | hold-to-talk recording (mic + pill), before Whisper | peak 67–73 MB | — | — |
 | M14 | idle pill, all modules (16), character on the panel only (default), 60 s | 23.5 MB | 37.8 MB | 156 ms over 60 s (0.26 % of one core) |
 | M14 | same with the character in the idle pill (awake, breathing/blinking/eyes) | 45.7 MB | 51.7 MB | 734 ms over 60 s (1.2 % of one core, ~0.1 % of machine) |
+| M15 | published `dist\Isle\Isle.exe`, idle pill, all modules (16), fresh data, 60 s | 25.1 MB | 38.3 MB | 172 ms over 60 s (0.29 % of one core, 0.024 % of machine) |
+| M15 | published self-contained exe, same, 30 s | 22.9 MB | 62.0 MB | 94 ms over 30 s (0.31 % of one core) |
+| M15 | start-up to input-idle, published exe | — | — | 382–527 ms warm; 1.39 s on the very first (cold-disk) launch after publishing |
+| M15 | Whisper from both published variants (`--transcribe`, 6 s speech) | peak 392–418 MB | — | 2.1–2.4 s per run |
+| M15 | 10-min soak (77 cycles, every tab, music, timers, notes, clipboard, settings) | 14.8 MB 20 s after the end | 64 MB (range 55–86, no trend) | managed heap 7 MB after trims; no errors |

@@ -20,7 +20,7 @@ public static partial class Memory
     /// <summary>Must be called on the UI thread.</summary>
     public static void TrimSoon(double seconds = 3)
     {
-        _timer ??= new DispatcherTimer(DispatcherPriority.ApplicationIdle);
+        _timer ??= new DispatcherTimer(DispatcherPriority.Background); // ApplicationIdle starves while an animation renders every frame
         _timer.Stop();
         _timer.Interval = TimeSpan.FromSeconds(seconds);
         _timer.Tick -= OnTick;
@@ -38,11 +38,13 @@ public static partial class Memory
     {
         try
         {
+            var before = GC.GetTotalMemory(false);
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
             using var p = Process.GetCurrentProcess();
             EmptyWorkingSet(p.Handle);
+            Logger.Info($"memory trim: managed {before / 1048576} -> {GC.GetTotalMemory(false) / 1048576} MB, private {p.PrivateMemorySize64 / 1048576} MB");
         }
         catch (Exception ex) { Logger.Error("memory trim", ex); }
     }

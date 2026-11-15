@@ -79,6 +79,33 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   `Brightness` WMI, VPN environment), `WindowsTheme` (HKCU Personalize + WM_SETTINGCHANGE broadcast),
   `BluetoothDevices` (WinRT list + KS one-shot reconnect/disconnect), `VpnDetector` (pbk profiles, client detection, CLI
   runner). COM interfaces in `CoreAudio.cs`. View `Views/Control/ControlView` (tiles, sliders, in-panel overlay lists).
+- **Live events** (`live`, `Modules/LiveEvents`) — `LiveEventsModule` owns small `ILiveSource`s, each switched by option
+  `live.<name>` and constructed only when on: `DownloadsSource` (FileSystemWatcher on Downloads, `DownloadDetector`
+  for Chrome/Edge/Firefox partial files, `SpeedMeter`), `MicCameraSource` (`RegistryWatcher` on the consent store,
+  `ConsentStore` parser), `ObsSource` (WebSocket v5, `ObsAuth`), `SteamSource` (`Vdf` + `Steam` manifest parser, file
+  watcher), `VpnIndicatorSource` (`NetworkChange`), `KeyboardLayoutSource` (foreground events + 500 ms check),
+  `CapsLockSource` (WH_KEYBOARD_LL), `NotificationsSource` (unavailable unpackaged). They talk to the pill through
+  `ILiveSink` (`PillSink`); views `Views/Live/IndicatorPill`. Options `live.obsPort/obsPassword/downloadsFolder`.
+- **Clipboard** (`clipboard`, `Modules/Clipboard`) — `ClipboardService` (AddClipboardFormatListener on a message
+  window, `ClipPrivacy`: exclusion formats + excluded apps), `ClipStore` (`clipboard.json`, text DPAPI-encrypted, images
+  as PNG in `clip\`, dedupe, pins, limit `clip.limit`), `ClipboardModule` (tab `Views/Clipboard/ClipboardView`; click =
+  `ClipboardOps.PasteTextAsync`/image paste into `PasteTarget`).
+- **Shelf** (`shelf`, `Modules/Shelf`) — `ShelfStore` (`shelf.json`, references only, missing-file flag), `ShelfModule`
+  (tab `Views/Shelf/ShelfView`, drag-out with `DoDragDrop` FileDrop, option `shelf.removeAfterDrop`); drops arrive via
+  `IslandWindow.Drop.cs` (expands to the Shelf on drag-over).
+- **Command bar** (`commands`, `Modules/Commands`) — `CommandModule` (hotkey `commandBar` = Alt+Space → full-panel
+  overlay `Views/Commands/CommandBarView`, 80 ms debounce, providers run off the UI thread). Providers (`ICommandProvider`):
+  `AppsProvider` (`AppIndex`: Start Menu shortcuts + recent files + `cmd.folders`, cached `index.json`; `Fuzzy` matcher),
+  `CalculatorProvider` (`Calculator` + `Units`), `CurrencyProvider` (`CurrencyParser`, `CurrencyService` with
+  `NbuRatesSource`, `rates.json`), `TimerProvider` (reuses `TimersController`), `SystemProvider` (confirm before
+  lock/sleep/restart/shutdown/recycle bin; Settings pages), `WebProvider` (`g` search, URLs, `?` → `AskAi`).
+- **Screen tools** (`tools`, `Modules/Tools`) — `ToolsModule` (hotkeys screenshot Win+Alt+S, capture Win+Alt+Q, colour
+  picker Win+Alt+C, record Win+Alt+R; one tool at a time, island hidden from captures). `ScreenGrab` (physical-pixel
+  capture across mixed-DPI monitors), `Views/Tools/SelectionOverlay` (region/window/fullscreen pick, loupe for the
+  colour picker), `Views/Tools/MarkupWindow` (pen, highlighter, arrow, shapes, text, pixelate, undo/redo, copy/save),
+  `QrReader` (ZXing) / `OcrReader` (Windows.Media.Ocr), `Recorder` (Windows.Graphics.Capture + Media Foundation H.264
+  MP4, WASAPI system audio/mic via NAudio, 30 fps ≤ 1080p). Tab `Views/Tools/ToolsView` (tools, OCR/QR results, colour
+  history `tools.colors`). Files go to `Pictures\Isle\` and `Videos\Isle\`.
 - **Hotkeys** (`HotkeyService`, owned by the island, not a module) — `Register(id, titleKey, default, pressed, released?)`,
   `Rebind`, `List()` for the settings table; user overrides in `Settings.Hotkeys`; failures logged, never fatal.
   Hold-hotkeys poll the key state at 30 ms only while held. Default: `toggle` = Win+Alt+Space.
@@ -123,6 +150,13 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   `MusicPlaying` (media module) and `TimerFinished`), `CreatureBrain` (pure mood + motion math), `CreatureDesign`
   (Pebb / Sprig / Kubo frozen shapes), `Views/Characters/CreatureView` (OnRender drawing, own adaptive clock, paused
   while hidden). Options `chars.kind`, `chars.inPill`, `chars.sleepMin`.
+
+## Settings panel (`Views/SettingsPanel`)
+`SettingsView` — full-panel overlay opened by `App.OpenSettings(section?)` (tab-bar gear, tray "Settings"). Sections
+General · Modules · Options · Hotkeys · About. Writes `Settings.Current` and saves (`Settings.Changed` handlers apply
+live); everything module-specific goes through `SettingsActions` (hotkey list/rebind/suspend, `ModuleHost.Sync`,
+restart one module for options read at start, open the AI settings / agent hooks / character gallery / weather tab).
+While it is open the island ignores click-through. `SettingsSnapshots` registers `settings-*` snapshot states.
 
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

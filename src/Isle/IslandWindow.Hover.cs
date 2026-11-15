@@ -141,6 +141,7 @@ public partial class IslandWindow
         NotifyCurrentView(shown: false);
         ReleaseFocus(restore: true);
         if (_hwnd != IntPtr.Zero) Native.UnregisterHotKey(_hwnd, EscHotkeyId);
+        if (!_snapshotMode) Memory.TrimSoon(5); // tab views paged in while open go back out once the pill is idle
         SetTargets();
         if (_currentTab is not null && _currentTab != _lastSavedTab && !_snapshotMode)
         {

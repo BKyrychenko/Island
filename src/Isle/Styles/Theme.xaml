@@ -84,6 +84,8 @@
 
     <!-- round icon button: content is usually a v:Icon -->
     <Style x:Key="IconButton" TargetType="ButtonBase" BasedOn="{StaticResource FlatButton}">
+        <!-- icon-only: the tooltip doubles as the accessible name (screen readers, UI Automation) -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Width" Value="28" />
@@ -412,6 +414,8 @@
 
     <!-- tab button (icon; selected one is highlighted by the sliding indicator drawn by TabBar) -->
     <Style x:Key="TabButton" TargetType="RadioButton">
+        <!-- icon-only: the tooltip doubles as the accessible name (screen readers, UI Automation) -->
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Foreground" Value="{DynamicResource FgDimBrush}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="MinWidth" Value="34" />

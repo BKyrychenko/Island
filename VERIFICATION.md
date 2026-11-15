@@ -13,19 +13,19 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | EventBus | auto-test | ok |
 | Single instance | live | ok — second process exits immediately |
 | Pill visible top-centre, black, 120×32 @100% | live (screenshot at 125% DPI) | ok |
-| Tray icon + menu | manual-needed | Right-click the Isle icon in the notification area: Show/Hide, Settings, Start with Windows, Quit should work |
+| Tray icon + menu | manual-needed | Right-click the Isle icon in the notification area: Show/Hide, Settings (opens the settings panel in the island), Start with Windows, Quit should work |
 | Idle budget (M0) | live | 8 MB WS / 31 MB private / 0% CPU |
 | Hover expand (120 ms intent) / collapse on leave (250 ms) | live (cursor driven by script, screenshots) | ok |
 | Spring expand/collapse (~400 ms perceived, slight overshoot, collapse faster) | auto-test + live | ok |
 | Tab bar with sliding indicator, label on selected tab, "more" overflow list, gear | snapshot (dark/light × en/uk, 150% scale) | ok |
 | Toast inside the panel (text + action) | snapshot | ok |
 | Themes Dark / Light / System (follows Windows live via WM_SETTINGCHANGE) | snapshot (dark/light); System: manual-needed | Switch Windows Settings → Personalisation → Colours → app mode; the island recolours within a second |
-| UI scale 80–200% | snapshot at 150% | ok (settings UI arrives in M15; live preview there) |
-| Auto-hide to screen edge (sliver, returns on top-edge touch) | snapshot (edge-hidden) | manual-needed for the live slide: enable `AutoHideEdge` in settings.json, move cursor away 1.5 s → island slides up; touch the top edge → it returns |
-| Click-through mode (WS_EX_TRANSPARENT) | manual-needed | Set `"ClickThrough": true` in settings.json → clicks on the pill reach the window below |
+| UI scale 80–200% | snapshot at 150% + manual-needed for the live preview | ok; Settings → General → Size: drag the slider, the island resizes as you go |
+| Auto-hide to screen edge (sliver, returns on top-edge touch) | snapshot (edge-hidden) | manual-needed for the live slide: Settings → General → "Tuck away at the screen edge", move cursor away 1.5 s → island slides up; touch the top edge → it returns |
+| Click-through mode (WS_EX_TRANSPARENT) | manual-needed | Settings → General → Click-through → close the panel; clicks on the pill reach the window below. Switch it off again via tray → Settings (the panel itself is clickable while open) |
 | Fullscreen auto-hide | manual-needed | Play a video fullscreen / press F11 in a browser → island disappears; exit → it returns |
-| Excluded apps | auto-test (name matching) + manual-needed | Add `"notepad"` to `ExcludedApps` → island hides while Notepad is in front |
-| Global hotkeys infrastructure (RegisterHotKey, failures non-fatal) | auto-test (gesture parsing) + manual-needed | Press Win+Alt+Space → panel opens/closes |
+| Excluded apps | auto-test (name matching) + manual-needed | Settings → General → "Hide while these apps are in front" → type `notepad`, Enter → island hides while Notepad is in front |
+| Global hotkeys infrastructure (RegisterHotKey, failures non-fatal, shown in Settings → Hotkeys) | auto-test (gesture parsing) + manual-needed | Press Win+Alt+Space → panel opens/closes |
 | Esc collapses | manual-needed | Expand, press Esc |
 | Pill priority queue (selection, sharing, banners) | auto-test | ok |
 | --snapshot tool | live | `Isle.exe --snapshot all <dir>` renders every state × theme × language |
@@ -63,7 +63,7 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Live: Chrome partial-download detector | auto-test | ok |
 | Live: Steam (libraryfolders.vdf, appmanifest parser, progress pill) | auto-test + snapshot | ok; manual-needed live: start a game download in Steam → pill shows name + % + speed |
 | Live: mic/camera in use (consent store, NonPackaged, event-driven) | auto-test (parser) + live (temporary registry entry → pill, removed → pill gone) | ok |
-| Live: OBS recording (WebSocket v5, auth) | auto-test (auth) + snapshot | manual-needed: OBS → Tools → WebSocket Server Settings → enable (port 4455; password goes into option `live.obsPassword`, DPAPI) → start recording → red dot + elapsed time |
+| Live: OBS recording (WebSocket v5, auth) | auto-test (auth) + snapshot | manual-needed: OBS → Tools → WebSocket Server Settings → enable (port 4455); in Isle Settings → Options → Live activity enter the port/password (stored DPAPI-encrypted) → start recording → red dot + elapsed time |
 | Live: Windows notifications | unavailable | `UserNotificationListener` needs package identity; for this unpackaged app `RequestAccessAsync` fails with 0x80070490. Sparse MSIX identity would need a machine-trusted signing certificate (admin). Option `live.notifications` stays off by default |
 | Live: VPN connect/disconnect flash | snapshot | manual-needed: connect a VPN (e.g. `tailscale up`) → "VPN connected" flash for 2.5 s |
 | Live: keyboard layout flash | auto-test (codes) + snapshot | manual-needed: press Win+Space to switch EN↔UK → "UK"/"EN" flash |
@@ -87,14 +87,14 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Command bar: system commands confirm with a second Enter; best result selected while results stream in | auto-test (CommandBarTests) | ok; manual-needed for the real actions: type "lock", Enter, Enter -> PC locks |
 | Command bar: timers/reminders ("timer 10m", "remind me in 5 min to stretch", "нагадай ...") | manual-needed (parsers auto-tested in M3) | Alt+Space -> "timer 10m" -> Enter -> timer pill appears |
 | Command bar: URL / g search / ? AI | manual-needed | "github.com" Enter opens the browser; "g wpf spring" searches; "? ..." goes to AI chat after M11 |
-| Command bar: configurable folders | manual-needed | Set option `cmd.folders` to e.g. `C:\Users\you\Documents` -> file names appear after the background index |
+| Command bar: configurable folders | manual-needed | Settings → Options → Command bar → "Extra folders to search": e.g. `C:\Users\you\Documents`, Enter → file names appear after the background index |
 | Screen selection overlay (dim, frame, size label, click-window, Enter = monitor, Esc) | live (screenshot m9/1-overlay) | ok; mixed-DPI multi-monitor: manual-needed (only one monitor here) — connect a second monitor with another scale and select on each |
 | Screenshot markup (tools, colours, widths, undo/redo, copy/save/copy path) | live (editor opened on the selection, m9/5-markup) + auto-test (arrow geometry) | ok; drawing/saving by hand: manual-needed — Win+Alt+S, drag, draw, Save → file in Pictures\Isle |
 | OCR (Windows.Media.Ocr, language chips, clipboard + toast) | live (test window → "Island OCR check 4721" exact) + snapshot | ok |
 | QR / barcode reading (ZXing.Net), Open only for web links | auto-test (roundtrip incl. UTF-8, inverted, none, URL filter) + snapshot | ok; live with a real code: manual-needed — show a QR on screen, Win+Alt+Q, drag over it |
 | Colour picker (loupe, HEX/RGB, click copies, history) | live (#129AE3 picked exactly) + snapshot | ok |
 | Screen recording (WGC + MediaTranscoder MP4, system audio, REC pill, stop, save to Videos\Isle) | live (9 s MP4 with AAC audio track, pill, saved, memory released) | ok; microphone mixing and region recording: manual-needed — enable "Microphone" in the Tools tab, press Record, drag a region, speak, stop |
-| Hotkey Win+Alt+R | unavailable on this PC | Xbox Game Bar owns it; rebind via settings (Hotkeys.record) or use the Record button |
+| Hotkey Win+Alt+R | unavailable on this PC | Xbox Game Bar owns it (Settings → Hotkeys shows it red); rebind there (click the box, press e.g. Ctrl+Win+Alt+R) or use the Record button |
 | Weather tab: current, 24-h strip, 7-day forecast, °C/°F (Open-Meteo) | auto-test (parser, WMO codes, formatting, cache/offline with fake source) + snapshot (dark/light, en/uk) + live API probe (request accepted, shape matches parser) | ok |
 | Weather city search (geocoding) and approximate IP location | auto-test (parsers) + live API probe + snapshot | ok; in-app: manual-needed — Weather tab → pencil → type "Kyiv" → Enter → pick a result; the forecast appears within a few seconds |
 | Temperature in idle pill | snapshot | ok |
@@ -123,3 +123,12 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Characters: gallery (pick, show in idle pill, nap delay) + panel mascot + idle-pill mascot | snapshot (en/uk, dark/light) + live (pill mascot drawn and animating) | ok |
 | Characters: idle cost | live (60 s): 0.26 % of one core by default, 1.2 % of one core with the pill mascot | ok |
 | Characters: dance to real music, fall asleep after N min, hop when a timer ends | auto-test (logic) | manual-needed — open the panel, click the character, turn on "Show in idle pill"; play music → it bounces; start a 1-min timer ("1m") → it hops when it ends; leave the PC for the nap time → it sleeps, move the mouse → it wakes |
+| Settings panel inside the island (gear + tray "Settings"): General / Modules / Options / Hotkeys / About | snapshot (6 states × dark/light × en/uk) + live (UI Automation: gear → sections → Light theme → Українська; settings.json saved, applied live) + auto-test (every section builds in both languages, labels exist) | ok |
+| Settings: module switches start/stop modules; options that a module reads at start restart that module | auto-test (ModuleHost) + code path | ok; manual-needed — Settings → Modules → switch Weather off → its tab disappears; on → it returns |
+| Settings: hotkey rebinding (click the box, press keys; Backspace = off; reset; conflicts shown red) | auto-test (key press → gesture text) + snapshot | manual-needed — Settings → Hotkeys → click "Win+Alt+R" → press Ctrl+Win+Alt+R → the red note disappears; press it → recording starts |
+| Settings: UI scale slider live preview, monitor choice (only with 2+ monitors), click-through switch reachable while on | snapshot + manual-needed | Drag Size to 150 %; with a second monitor pick "2" → the island moves there |
+| Ukrainian translation review (all 650+ strings; consistent "папка", typographic apostrophes) | auto-test (key parity) + snapshot sheets (104 states) | ok |
+| All UI states in both themes and both languages | snapshot (`--snapshot all`: 104 states × Dark/Light × EN/UK = 416 PNGs, inspected as contact sheets) | ok (switches that start "on" render "off" in snapshots only — template animation; live they are correct) |
+| `build.ps1` → `dist\Isle\Isle.exe` (framework-dependent, 69 MB) and `dist\Isle-selfcontained\Isle.exe` | live | both start and show the pill; Whisper `--transcribe` works from both (self-contained needed loose native DLLs — fixed) |
+| Perf M15: published exe, idle, all 16 modules, 60 s | live | 0.29 % of one core (0.024 % of machine), 25 MB working set, 38 MB private; start-up 382–527 ms warm (1.4 s on the first cold launch) |
+| 10-minute soak (music play/pause on a real SMTC session, timers + finished banners dismissed, new notes typed, clipboard copy every cycle, mute on/off, settings sections, switching all 10 tabs) | live (`scratch\soak.ps1`, 77 cycles in 603 s) | ok — no errors/unhandled exceptions in log.txt; private bytes steady 55–86 MB (no trend), managed heap 7 MB after each trim, working set 14.8 MB 20 s after the last collapse |

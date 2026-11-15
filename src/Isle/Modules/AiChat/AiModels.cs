@@ -21,6 +21,10 @@ public sealed class ChatMessage
     public string Text { get; set; } = "";
     public List<ChatAttachment> Attachments { get; set; } = [];
     public bool Error { get; set; }
+    /// <summary>The user pressed Stop during this answer.</summary>
+    public bool Stopped { get; set; }
+    /// <summary>A failure that happened after part of the answer had arrived (shown under it).</summary>
+    public string Note { get; set; } = "";
 }
 
 public sealed class Conversation

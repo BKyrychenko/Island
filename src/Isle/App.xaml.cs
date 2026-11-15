@@ -71,6 +71,7 @@ public partial class App : Application
             Host.Register("commands", () => new Modules.Commands.CommandModule(Island!, () => Host.Get<Modules.Timers.TimersModule>("timers")?.Controller));
             Host.Register("tools", () => new Modules.Tools.ToolsModule(Island!));
             Host.Register("weather", () => new Modules.Weather.WeatherModule(Island!));
+            Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

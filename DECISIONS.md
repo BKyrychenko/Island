@@ -132,6 +132,15 @@ One line each: decision — why.
 - Attachments: images → base64 image blocks (OpenAI: data-URL `image_url`), PDF → base64 document block on Anthropic and extracted text on OpenAI-compatible, other files → extracted text wrapped in `<file name="…">`. History sent = alternating user/assistant (errors and empty turns dropped, same-role turns merged).
 - Keys stored DPAPI-protected in `Settings.Options` (`ai.anthropic.key`, `ai.openai.key`); errors carry only a status-derived key + the server's short `error.message`, never keys or bodies.
 - Conversations in `chats.json` (plain JSON via JsonStore, newest first, max 100); title = first user line (≤ 48 chars).
+- AI tab layout (520×220 panel): one-line header (chat picker · system prompt · new chat · key icon for provider settings — not a gear, which the tab bar already has), the conversation, attachment chips, input row. Chat list, system prompt and settings are full-cover in-panel overlays (no popups on the non-activating window).
+- Streaming answers are re-rendered at most every 80 ms (DispatcherTimer coalescing) — re-building the Markdown per token would cost a layout pass per token.
+- Own Markdown subset parser (`Markdown.Parse/Inline`: headings, lists with indent, fenced code incl. unclosed fence while streaming, quotes, rules, bold/italic/code; unclosed markers stay literal) rendered as TextBlocks — no Markdown/HTML library, tiny and testable.
+- NuGet `PdfPig` (Apache-2.0, managed) for PDF text — needed for OpenAI-compatible providers, which have no document input; Anthropic still gets the PDF itself as a document block.
+- .docx/.xlsx text read directly from the Open XML zip with `System.IO.Compression` + `XmlDocument` (DTD prohibited) instead of the DocumentFormat.OpenXml package (~6 MB) — we only need paragraph text and cell values (shared/inline strings, booleans), xlsx as CSV per sheet.
+- Attachment limits: image 5 MB (Anthropic per-image limit), PDF 20 MB, other files 10 MB, extracted text capped at 300 000 chars, 5 files per message; unknown extensions are accepted as text when the first 8 KB has no NUL byte. Ctrl+V of an image in the input attaches it as PNG.
+- A failure after part of an answer arrived keeps the partial text and shows the error under it (`ChatMessage.Note`); Stop keeps the partial text marked "Stopped".
+- The streaming HttpClient (10-min timeout, shared by both providers) is created on the first request and disposed 2 min after the last one; `Memory.TrimSoon` after each answer.
+- "Test connection" sends one real tiny message ("Reply with the single word OK.") with the saved settings — the only reliable check across both provider kinds.
 
 ## Performance measurements
 | When | State | Working set | Private | CPU |

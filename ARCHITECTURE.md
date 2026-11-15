@@ -89,5 +89,13 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   `WeatherCodes` (WMO → text/icon), `WeatherFormat`, `RainAlerts`. View `Views/Weather/WeatherView` (report with 24 h /
   7 days, setup with search + option chips). Options: `weather.city/lat/lon/ip/units/inPill/rainAlerts/lastAlert`.
 
+- **AI chat** (`ai`, `Modules/AiChat`) — `AiModule` (tab, current conversation, one streaming request at a time:
+  `Send`, `StreamInto(chat, answer, delta)` (never throws; errors become message text), `Cancel`, `TestConnection`,
+  static `SaveConfig`/`ForgetKey`; lazy HttpClient disposed 2 min after use), `ChatStore` (`chats.json`, newest first,
+  max 100), providers behind `IChatProvider` (`AnthropicProvider` official SDK, `OpenAiProvider` raw SSE), `AiConfig`
+  (options `ai.provider`, `ai.anthropic.model/key`, `ai.openai.base/model/key`, keys DPAPI), `Attachments` (file →
+  image/PDF/text attachment, docx/xlsx via Open XML zip, PDF text via PdfPig), `Markdown` (block + inline parser).
+  Views `Views/AiChat/AiChatView` (header, bubbles, chips, input, overlays) and `MarkdownView` (renderer).
+
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

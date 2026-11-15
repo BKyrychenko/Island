@@ -95,3 +95,8 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Colour picker (loupe, HEX/RGB, click copies, history) | live (#129AE3 picked exactly) + snapshot | ok |
 | Screen recording (WGC + MediaTranscoder MP4, system audio, REC pill, stop, save to Videos\Isle) | live (9 s MP4 with AAC audio track, pill, saved, memory released) | ok; microphone mixing and region recording: manual-needed — enable "Microphone" in the Tools tab, press Record, drag a region, speak, stop |
 | Hotkey Win+Alt+R | unavailable on this PC | Xbox Game Bar owns it; rebind via settings (Hotkeys.record) or use the Record button |
+| Weather tab: current, 24-h strip, 7-day forecast, °C/°F (Open-Meteo) | auto-test (parser, WMO codes, formatting, cache/offline with fake source) + snapshot (dark/light, en/uk) + live API probe (request accepted, shape matches parser) | ok |
+| Weather city search (geocoding) and approximate IP location | auto-test (parsers) + live API probe + snapshot | ok; in-app: manual-needed — Weather tab → pencil → type "Kyiv" → Enter → pick a result; the forecast appears within a few seconds |
+| Temperature in idle pill | snapshot | ok |
+| Rain alert banner (once per event) | auto-test (detection, rounding, hourly fallback, once-per-event) + snapshot | ok; real rain: manual-needed — wait for a rainy day with the module on |
+| Weather offline cache | auto-test (restart reads cache, failed refresh keeps it, corrupt cache ignored) + snapshot | ok |

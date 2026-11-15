@@ -58,6 +58,18 @@
     <Geometry x:Key="Icon.Screenshot">M4 8 V5.5 A1.5 1.5 0 0 1 5.5 4 H8 M16 4 H18.5 A1.5 1.5 0 0 1 20 5.5 V8 M20 16 V18.5 A1.5 1.5 0 0 1 18.5 20 H16 M8 20 H5.5 A1.5 1.5 0 0 1 4 18.5 V16 M9 12 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0</Geometry>
     <Geometry x:Key="Icon.TextScan">M4 8 V5.5 A1.5 1.5 0 0 1 5.5 4 H8 M16 4 H18.5 A1.5 1.5 0 0 1 20 5.5 V8 M20 16 V18.5 A1.5 1.5 0 0 1 18.5 20 H16 M8 20 H5.5 A1.5 1.5 0 0 1 4 18.5 V16 M8.5 8.5 H15.5 M12 8.5 V15.5</Geometry>
     <Geometry x:Key="Icon.Qr">M4.5 4.5 H10 V10 H4.5 Z M14 4.5 H19.5 V10 H14 Z M4.5 14 H10 V19.5 H4.5 Z M14 14 H16 V16 H14 Z M17.5 17.5 H19.5 V19.5 H17.5 Z M14 19.5 H15.5 M19.5 14 V15.5 M7 7 H7.5 M16.5 7 H17 M7 16.5 H7.5</Geometry>
+
+    <!-- weather (original line drawings) -->
+    <Geometry x:Key="Wx.Sun">M8.5 12 a3.5 3.5 0 1 0 7 0 a3.5 3.5 0 1 0 -7 0 M12 3.5 V5.5 M12 18.5 V20.5 M3.5 12 H5.5 M18.5 12 H20.5 M6 6 L7.4 7.4 M16.6 16.6 L18 18 M6 18 L7.4 16.6 M16.6 7.4 L18 6</Geometry>
+    <Geometry x:Key="Wx.Moon">M18.5 14.5 A7.5 7.5 0 1 1 9.5 5.5 A5.8 5.8 0 0 0 18.5 14.5 Z</Geometry>
+    <Geometry x:Key="Wx.Cloud">M7.5 18 H16.5 a3.75 3.75 0 0 0 0.6 -7.45 a5.25 5.25 0 0 0 -10.1 -1.2 A4.4 4.4 0 0 0 7.5 18 Z</Geometry>
+    <Geometry x:Key="Wx.PartlyDay">M5.99 10.09 A3.2 3.2 0 1 1 12.15 9.56 M9 3 V4.4 M3 9 H4.4 M4.8 4.8 L5.8 5.8 M13.2 4.8 L12.2 5.8 M9 20 H17 a3.3 3.3 0 0 0 0.5 -6.6 a4.6 4.6 0 0 0 -8.9 -1 A3.9 3.9 0 0 0 9 20 Z</Geometry>
+    <Geometry x:Key="Wx.PartlyNight">M12.6 8.6 A4.3 4.3 0 1 1 7.2 3.6 A3.3 3.3 0 0 0 12.6 8.6 M9 20 H17 a3.3 3.3 0 0 0 0.5 -6.6 a4.6 4.6 0 0 0 -8.9 -1 A3.9 3.9 0 0 0 9 20 Z</Geometry>
+    <Geometry x:Key="Wx.Fog">M4.5 8.5 H19.5 M6.5 12 H17.5 M4.5 15.5 H19.5 M8 19 H16</Geometry>
+    <Geometry x:Key="Wx.Drizzle">M7.5 15 H16.5 a3.75 3.75 0 0 0 0.6 -7.45 a5.25 5.25 0 0 0 -10.1 -1.2 A4.4 4.4 0 0 0 7.5 15 Z M9 19 V19.2 M12.5 20 V20.2 M16 19 V19.2</Geometry>
+    <Geometry x:Key="Wx.Rain">M7.5 15 H16.5 a3.75 3.75 0 0 0 0.6 -7.45 a5.25 5.25 0 0 0 -10.1 -1.2 A4.4 4.4 0 0 0 7.5 15 Z M9.2 18 L8.2 20.5 M12.7 18 L11.7 20.5 M16.2 18 L15.2 20.5</Geometry>
+    <Geometry x:Key="Wx.Snow">M7.5 15 H16.5 a3.75 3.75 0 0 0 0.6 -7.45 a5.25 5.25 0 0 0 -10.1 -1.2 A4.4 4.4 0 0 0 7.5 15 Z M8 18.3 L10 20.3 M10 18.3 L8 20.3 M14 18.3 L16 20.3 M16 18.3 L14 20.3</Geometry>
+    <Geometry x:Key="Wx.Thunder">M7.5 15 H16.5 a3.75 3.75 0 0 0 0.6 -7.45 a5.25 5.25 0 0 0 -10.1 -1.2 A4.4 4.4 0 0 0 7.5 15 Z M12.8 16 L10.8 19 H13.2 L11.2 22</Geometry>
     <Geometry x:Key="Icon.Picker">M14.5 5.5 L18.5 9.5 M16.5 3.5 a2.1 2.1 0 0 1 4 4 L18 10 L14 6 Z M15 9 L7 17 L5 19 L4.5 19.5 M15 9 L7.5 16.5 L5.5 17 L5 18.5</Geometry>
     <Geometry x:Key="Icon.Record">M4.5 12 a7.5 7.5 0 1 0 15 0 a7.5 7.5 0 1 0 -15 0 M9 12 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0</Geometry>
     <Geometry x:Key="Icon.Pen">M5 19 L6 15 L15.5 5.5 a2.1 2.1 0 0 1 3 3 L9 18 Z M14 7 L17 10</Geometry>

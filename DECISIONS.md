@@ -117,6 +117,15 @@ One line each: decision — why.
 - Win+Alt+R is owned by Xbox Game Bar on this machine (registration fails, logged, non-fatal); the Tools tab Record button and a rebinding (Settings.Hotkeys["record"]) work. Win+Alt+S/Q/C register fine.
 - Windows.Graphics.Capture on Windows 11 draws a yellow border around the captured monitor while recording (`IsBorderRequired` is not in the 19041 projection) — acceptable as a recording indicator.
 
+## M10
+- Weather source: Open-Meteo forecast + geocoding (free, no key) in one request (`current`, 25 `hourly`, 7 `daily`, 12 × `minutely_15` precipitation, `timezone=auto`, `timeformat=unixtime`). Times stored as Unix seconds and shown in the place's own UTC offset; temperatures stored in °C and converted for display (°F also switches wind to mph).
+- Approximate location: geojs.io (`get.geojs.io/v1/ip/geo.json`, HTTPS, no key) — only when the "Approximate location (IP)" chip is on (off by default); on failure the last stored coordinates are used.
+- No network at all until a place is chosen; then one refresh on start if the cache is older than 30 min and a 30-min `DispatcherTimer` while the module is enabled. HTTP through `IdleHttp` (client disposed 2 min after the last request).
+- Place search lives in the Weather tab itself (pencil button) instead of the settings panel — the spec's settings panel is M15; options are kept in `Settings.Options` (`weather.*`) so M15 can show the same toggles.
+- Rain alert: first 15-min slot ≥ 0.1 mm within 2 h while dry now (falls back to hourly ≥ 60 % wet code without minutely data), rounded to 5 min; "once per event" = no new banner unless the start is > 3 h from the last announced one (stored in `weather.lastAlert`). Banner is a transient pill item for 10 s; click opens the tab.
+- Weather icons: original line drawings (`Wx.*` geometries in Icons.xaml) drawn with the shared `Icon` control.
+- Cache `weather.json` (JsonStore, corrupt → backup + ignored) for offline display; offline state shows "Offline · Updated HH:mm" in the warning colour.
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

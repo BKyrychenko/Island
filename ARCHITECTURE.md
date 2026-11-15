@@ -83,5 +83,11 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **Tray** (`tray`) — notification-area icon (`Shell_NotifyIcon`, hidden message window), native menu:
   Show/Hide, Settings, Start with Windows, Quit. Icon drawn by `TrayIcon.Render`. Re-adds itself on `TaskbarCreated`.
 
+- **Weather** (`weather`, `Modules/Weather`) — `WeatherModule` (tab, idle-pill right slot `WeatherPill`, rain banner
+  `weather.rain`, 30-min refresh timer only once a place is set), `WeatherService` (last report + `weather.json` cache,
+  `IWeatherSource` seam), `OpenMeteoSource` (forecast, geocoding, geojs.io IP location), pure `OpenMeteoParser`,
+  `WeatherCodes` (WMO → text/icon), `WeatherFormat`, `RainAlerts`. View `Views/Weather/WeatherView` (report with 24 h /
+  7 days, setup with search + option chips). Options: `weather.city/lat/lon/ip/units/inPill/rainAlerts/lastAlert`.
+
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

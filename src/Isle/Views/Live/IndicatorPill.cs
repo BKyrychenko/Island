@@ -12,7 +12,8 @@ public sealed class IndicatorPill : Grid
     readonly Icon _icon = new() { Width = 15, Height = 15, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock _text = new() { FontSize = 12.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     readonly TextBlock _sub = new() { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-    readonly Border _bar = new() { Height = 2, CornerRadius = new CornerRadius(1), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(16, 0, 16, 4), Visibility = Visibility.Collapsed };
+    readonly ScaleTransform _barScale = new(0, 1);
+    readonly Border _bar = new() { Height = 2, CornerRadius = new CornerRadius(1), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(16, 0, 16, 4), Visibility = Visibility.Collapsed };
     readonly Border _track = new() { Height = 2, CornerRadius = new CornerRadius(1), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(16, 0, 16, 4), Visibility = Visibility.Collapsed };
 
     public IndicatorPill(string? iconKey, string text, string sub = "", string? dotBrushKey = null, bool center = false)
@@ -20,6 +21,7 @@ public sealed class IndicatorPill : Grid
         _sub.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
         _icon.SetResourceReference(Icon.ForegroundProperty, "FgBrush");
         _bar.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+        _bar.RenderTransform = _barScale; // scale, not width: works before layout and never re-measures
         _track.SetResourceReference(Border.BackgroundProperty, "SurfaceHoverBrush");
         var row = new DockPanel { LastChildFill = true, Margin = new Thickness(14, 0, 14, 0), HorizontalAlignment = center ? HorizontalAlignment.Center : HorizontalAlignment.Stretch };
         DockPanel.SetDock(_dot, Dock.Left);
@@ -52,7 +54,7 @@ public sealed class IndicatorPill : Grid
         var show = progress is not null;
         _bar.Visibility = _track.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show) return;
-        _bar.Width = Math.Max(2, (ActualWidth > 0 ? ActualWidth - 32 : Width - 32) * Math.Clamp(progress!.Value, 0, 1));
+        _barScale.ScaleX = Math.Clamp(progress!.Value, 0, 1);
     }
 
     /// <summary>Two dots for mic + camera (compact privacy indicator).</summary>

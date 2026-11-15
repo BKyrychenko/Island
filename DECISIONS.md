@@ -73,6 +73,18 @@ One line each: decision — why.
 - Fullscreen detection fixed (found live): a maximized Chrome/Edge window has no `WS_CAPTION`, so the old "covers the screen and has no caption" rule hid the island behind every maximized browser. Now: `SHQueryUserNotificationState` busy/D3D/presentation → hide; otherwise only a non-maximized (`IsZoomed` false) window covering the whole monitor counts.
 - Tab restore: the remembered last tab wins over whichever tab registered first, until the user picks a tab in this session (found live: modules register tabs one by one).
 
+## M6
+- One module `live` hosts all live-event sources; each source has its own option `live.<name>` (downloads, miccam, notifications, obs, steam, vpn, layout, caps — all on by default except notifications) and is constructed only when enabled. Toggling an option starts/stops just that source.
+- Sources talk to an `ILiveSink` (the pill queue + timed "flash" items) so they can be tested with a fake sink on a private STA dispatcher.
+- Downloads: `FileSystemWatcher` on Downloads for `*.crdownload/*.part/*.partial/*.download`; a 1 s size sample runs only while a partial file exists; a leftover partial file from an old, abandoned download is shown only once it grows; rename to the final name → 4 s "Downloaded" flash (click selects the file in Explorer). Chrome's partial files carry no total size, so progress is size + speed (spec allows this).
+- Mic/camera: consent store read on `RegNotifyChangeKeyValue` (whole subtree, thread-pool wait, 300 ms debounce) — no polling. Verified live with a temporary NonPackaged entry.
+- Windows notifications: `UserNotificationListener.RequestAccessAsync` throws `0x80070490` (element not found) for this unpackaged app. A sparse MSIX package would need a signing certificate trusted in the machine store (admin) — not done; the source stays off by default and is marked unavailable.
+- OBS: `ClientWebSocket` to obs-websocket v5, subscribed only to Outputs events; the 15 s probe first checks for an `obs64`/`obs` process so nothing connects while OBS is closed. Password stored DPAPI-encrypted (`Core/Secret`, NuGet `System.Security.Cryptography.ProtectedData` from Microsoft — also needed for the clipboard in M7).
+- Steam: `SteamPath` from HKCU, libraries from `libraryfolders.vdf` (new and old format), `FileSystemWatcher` on `appmanifest_*.acf`; own tiny KeyValues parser. Downloading = StateFlags has UpdateRunning (1024) or Downloading (1<<20), or UpdateStarted with bytes left.
+- Keyboard layout: checked on `EVENT_SYSTEM_FOREGROUND` (shared `ForegroundWatcher`) plus the 500 ms check the spec allows while the option is on (layout switches inside a window raise no cross-process event).
+- Caps Lock: `WH_KEYBOARD_LL`; the callback only compares the vk code and posts to the UI thread.
+- Progress bar in pills uses a `ScaleTransform` (found in snapshots: width computed from `ActualWidth` before layout was NaN).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|
@@ -84,3 +96,4 @@ One line each: decision — why.
 | M2 | music playing (fake SMTC session), pill collapsed, 20 s | 33 MB | — | 844 ms / 20 s (0.35 % of machine) |
 | M2 | same with lyric line in the pill | 42 MB | — | 1219 ms / 20 s (0.51 %) |
 | M2 | music tab expanded while playing | 55–60 MB | — | — |
+| M6 | idle pill, all modules + all live sources on (notifications unavailable), 60 s after a download/Caps Lock run | 55.5 MB | 48.7 MB | 172 ms over 60 s (0.29 % of one core, ~0.04 % of machine) |

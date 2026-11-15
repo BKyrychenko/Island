@@ -59,3 +59,14 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | VPN: profile/client detection | auto-test (4 tests) + live (none installed on this machine) | ok |
 | VPN connect/disconnect (rasdial / tailscale / warp-cli / mullvad / nordvpn) | manual-needed | Open the VPN tile, press Connect on a listed VPN; if admin rights are needed a message says so |
 | Fullscreen auto-hide vs maximized browser | live | island stays visible over a maximized Chrome window (was hidden before the fix) |
+| Live: Downloads (partial file detection, final names, size/speed, finished flash) | auto-test (detector + source with fake sink) + live (screenshots m6/1, m6/2) | ok |
+| Live: Chrome partial-download detector | auto-test | ok |
+| Live: Steam (libraryfolders.vdf, appmanifest parser, progress pill) | auto-test + snapshot | ok; manual-needed live: start a game download in Steam → pill shows name + % + speed |
+| Live: mic/camera in use (consent store, NonPackaged, event-driven) | auto-test (parser) + live (temporary registry entry → pill, removed → pill gone) | ok |
+| Live: OBS recording (WebSocket v5, auth) | auto-test (auth) + snapshot | manual-needed: OBS → Tools → WebSocket Server Settings → enable (port 4455; password goes into option `live.obsPassword`, DPAPI) → start recording → red dot + elapsed time |
+| Live: Windows notifications | unavailable | `UserNotificationListener` needs package identity; for this unpackaged app `RequestAccessAsync` fails with 0x80070490. Sparse MSIX identity would need a machine-trusted signing certificate (admin). Option `live.notifications` stays off by default |
+| Live: VPN connect/disconnect flash | snapshot | manual-needed: connect a VPN (e.g. `tailscale up`) → "VPN connected" flash for 2.5 s |
+| Live: keyboard layout flash | auto-test (codes) + snapshot | manual-needed: press Win+Space to switch EN↔UK → "UK"/"EN" flash |
+| Live: Caps Lock flash | live (key sent by script, screenshot m6/3) + snapshot | ok |
+| Pill priority order (finished > agent > rec > mic/cam > timer > download > music) | auto-test | ok |
+| Idle budget (M6, all modules) | live | 55.5 MB WS / 0.29 % of one core over 60 s |

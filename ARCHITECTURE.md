@@ -118,5 +118,11 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   plan + confirm), pill `AgentPill` (dot: working / waiting / done check). `HookInstaller` (plan, install, remove,
   backup; helper copied to `%AppData%\Islein`). Options `agents.approvals`, `agents.timeout`.
 
+- **Characters** (`characters`, `Modules/Characters`) — `CharactersModule` (panel mascot via `IslandWindow.Tabs.Mascot`,
+  optional idle-pill mascot via `IdleView.LeftSlot`, gallery overlay `Views/Characters/CharacterGallery`; subscribes to
+  `MusicPlaying` (media module) and `TimerFinished`), `CreatureBrain` (pure mood + motion math), `CreatureDesign`
+  (Pebb / Sprig / Kubo frozen shapes), `Views/Characters/CreatureView` (OnRender drawing, own adaptive clock, paused
+  while hidden). Options `chars.kind`, `chars.inPill`, `chars.sleepMin`.
+
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

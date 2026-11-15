@@ -397,6 +397,18 @@ public sealed partial class Strings
         ["agents.pillDone"] = "{0} finished",
         ["agents.pillQuestion"] = "Question",
         ["agents.deniedMessage"] = "The user denied this from the Isle island.",
+        ["chars.title"] = "Characters",
+        ["chars.close"] = "Close",
+        ["chars.pebb"] = "Pebb",
+        ["chars.pebb.trait"] = "A calm pebble",
+        ["chars.sprig"] = "Sprig",
+        ["chars.sprig.trait"] = "A curious sprout",
+        ["chars.kubo"] = "Kubo",
+        ["chars.kubo.trait"] = "A cheerful little box",
+        ["chars.inPill"] = "Show in idle pill",
+        ["chars.sleep"] = "Naps after",
+        ["chars.min"] = "{0} min",
+        ["chars.never"] = "Never",
     };
 
     static readonly Dictionary<string, string> Uk = new()
@@ -794,5 +806,17 @@ public sealed partial class Strings
         ["agents.pillDone"] = "{0}: готово",
         ["agents.pillQuestion"] = "Питання",
         ["agents.deniedMessage"] = "The user denied this from the Isle island.",
+        ["chars.title"] = "Персонажі",
+        ["chars.close"] = "Закрити",
+        ["chars.pebb"] = "Пебб",
+        ["chars.pebb.trait"] = "Спокійний камінчик",
+        ["chars.sprig"] = "Спріг",
+        ["chars.sprig.trait"] = "Допитливий паросток",
+        ["chars.kubo"] = "Кубо",
+        ["chars.kubo.trait"] = "Веселий кубик",
+        ["chars.inPill"] = "Показувати в пілюлі",
+        ["chars.sleep"] = "Засинає через",
+        ["chars.min"] = "{0} хв",
+        ["chars.never"] = "Ніколи",
     };
 }

@@ -17,21 +17,23 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M11 AI chat + text actions (+ perf measurement)
 - [x] M12 Voice to text
 - [x] M13 Agents integration
-- [ ] M14 Characters
+- [x] M14 Characters
 - [ ] M15 Polish & release
 
 ## Last action
-M13 done: `src/Isle.Hook` (pipe client, fail open), `Modules/Agents` (AgentPipeServer, AgentBook, AgentsModule, HookInstaller,
-AgentText, AgentSnapshots), `Views/Agents` (AgentsView, AgentPill), strings EN/UK, `AgentTests` (46). Fixed: first pipe
-instance created synchronously (flaky tests), hook-timeout cancel race that left stale waiting cards (found live).
-Live: real Isle.Hook.exe ↔ Isle, Allow via UI Automation reached the hook; timeout fails open and clears the card.
+M14 done: `Modules/Characters` (CreatureBrain, CreatureDesign Pebb/Sprig/Kubo, CharactersModule, CharacterSnapshots),
+`Views/Characters` (CreatureView, CharacterGallery), tab-bar mascot slot (`TabBar.Mascot`), `MusicPlaying` event from
+media, strings EN/UK, `CharacterTests`. Perf: idle 0.26 % of one core (default), 1.2 % with the pill mascot on.
+(M13 committed before: agents integration, pipe cancel race fixed.)
 
 ## Next step
-M14 Characters (§4.15): 3 original geometric creatures in XAML (invented names), idle breathing/blink, eyes follow
-cursor, dance to music (playback state; loudness only if cheap), sleep after N min idle (`GetLastInputInfo`), happy on
-`TimerFinished` (EventBus), small in idle pill (left slot) + larger on the panel, settings gallery, ≤30 fps, paused when hidden.
-Note for M15: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the
-self-contained build loads whisper.dll. Agents settings (timeout, approvals) go into the settings panel.
+M15 Polish & release (§8.15): settings panel inside the island (gear → overlay: theme, scale, language, monitor,
+auto-hide, click-through, excluded apps, per-module toggles, module options incl. weather/AI/voice/agents/characters
+gallery, hook install/remove link, hotkey table with rebinding), Ukrainian strings review, snapshots of every state in
+both themes/languages, full perf measurement, 10-min soak test, README.md, VERIFICATION.md, ARCHITECTURE.md, build.ps1
+run + launch the published exe. Then DONE.flag (+ final message in Ukrainian).
+Notes: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the self-contained
+build loads whisper.dll. `IslandWindow.SettingsRequested` has no handler yet (tray "Settings" too?).
 
 ## Known blockers
 - none

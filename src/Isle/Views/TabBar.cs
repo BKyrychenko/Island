@@ -18,6 +18,7 @@ public sealed class TabBar : Grid
     readonly Border _indicator = new() { Height = 28, CornerRadius = new CornerRadius(14), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
     readonly TranslateTransform _indicatorX = new();
     readonly Button _more, _gear;
+    readonly ContentPresenter _mascot = new() { Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly Dictionary<string, RadioButton> _buttons = [];
     List<TabInfo> _tabs = [];
     List<TabInfo> _hidden = [];
@@ -33,12 +34,27 @@ public sealed class TabBar : Grid
     public IReadOnlyList<TabInfo> Hidden => _hidden;
     public double AvailableWidth { get; set; } = 496;
 
+    /// <summary>Optional character next to the gear (characters module); takes room from the tab strip.</summary>
+    public FrameworkElement? Mascot
+    {
+        get => _mascot.Content as FrameworkElement;
+        set
+        {
+            if (ReferenceEquals(_mascot.Content, value)) return;
+            _mascot.Content = value;
+            Rebuild();
+        }
+    }
+
     public TabBar()
     {
         Height = 28;
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        SetColumn(_mascot, 1);
+        Children.Add(_mascot);
 
         _indicator.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
         _indicator.RenderTransform = _indicatorX;
@@ -50,12 +66,12 @@ public sealed class TabBar : Grid
         _more = SideIcon("Icon.More", "tabs.more");
         _more.Click += (_, _) => MoreRequested?.Invoke(_hidden);
         _more.Visibility = Visibility.Collapsed;
-        SetColumn(_more, 1);
+        SetColumn(_more, 2);
         Children.Add(_more);
 
         _gear = SideIcon("Icon.Settings", "tray.settings");
         _gear.Click += (_, _) => SettingsRequested?.Invoke();
-        SetColumn(_gear, 2);
+        SetColumn(_gear, 3);
         Children.Add(_gear);
 
         Strings.LanguageChanged += Rebuild;
@@ -99,7 +115,7 @@ public sealed class TabBar : Grid
         _buttons.Clear();
 
         // how many fit?
-        var avail = AvailableWidth - SideButton;
+        var avail = AvailableWidth - SideButton - (Mascot is { } m ? (double.IsNaN(m.Width) ? 28 : m.Width) + 4 : 0);
         var visible = _tabs;
         _hidden = [];
         if (_tabs.Count * TabWidth + LabelRoom > avail)

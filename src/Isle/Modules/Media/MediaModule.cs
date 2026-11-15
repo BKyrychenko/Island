@@ -22,7 +22,11 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
     string? _lastTrack, _banneredTrack;
     bool _pillShown;
 
+    bool _playingPublished;
+
     public string Id => "media";
+    /// <summary>True while a media session is playing (characters dance).</summary>
+    public bool IsPlaying => _session?.Current?.IsPlaying == true;
     public IMediaSource? Source => _session;
     public LyricsTracker? Lyrics => _lyrics;
 
@@ -57,6 +61,8 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
     void OnChanged()
     {
         var cur = _session?.Current;
+        var playing = cur?.IsPlaying == true;
+        if (playing != _playingPublished) { _playingPublished = playing; EventBus.Publish(new MusicPlaying(playing)); }
         if (cur is null)
         {
             _lastTrack = null;
@@ -164,7 +170,11 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         _pill = null;
         _lyrics = null;
         Theme.SetAccent(null);
+        if (_playingPublished) { _playingPublished = false; EventBus.Publish(new MusicPlaying(false)); }
     }
 
     public void Dispose() { if (_session is not null) Stop(); }
 }
+
+/// <summary>Published when playback starts or stops (any source).</summary>
+public sealed record MusicPlaying(bool Playing);

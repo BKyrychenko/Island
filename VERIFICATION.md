@@ -118,3 +118,8 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Agents: tab cards, question chips, empty/setup, hooks panel, install confirm, pills (waiting/working/done) | snapshot (dark/light, en/uk) | ok |
 | Agents: install/remove hooks (backup, merge, only Isle entries removed, invalid JSON never overwritten, missing file created) | auto-test (temp configs) | ok |
 | Agents: real Claude Code / Codex session through the installed hooks | manual-needed | Agents tab → plug icon → Claude Code → Install → Confirm; start a new `claude` session, ask it to run `dir`; the island shows "needs you" with Allow/Deny — press Allow and the command runs. Remove restores the file (a backup `settings.json.isle-backup-*` is kept). Same for Codex. |
+| Characters: three original creatures (Pebb, Sprig, Kubo), every mood (awake, blink, dance, happy, asleep) | snapshot (`chars-sheet`, dark/light) | ok |
+| Characters: mood rules (happy > asleep > dancing > awake), eye offset, blink, motion ranges, ≤ 30 fps | auto-test | ok |
+| Characters: gallery (pick, show in idle pill, nap delay) + panel mascot + idle-pill mascot | snapshot (en/uk, dark/light) + live (pill mascot drawn and animating) | ok |
+| Characters: idle cost | live (60 s): 0.26 % of one core by default, 1.2 % of one core with the pill mascot | ok |
+| Characters: dance to real music, fall asleep after N min, hop when a timer ends | auto-test (logic) | manual-needed — open the panel, click the character, turn on "Show in idle pill"; play music → it bounces; start a 1-min timer ("1m") → it hops when it ends; leave the PC for the nap time → it sleeps, move the mouse → it wakes |

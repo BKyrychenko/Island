@@ -168,6 +168,15 @@ One line each: decision — why.
 - Install copies the helper to `%AppData%\Islein\` (stable path across rebuilds), backs up the config to `<file>.isle-backup-<timestamp>`, merges (Isle handlers recognised by `Isle.Hook.exe` in `command`), never writes invalid/commented JSON; Remove takes out only Isle's handlers. The panel shows the exact plan (file, helper path, events) and needs a Confirm press. Not run against the owner's real `~/.claude/settings.json`.
 - Interrupted runs send no Stop: a 1-min check runs only while some session is "working" and demotes ones silent for a while; sessions not heard from for 3 h are dropped.
 
+## M14
+- Three original characters with invented names — **Pebb** (calm blue pebble), **Sprig** (green sprout with a leaf), **Kubo** (orange box with an antenna) — each a handful of frozen geometries in a 40×40 design box (`CreatureDesign`), no assets.
+- Drawn by one `FrameworkElement` (`CreatureView.OnRender`, pushed transforms) instead of a Path tree + storyboards: one invalidate per frame, nothing animating while hidden. Its own `DispatcherTimer` runs only while the view is visible: 30 fps while dancing / hopping / blinking / eyes moving, 8 fps while only breathing, 4 fps asleep; it wakes early for the next blink.
+- Mood logic is pure (`CreatureBrain`, injectable clock, tested): happy 3.2 s after `TimerFinished` > asleep after N min without input (`GetLastInputInfo`, option `chars.sleepMin`, default 5, 0 = never) > dancing while music plays > awake. Asleep wakes within 250 ms of input (4 fps check).
+- Dance = tempo-agnostic bounce at ~116 bpm + sway, driven by playback state (`MusicPlaying` on the EventBus, published by the media module). WASAPI loopback loudness was skipped: it would keep an audio capture running for the whole time music plays, for a 22-px bounce.
+- Eyes follow the cursor: `GetCursorPos` vs the view's screen centre (both physical pixels), offset grows with distance (max 1.5 design units), eased. The cursor is read only on the character's own frames, no extra timer.
+- Placement: a 28-px character in the tab bar next to the gear (it takes room from the tab strip; click opens the gallery overlay), and optionally a 22-px one in the idle pill's left slot (option `chars.inPill`, **off by default** so the default idle cost stays ~0). Gallery = full-panel overlay (pick, "show in idle pill", nap delay); the M15 settings panel can reuse it.
+- Overlapping parts (stem + leaves, antenna stem + ball) use non-zero fill — even-odd punched holes (found in the snapshot sheet).
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|
@@ -190,3 +199,5 @@ One line each: decision — why.
 | M12 | Whisper base loaded, transcribing 6 s of speech (auto language) | peak ~400 MB | — | 2.1 s per run (cold 1.2–2.1 s) |
 | M12 | 2 min 8 s after the last transcription (engine unloaded + trim) | 9 MB | — | — |
 | M12 | hold-to-talk recording (mic + pill), before Whisper | peak 67–73 MB | — | — |
+| M14 | idle pill, all modules (16), character on the panel only (default), 60 s | 23.5 MB | 37.8 MB | 156 ms over 60 s (0.26 % of one core) |
+| M14 | same with the character in the idle pill (awake, breathing/blinking/eyes) | 45.7 MB | 51.7 MB | 734 ms over 60 s (1.2 % of one core, ~0.1 % of machine) |

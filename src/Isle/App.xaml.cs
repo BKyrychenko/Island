@@ -80,6 +80,7 @@ public partial class App : Application
             Host.Register("weather", () => new Modules.Weather.WeatherModule(Island!));
             Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
             Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
+            Host.Register("agents", () => new Modules.Agents.AgentsModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

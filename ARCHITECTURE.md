@@ -109,5 +109,14 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   loaded on demand, unloaded 2 min after use), `LanguagePick`, `TranscriptText`, `WhisperModels` (base/small, URL, size,
   SHA-256; files in `%AppData%\Isle\models\`). `VoiceSelfTest` = debug CLI `--transcribe`. Options `voice.model`, `voice.lang`.
 
+- **Agents** (`agents`, `Modules/Agents` + `src/Isle.Hook`) — `Isle.Hook.exe <claude|codex> [--timeout s] [--async]`
+  is registered as a command hook, reads the hook JSON from stdin and sends it over the named pipe
+  `Isle.Agents.v1.<user>` (`HookProtocol`: one JSON line each way, `BuildOutput` makes the hook's stdout; fails open).
+  `AgentPipeServer` (accept loop, per-connection serve, disconnect watch) → `AgentsModule.Handle` → `AgentBook`
+  (sessions keyed by agent + session_id, states idle/working/waiting/done, pending `AgentRequest`s with a reply TCS).
+  View `Views/Agents/AgentsView` (cards with Allow / Deny / In terminal, question option chips, hooks panel with
+  plan + confirm), pill `AgentPill` (dot: working / waiting / done check). `HookInstaller` (plan, install, remove,
+  backup; helper copied to `%AppData%\Islein`). Options `agents.approvals`, `agents.timeout`.
+
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

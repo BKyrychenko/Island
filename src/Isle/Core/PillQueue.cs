@@ -6,11 +6,13 @@ namespace Isle.Core;
 public static class PillPriority
 {
     public const int Idle = 0;
+    public const int AgentWorking = 20; // agent session working (below music; shares the pill as a dot)
     public const int Music = 30;
     public const int Download = 40;
     public const int TimerRunning = 50;
     public const int MicCamera = 60;
     public const int Recording = 70;
+    public const int AgentDone = 75;    // short "agent finished" check
     public const int AgentWaiting = 80;
     public const int Transient = 85;   // brief indicators and banners (layout, Caps Lock, VPN, track title, notifications)
     public const int Finished = 90;    // finished timer / reminder

@@ -25,6 +25,21 @@
     <Using Include="System.IO" />
   </ItemGroup>
 
+  <!-- Agents (M13): the pipe protocol is shared with the hook helper; the helper is built first and copied next to Isle.exe. -->
+  <ItemGroup>
+    <Compile Include="..\Isle.Hook\HookProtocol.cs" Link="Modules\Agents\HookProtocol.cs" />
+    <ProjectReference Include="..\Isle.Hook\Isle.Hook.csproj" ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+  <Target Name="CopyHookHelper" AfterTargets="Build">
+    <PropertyGroup>
+      <HookOut>..\Isle.Hook\bin\$(Configuration)\net10.0\</HookOut>
+    </PropertyGroup>
+    <ItemGroup>
+      <HookFiles Include="$(HookOut)Isle.Hook.exe;$(HookOut)Isle.Hook.dll;$(HookOut)Isle.Hook.runtimeconfig.json;$(HookOut)Isle.Hook.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HookFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(HookOut)Isle.Hook.exe')" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="13.8.0" />
     <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />

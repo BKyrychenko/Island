@@ -62,6 +62,7 @@ public partial class IslandWindow
             Modules.Weather.WeatherSnapshots.Register(SnapshotStates);
             Modules.AiChat.AiSnapshots.Register(SnapshotStates);
             Modules.Voice.VoiceSnapshots.Register(SnapshotStates);
+            Modules.Agents.AgentSnapshots.Register(SnapshotStates);
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");

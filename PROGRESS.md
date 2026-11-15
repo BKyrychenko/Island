@@ -16,24 +16,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M10 Weather
 - [x] M11 AI chat + text actions (+ perf measurement)
 - [x] M12 Voice to text
-- [ ] M13 Agents integration
+- [x] M13 Agents integration
 - [ ] M14 Characters
 - [ ] M15 Polish & release
 
 ## Last action
-M12 done: `Modules/Voice` (VoiceModule hold-to-talk Win+Alt+V, MicCapture NAudio WASAPI → 16 kHz, WhisperEngine
-Whisper.net 1.9.1 with 2-min idle unload, ModelDownloader with SHA-256, LanguagePick, TranscriptText), `Views/Voice/VoicePill`,
-snapshots `voice-*`, strings EN/UK, `VoiceTests`. Debug CLI `--transcribe <wav> <out.txt> [--lang] [--model] [--unload]`.
-Live: real model download + verified, exact English transcription (cold 2.1 s / warm 1–2 s, peak ~400 MB), scripted hold
-in a WinForms target (pill, real mic, silence message). Published single-file exe transcribes too. Idle unload verified (400 → 9 MB).
+M13 done: `src/Isle.Hook` (pipe client, fail open), `Modules/Agents` (AgentPipeServer, AgentBook, AgentsModule, HookInstaller,
+AgentText, AgentSnapshots), `Views/Agents` (AgentsView, AgentPill), strings EN/UK, `AgentTests` (46). Fixed: first pipe
+instance created synchronously (flaky tests), hook-timeout cancel race that left stale waiting cards (found live).
+Live: real Isle.Hook.exe ↔ Isle, Allow via UI Automation reached the hook; timeout fails open and clears the card.
 
 ## Next step
-M13 Agents integration (§4.14): read https://code.claude.com/docs/en/hooks first (exact field names), `src/Isle.Hook`
-named-pipe client (fail open, 60 s timeout), pipe server + Agents tab cards with Allow/Deny and option buttons, pill dot,
-install/remove hooks with backup + merge (`~/.claude/settings.json`), Codex `notify` (read its docs). Tests for pipe
-protocol and hook JSON with fakes.
+M14 Characters (§4.15): 3 original geometric creatures in XAML (invented names), idle breathing/blink, eyes follow
+cursor, dance to music (playback state; loudness only if cheap), sleep after N min idle (`GetLastInputInfo`), happy on
+`TimerFinished` (EventBus), small in idle pill (left slot) + larger on the panel, settings gallery, ≤30 fps, paused when hidden.
 Note for M15: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the
-self-contained build loads whisper.dll.
+self-contained build loads whisper.dll. Agents settings (timeout, approvals) go into the settings panel.
 
 ## Known blockers
 - none

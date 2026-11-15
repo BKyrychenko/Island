@@ -158,6 +158,16 @@ One line each: decision — why.
 - Debug CLI `--transcribe <in.wav> <out.txt> [--lang] [--model] [--unload]` runs the same engine on a file (downloads the model if missing) — verifies the pipeline without a microphone or speaking into the owner's room.
 - No Voice tab: the feature is a hotkey + pill; its options (model, language) go into the settings panel in M15.
 
+## M13
+- Claude Code hooks follow https://code.claude.com/docs/en/hooks (read 2026-11-15): `PermissionRequest` → `hookSpecificOutput.decision.behavior` allow/deny (+ `message` on deny); `AskUserQuestion` is answered on `PreToolUse` with `permissionDecision: "allow"` + `updatedInput` = original `tool_input` + `answers` {question → label} (the docs say allow alone is not enough). Status events (SessionStart, UserPromptSubmit, PreToolUse, Notification, Stop, SessionEnd) are registered with `async: true` so they never delay the agent; only the two waiting hooks are synchronous.
+- Claude Code handlers use the documented exec form (`command` = exe path, `args` = list) — no shell, so paths with spaces need no quoting in Git Bash or PowerShell. Hook `timeout` = Isle's wait + 30 s so Claude never kills the helper before it fails open.
+- Codex: its hooks use the same shape (`~/.codex/hooks.json`, enabled by default, `PermissionRequest` with `decision.behavior`), so approvals work for Codex too; no Notification event and no AskUserQuestion there. Codex commands are shell strings (path quoted when it has spaces); status hooks get `timeout: 3` because Codex caps SessionEnd at 3 s. The old `notify` setting was not needed.
+- `Isle.Hook.exe` = tiny framework-dependent console app (no packages), one pipe connection per call, 400 ms connect timeout and a `WaitNamedPipe` probe so a missing island costs ~nothing; any failure/timeout → exit 0, no output (fail open). Protocol (`HookProtocol.cs`) is one JSON line each way, compiled into both projects (linked file).
+- Pipe `Isle.Agents.v1.<user>` created with `PipeOptions.CurrentUserOnly`; the first server instance is created synchronously in `Start()` so a hook arriving right after start-up finds it (found by flaky tests). The server notices a hook that left (timeout, Ctrl+C) by a pending 1-byte read and cancels the card.
+- Hook-timeout cancel is posted to the UI thread from the `catch`, not via `ct.Register`: `WaitAsync`'s own cancellation callback resumes the handler inline and disposing the registration dropped ours before it ran, leaving a stale "waiting" card whose Allow went nowhere (found live with UI Automation).
+- Install copies the helper to `%AppData%\Islein\` (stable path across rebuilds), backs up the config to `<file>.isle-backup-<timestamp>`, merges (Isle handlers recognised by `Isle.Hook.exe` in `command`), never writes invalid/commented JSON; Remove takes out only Isle's handlers. The panel shows the exact plan (file, helper path, events) and needs a Confirm press. Not run against the owner's real `~/.claude/settings.json`.
+- Interrupted runs send no Stop: a 1-min check runs only while some session is "working" and demotes ones silent for a while; sessions not heard from for 3 h are dropped.
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

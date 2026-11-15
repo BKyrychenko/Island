@@ -199,24 +199,9 @@ public sealed class ShelfView : Grid, ITabView
             }
         }
         catch { src = null; }
-        src ??= ShellIcon(path);
+        src ??= ShellIcons.For(path);
         _icons[path] = src;
         return src;
-    }
-
-    static ImageSource? ShellIcon(string path)
-    {
-        var info = new Native.SHFILEINFO();
-        try
-        {
-            if (Native.SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<Native.SHFILEINFO>(), Native.SHGFI_ICON | Native.SHGFI_LARGEICON) == IntPtr.Zero || info.hIcon == IntPtr.Zero)
-                return null;
-            var src = Imaging.CreateBitmapSourceFromHIcon(info.hIcon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            src.Freeze();
-            return src;
-        }
-        catch { return null; }
-        finally { if (info.hIcon != IntPtr.Zero) Native.DestroyIcon(info.hIcon); }
     }
 
     static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };

@@ -339,4 +339,12 @@ internal static partial class Native
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
+
+    public const uint SHGFI_PIDL = 0x8;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SHParseDisplayName(string pszName, IntPtr pbc, out IntPtr ppidl, uint sfgaoIn, out uint psfgaoOut);
+
+    [DllImport("shell32.dll", EntryPoint = "SHGetFileInfoW")]
+    public static extern IntPtr SHGetFileInfoPidl(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
 }

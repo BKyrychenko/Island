@@ -248,3 +248,35 @@ public class CurrencyTests
         Assert.Null(await svc.GetAsync(default));
     }
 }
+
+public class CommandBarTests
+{
+    sealed class Delayed(int delayMs, params CommandItem[] items) : ICommandProvider
+    {
+        public async Task<IEnumerable<CommandItem>> QueryAsync(string text, CancellationToken ct)
+        {
+            await Task.Delay(delayMs, ct);
+            return items;
+        }
+    }
+
+    [Fact]
+    public void Late_better_result_takes_the_selection_and_confirm_needs_two_enters()
+    {
+        FakeSink.Run(sink =>
+        {
+            var runs = 0;
+            var web = new CommandItem { Title = "web", Score = 5, Run = () => runs += 100 };
+            var shutdown = new CommandItem { Title = "Shut down", Score = 1000, Confirm = true, Run = () => runs++ };
+            var view = new Isle.Views.Commands.CommandBarView([new Delayed(0, web), new Delayed(300, shutdown)], i => i.Run!(), null);
+            view.Text = "shutdown";
+            view.Query();
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 2));
+            Assert.Same(shutdown, view.Results[view.SelectedIndex]);
+            view.Execute();
+            Assert.Equal(0, runs); // first Enter only arms
+            view.Execute();
+            Assert.Equal(1, runs);
+        });
+    }
+}

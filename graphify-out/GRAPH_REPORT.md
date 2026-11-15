@@ -1,17 +1,17 @@
 # Graph Report - island  (2026-11-15)
 
 ## Corpus Check
-- 104 files · ~68,653 words
+- 116 files · ~76,554 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 2, .manifest 1)
 
 ## Summary
-- 1963 nodes · 5236 edges · 102 communities (72 shown, 30 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 726 edges (avg confidence: 0.85)
+- 2180 nodes · 5898 edges · 122 communities (77 shown, 45 thin omitted)
+- Extraction: 87% EXTRACTED · 13% INFERRED · 0% AMBIGUOUS · INFERRED: 793 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `83a997a5`
+- Built from commit: `dbdf8464`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,15 +19,15 @@
 - Native
 - ShelfView
 - SystemControls.cs
-- ModuleHost
+- RatesSnapshot
 - IslandWindow
 - 4. Features (all of them)
-- Modules (`src/Isle/Modules`)
+- TimersController
 - TimersView
 - ClipboardService
-- MediaSession
+- Logger.Error
 - Isle.Tests.csproj
-- IReadOnlyList
+- IVpnEnvironment
 - Color
 - Isle
 - Window
@@ -35,7 +35,7 @@
 - PillItem
 - MusicView
 - ResourceDictionary
-- TimersController
+- TimerBook
 - MediaModule
 - ReminderParser
 - CLAUDE.md
@@ -50,28 +50,29 @@
 - IntPtr
 - ControlView
 - Modules (`src/Isle/Modules`)
+- Task
 - LyricsService.cs
 - App.StartModules
 - system_windows
-- TimerPill.cs
+- Isle.Core
 - TabBar
 - PreserveSig
 - Screens.All
 - App
 - IslandWindow
-- Isle.Tests
+- system_windows_media
 - Settings
-- NotesStore
+- Modules (`src/Isle/Modules`)
 - AudioVolume
-- LyricsTracker
-- DeviceState
+- Action
+- VpnDetector.Detect
 - CoreAudio.cs
 - DownloadsSource
 - IslandWindow
 - LiveEventsModule.Create
-- Logger.Error
+- Button
 - Strings.cs
-- RECT
+- ShelfView
 - List
 - Grid
 - Equalizer
@@ -83,101 +84,120 @@
 - Isle.Modules.Media
 - IAudioEndpointVolume
 - LiveEventsModule
-- Thickness
+- CommandBarView
 - Project: "Isle" — a full-featured Dynamic-Island-style overlay for Windows (personal use)
 - IdlePillView
 - Fact
 - EDataFlow
-- HotkeyService
+- ForegroundWatcher
 - TrayModule
 - IDisposable
 - LrclibHttp
-- Isle.Core
+- NotesFormattingTests.Formatting_survives_save_and_load
 - Note
-- Action
-- IModule
+- ControlServices
+- ModuleHost
 - DeviceState
 - ObsSource
-- Sources.cs
-- Func
-- KeyboardLayoutSource
+- IndicatorPill.cs
+- FakeSink
+- MicCameraSource.InUse
 - IndicatorPill
-- IslandWindow.ShowTab
+- IslandWindow.Expand
 - Gesture
 - RegistryWatcher
 - PlaybackMath.Choose
 - LyricsModule
-- ARCHITECTURE
+- TimeSpan
 - ObsAuth.Response
+- TempDir
 - NotesModule
-- RepeatKind
+- Calculator.TryEvaluate
 - BluetoothDevices.ListAsync
+- Units
+- CommandItem
 - LyricsStatus
+- system_windows_controls
+- Parser
+- LyricsServiceTests
+- ShellIcons.For
+- Strings
+- CommandModule
+- Spring
+- MusicPill
+- ClipboardView
+- Radios
+- VpnIndicatorSource
+- ClipboardService.SendCtrlV
+- NotesStoreTests.Crud_and_persistence
+- EventBusTests.Publish_reaches_subscribers_until_disposed_and_survives_throwing_handlers
+- NotesSnapshots.Register
+- LowLevelKeyboardProc
 
 ## God Nodes (most connected - your core abstractions)
-1. `Native` - 72 edges
-2. `Isle.Core` - 64 edges
-3. `NotesView` - 47 edges
-4. `ControlView` - 46 edges
-5. `IslandWindow` - 46 edges
-6. `IslandWindow` - 43 edges
+1. `Native` - 74 edges
+2. `Isle.Core` - 71 edges
+3. `IslandWindow` - 53 edges
+4. `NotesView` - 47 edges
+5. `ControlView` - 46 edges
+6. `IslandWindow` - 46 edges
 7. `Modules (`src/Isle/Modules`)` - 43 edges
 8. `TimersController` - 40 edges
 9. `MusicView` - 37 edges
 10. `MediaState` - 37 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `M1` --references--> `Icon`  [INFERRED]
-  DECISIONS.md → src/Isle/Views/Icon.cs
 - `2. Hard requirements (non-negotiable)` --references--> `Strings`  [INFERRED]
   SPEC.md → src/Isle/Core/Strings.Data.cs
-- `M5` --references--> `IAudioEndpointVolume`  [INFERRED]
-  DECISIONS.md → src/Isle/Modules/ControlCenter/CoreAudio.cs
-- `M6` --references--> `ForegroundWatcher`  [INFERRED]
-  DECISIONS.md → src/Isle/Core/ForegroundWatcher.cs
-- `M6` --references--> `ILiveSink`  [INFERRED]
-  DECISIONS.md → src/Isle/Modules/LiveEvents/Sources.cs
+- `M1` --references--> `Icon`  [INFERRED]
+  DECISIONS.md → src/Isle/Views/Icon.cs
+- `Modules (`src/Isle/Modules`)` --references--> `BluetoothDevices`  [INFERRED]
+  ARCHITECTURE.md → src/Isle/Modules/ControlCenter/Bluetooth.cs
+- `Modules (`src/Isle/Modules`)` --references--> `VpnDetector`  [INFERRED]
+  ARCHITECTURE.md → src/Isle/Modules/ControlCenter/Vpn.cs
+- `Modules (`src/Isle/Modules`)` --references--> `ArtColors`  [INFERRED]
+  ARCHITECTURE.md → src/Isle/Modules/Media/ArtColors.cs
 
 ## Import Cycles
 - None detected.
 
-## Communities (102 total, 30 thin omitted)
+## Communities (122 total, 45 thin omitted)
 
 ### Community 0 - "Native"
-Cohesion: 0.09
-Nodes (6): INPUT, LowLevelKeyboardProc, MonitorEnumProc, Native, POINT, WinEventDelegate
+Cohesion: 0.10
+Nodes (8): INPUT, MonitorEnumProc, Native, POINT, RECT, Height, Width, WinEventDelegate
 
 ### Community 1 - "ShelfView"
-Cohesion: 0.09
-Nodes (12): ShelfFile, Items, Version, ShelfItem, Added, Id, Path, ShelfStore (+4 more)
+Cohesion: 0.11
+Nodes (12): Isle.Modules.Shelf, ShelfFile, Items, Version, ShelfItem, Added, Id, Path (+4 more)
 
-### Community 3 - "ModuleHost"
-Cohesion: 0.31
-Nodes (3): Process shape, ModuleHost, Ids
+### Community 3 - "RatesSnapshot"
+Cohesion: 0.16
+Nodes (9): CurrencyService, IRatesSource, NbuRatesSource, RatesSnapshot, Date, Fetched, Rates, CurrencyTests (+1 more)
 
 ### Community 4 - "IslandWindow"
-Cohesion: 0.11
+Cohesion: 0.14
 Nodes (5): IslandWindow, CurrentTab, IdleView, TabList, IsExpanded
 
 ### Community 5 - "4. Features (all of them)"
 Cohesion: 0.11
 Nodes (19): 4.10 Command bar (default hotkey Alt+Space), 4.11 Screen tools (Tools tab + hotkeys), 4.12 Weather tab, 4.13 AI chat tab (bring-your-own key), 4.14 Agents tab — Claude Code and Codex integration, 4.15 Characters ("tenants"), 4.16 Voice to text, 4.17 Tray, settings, autostart, hotkeys (+11 more)
 
-### Community 6 - "Modules (`src/Isle/Modules`)"
-Cohesion: 0.15
-Nodes (11): Modules (`src/Isle/Modules`), DECISIONS, M1, M3, M4, M6, M7, Performance measurements (+3 more)
+### Community 6 - "TimersController"
+Cohesion: 0.13
+Nodes (11): SubmitResult, Full, Invalid, Reminder, Timer, TimersController, Clock, NextWake (+3 more)
 
-### Community 8 - "ClipboardService"
-Cohesion: 0.12
-Nodes (3): ClipboardService, InputUnion, KEYBDINPUT
+### Community 9 - "Logger.Error"
+Cohesion: 0.06
+Nodes (18): Autostart, IsEnabled, JsonStore, Logger, AppIndex, Entries, EntryKind, App (+10 more)
 
 ### Community 10 - "Isle.Tests.csproj"
 Cohesion: 0.15
 Nodes (9): net10.0-windows10.0.19041.0, Microsoft.NET.Test.Sdk (17.14.1), System.Management (11.0.0), System.Security.Cryptography.ProtectedData (11.0.0), xunit (2.9.3), xunit.runner.visualstudio (3.1.4), Microsoft.NET.Sdk, net10.0-windows10.0.19041.0 (+1 more)
 
-### Community 11 - "IReadOnlyList"
-Cohesion: 0.08
-Nodes (16): ClipPrivacy, EmptyVpnEnvironment, LocalAppData, ProgramFiles, Client, IVpnEnvironment, LocalAppData, ProgramFiles (+8 more)
+### Community 11 - "IVpnEnvironment"
+Cohesion: 0.15
+Nodes (9): EmptyVpnEnvironment, LocalAppData, ProgramFiles, IVpnEnvironment, LocalAppData, ProgramFiles, MachineVpnEnvironment, LocalAppData (+1 more)
 
 ### Community 12 - "Color"
 Cohesion: 0.13
@@ -188,75 +208,75 @@ Cohesion: 0.08
 Nodes (34): Body, EmptyText, MoreList, MoreOverlay, Outline, Panel, PanelScale, PillLayer (+26 more)
 
 ### Community 17 - "TimerItem"
-Cohesion: 0.10
-Nodes (17): StopwatchState, Accumulated, Active, IsRunning, RunningSince, TimerDoc, Stopwatch, Timers (+9 more)
+Cohesion: 0.20
+Nodes (9): TimerItem, Duration, EndsAt, FinishedAt, Id, IsPaused, IsRunning, Label (+1 more)
 
 ### Community 18 - "PillItem"
 Cohesion: 0.12
 Nodes (18): PillItem, Click, Compact, CompactWidth, Height, HoverExpands, Id, IsBanner (+10 more)
 
+### Community 19 - "MusicView"
+Cohesion: 0.15
+Nodes (7): LyricsTracker, ForCurrent, Loading, Result, TrackKey, MusicView, LyricsOpen
+
 ### Community 20 - "ResourceDictionary"
 Cohesion: 0.15
 Nodes (16): Bd, Hover, On, PART_ContentHost, PART_Indicator, PART_Track, ResourceDictionary, Thumb (+8 more)
 
-### Community 21 - "TimersController"
+### Community 21 - "TimerBook"
 Cohesion: 0.08
-Nodes (19): TimerBook, Doc, Finished, NextEnd, Now, Soonest, Stopwatch, Timers (+11 more)
+Nodes (17): StopwatchState, Accumulated, Active, IsRunning, RunningSince, TimerBook, Doc, Finished (+9 more)
 
 ### Community 22 - "MediaModule"
-Cohesion: 0.15
-Nodes (9): MediaModule, Id, Lyrics, LyricsAlwaysFetch, LyricsInPill, Source, MusicPill, PillWidth (+1 more)
+Cohesion: 0.16
+Nodes (7): MediaModule, Id, Lyrics, LyricsAlwaysFetch, LyricsInPill, Source, TrackBanner
 
 ### Community 23 - "ReminderParser"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (13): RepeatRule, DayOfMonth, Days, Interval, Kind, ParsedReminder, ReminderParser, Rule (+5 more)
 
-### Community 26 - "TimeSpan"
-Cohesion: 0.13
-Nodes (4): Lrc, LrcLine, DurationParser, LrcTests
-
 ### Community 27 - "Node"
-Cohesion: 0.16
+Cohesion: 0.17
 Nodes (6): Node, Steam, SteamDownload, Progress, Vdf, SteamParserTests
 
 ### Community 28 - "Theory"
-Cohesion: 0.14
-Nodes (4): LiveMiscTests, ExcludedAppTests, GestureTests, DurationParserTests
+Cohesion: 0.11
+Nodes (7): CalculatorTests, UnitTests, DownloadDetectorTests, LiveMiscTests, PlaybackTests, ExcludedAppTests, DurationParserTests
 
 ### Community 29 - "MediaState"
-Cohesion: 0.12
-Nodes (16): MediaState, Accent, Album, Art, Artist, CanNext, CanPrev, CanSeek (+8 more)
+Cohesion: 0.10
+Nodes (17): MediaSnapshots, MediaState, Accent, Album, Art, Artist, CanNext, CanPrev (+9 more)
 
 ### Community 30 - "FakeMediaSource"
-Cohesion: 0.14
-Nodes (5): FakeMediaSource, Current, IMediaSource, Current, MediaSnapshots
+Cohesion: 0.21
+Nodes (4): FakeMediaSource, Current, IMediaSource, Current
 
 ### Community 32 - "TimersSnapshots.Register"
-Cohesion: 0.23
-Nodes (6): TimersSnapshots, Ring, Brush, Progress, Track, TimerPill
+Cohesion: 0.19
+Nodes (7): TimersSnapshots, Ring, Brush, Progress, Track, TimerDoneBanner, TimerPill
 
 ### Community 33 - "IntPtr"
-Cohesion: 0.09
-Nodes (9): ForegroundWatcher, LastExternal, KnownFolders, Downloads, TrayIcon, ICONINFO, MOUSEINPUT, NOTIFYICONDATA (+1 more)
-
-### Community 34 - "ControlView"
 Cohesion: 0.15
-Nodes (4): VpnEntry, CanToggle, ControlView, Tile
+Nodes (6): KnownFolders, Downloads, TrayIcon, ICONINFO, MOUSEINPUT, NOTIFYICONDATA
 
 ### Community 35 - "Modules (`src/Isle/Modules`)"
-Cohesion: 0.20
-Nodes (5): TimersModule, Controller, Id, ReminderBanner, TimerDoneBanner
+Cohesion: 0.18
+Nodes (4): TimersModule, Controller, Id, ReminderBanner
 
 ### Community 38 - "App.StartModules"
-Cohesion: 0.11
+Cohesion: 0.13
 Nodes (6): ClipboardModule, Id, ControlModule, Id, ShelfModule, Id
 
-### Community 40 - "TimerPill.cs"
-Cohesion: 0.31
-Nodes (5): Isle.Views.Timers, Isle.Modules.Reminders, Isle.Modules.Timers, ReminderBookTests, TimerBookTests
+### Community 39 - "system_windows"
+Cohesion: 0.14
+Nodes (3): Isle, Isle.Modules.Hotkeys, Isle.Modules.LiveEvents
+
+### Community 40 - "Isle.Core"
+Cohesion: 0.13
+Nodes (6): Isle.Views.Timers, Isle.Core, Isle.Tests, Isle.Modules.Reminders, Isle.Modules.Timers, PillPriority
 
 ### Community 41 - "TabBar"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (9): Icon, Data, Filled, Foreground, Stroke, TabBar, AvailableWidth, Hidden (+1 more)
 
 ### Community 42 - "PreserveSig"
@@ -268,67 +288,63 @@ Cohesion: 0.23
 Nodes (4): ScreenInfo, Screens, Screen, MONITORINFOEX
 
 ### Community 44 - "App"
-Cohesion: 0.13
-Nodes (5): Application, App, Host, Island, IsSnapshot
+Cohesion: 0.11
+Nodes (6): Shell, Application, App, Host, Island, IsSnapshot
 
 ### Community 45 - "IslandWindow"
-Cohesion: 0.13
-Nodes (4): Shell, IslandWindow, IsHiddenByUser, PasteTarget
+Cohesion: 0.14
+Nodes (3): IslandWindow, IsHiddenByUser, PasteTarget
 
-### Community 46 - "Isle.Tests"
+### Community 46 - "system_windows_media"
 Cohesion: 0.18
-Nodes (5): Isle.Modules.Clipboard, Isle.Views.Shelf, Isle.Modules.Shelf, Isle.Tests, Isle.Views.Clipboard
+Nodes (4): Isle.Modules.Clipboard, Isle.Modules.Tray, Isle.Views.Shelf, Isle.Views.Clipboard
 
 ### Community 47 - "Settings"
-Cohesion: 0.08
-Nodes (21): Isle.Modules.Tray, Settings, AutoHideEdge, ClickThrough, Current, ExcludedApps, HideInFullscreen, Hotkeys (+13 more)
+Cohesion: 0.10
+Nodes (16): Settings, AutoHideEdge, ClickThrough, Current, ExcludedApps, HideInFullscreen, Hotkeys, Language (+8 more)
 
-### Community 48 - "NotesStore"
-Cohesion: 0.17
-Nodes (9): NotesSnapshots, NotesDoc, Folders, Notes, NotesStore, Doc, Folders, Notes (+1 more)
+### Community 48 - "Modules (`src/Isle/Modules`)"
+Cohesion: 0.26
+Nodes (5): Modules (`src/Isle/Modules`), NotesStore, Doc, Folders, Notes
 
 ### Community 49 - "AudioVolume"
-Cohesion: 0.17
-Nodes (4): AudioVolume, Available, Level, Muted
+Cohesion: 0.14
+Nodes (5): AudioVolume, Available, Level, Muted, IMMDeviceEnumerator
 
-### Community 50 - "LyricsTracker"
-Cohesion: 0.24
-Nodes (5): LyricsTracker, ForCurrent, Loading, Result, TrackKey
+### Community 50 - "Action"
+Cohesion: 0.19
+Nodes (8): AppsProvider, CalculatorProvider, Cmd, CurrencyProvider, ICommandProvider, SystemProvider, TimerProvider, WebProvider
 
-### Community 51 - "DeviceState"
-Cohesion: 0.16
-Nodes (5): IKsControl, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator, KsProperty
+### Community 51 - "VpnDetector.Detect"
+Cohesion: 0.15
+Nodes (8): Client, VpnDetector, VpnEntry, CanToggle, FakeEnv, LocalAppData, ProgramFiles, VpnDetectorTests
 
 ### Community 52 - "CoreAudio.cs"
-Cohesion: 0.21
-Nodes (3): IPropertyStore, PropertyKey, PropVariant
+Cohesion: 0.14
+Nodes (6): CoreAudioIds, IKsControl, IPropertyStore, KsProperty, PropertyKey, PropVariant
 
 ### Community 53 - "DownloadsSource"
-Cohesion: 0.12
-Nodes (7): DownloadDetector, SpeedMeter, BytesPerSecond, DownloadsSource, Item, SteamSource, DownloadDetectorTests
+Cohesion: 0.15
+Nodes (5): DownloadDetector, SpeedMeter, BytesPerSecond, DownloadsSource, Item
 
 ### Community 54 - "IslandWindow"
-Cohesion: 0.14
+Cohesion: 0.11
 Nodes (6): IslandWindow, FileDropTarget, Handle, Hotkeys, Pill, Watcher
 
 ### Community 55 - "LiveEventsModule.Create"
-Cohesion: 0.15
-Nodes (5): CapsLockSource, ILiveSource, NotificationsSource, Unavailable, VpnIndicatorSource
+Cohesion: 0.12
+Nodes (9): CapsLockSource, ILiveSink, Ui, ILiveSource, KeyboardLayoutSource, MicCameraSource, NotificationsSource, Unavailable (+1 more)
 
-### Community 56 - "Logger.Error"
-Cohesion: 0.11
-Nodes (7): Autostart, IsEnabled, JsonStore, Logger, Brightness, Level, Supported
-
-### Community 58 - "RECT"
-Cohesion: 0.67
-Nodes (3): RECT, Height, Width
+### Community 56 - "Button"
+Cohesion: 0.29
+Nodes (4): Brightness, Level, Supported, Tile
 
 ### Community 60 - "List"
-Cohesion: 0.11
-Nodes (15): Reminder, Due, FiredAt, Id, Repeat, Source, Text, ReminderBook (+7 more)
+Cohesion: 0.08
+Nodes (24): Reminder, Due, FiredAt, Id, Repeat, Source, Text, ReminderBook (+16 more)
 
 ### Community 61 - "Grid"
-Cohesion: 0.43
+Cohesion: 0.25
 Nodes (3): MarqueeText, Inner, Text
 
 ### Community 62 - "Equalizer"
@@ -336,8 +352,8 @@ Cohesion: 0.26
 Nodes (3): ArtImage, Equalizer, Playing
 
 ### Community 63 - "DateTimeOffset"
-Cohesion: 0.15
-Nodes (9): Service, DiskEntry, ILyricsHttp, LyricsResult, LyricsService, TrackQuery, CacheKey, FakeHttp (+1 more)
+Cohesion: 0.24
+Nodes (3): DiskEntry, LyricsResult, LyricsService
 
 ### Community 64 - "TabInfo"
 Cohesion: 0.19
@@ -347,109 +363,133 @@ Nodes (5): Paths, LogFile, Root, SettingsFile, TabInfo
 Cohesion: 0.29
 Nodes (6): How to check quickly, Known blockers, Last action, Milestones, Next step, PROGRESS
 
-### Community 66 - "Memory"
-Cohesion: 0.32
-Nodes (3): Core (`src/Isle/Core`), M0, Memory
-
 ### Community 67 - "IMMNotificationClient"
 Cohesion: 0.16
 Nodes (7): M5, DeviceCallback, VolumeCallback, Audio, AudioVolumeNotificationData, IAudioEndpointVolumeCallback, IMMNotificationClient
 
 ### Community 68 - "Isle.Modules.Media"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (3): Isle.Views.Music, Isle.Modules.Lyrics, Isle.Modules.Media
 
 ### Community 71 - "LiveEventsModule"
-Cohesion: 0.19
-Nodes (4): LiveEventsModule, Id, PillSink, Ui
+Cohesion: 0.16
+Nodes (5): CurrencyParser, LiveEventsModule, Id, PillSink, Ui
+
+### Community 72 - "CommandBarView"
+Cohesion: 0.17
+Nodes (6): CommandBarView, Results, SelectedIndex, Text, CommandBarTests, Delayed
 
 ### Community 73 - "Project: "Isle" — a full-featured Dynamic-Island-style overlay for Windows (personal use)"
-Cohesion: 0.10
-Nodes (17): 0. How to work on this (read first), 1. What we are building, 2. Hard requirements (non-negotiable), 3. Tech stack and layout, 5. Quality rules, 6. Performance verification, 7. Testing, 8. Milestones (in order; commit after each; update PROGRESS.md and the graph) (+9 more)
+Cohesion: 0.18
+Nodes (10): 0. How to work on this (read first), 1. What we are building, 2. Hard requirements (non-negotiable), 3. Tech stack and layout, 5. Quality rules, 6. Performance verification, 7. Testing, 9. Definition of Done (+2 more)
 
 ### Community 74 - "IdlePillView"
-Cohesion: 0.31
+Cohesion: 0.18
 Nodes (5): IdlePillView, DesiredPillWidth, LeftSlot, Now, RightSlot
 
 ### Community 75 - "Fact"
-Cohesion: 0.05
-Nodes (27): Secret, Spring, ClipSnapshots, ClipEntry, Cipher, Id, Image, ImageHash (+19 more)
+Cohesion: 0.06
+Nodes (26): Secret, ClipEntry, Cipher, Id, Image, ImageHash, ImageHeight, ImageWidth (+18 more)
 
 ### Community 76 - "EDataFlow"
 Cohesion: 0.24
 Nodes (8): EDataFlow, All, Capture, Render, ERole, Communications, Console, Multimedia
 
-### Community 79 - "IDisposable"
-Cohesion: 0.19
-Nodes (4): EventBus, Unsubscriber, EventBusTests, Ping
+### Community 80 - "LrclibHttp"
+Cohesion: 0.23
+Nodes (3): IdleHttp, ILyricsHttp, LrclibHttp
 
-### Community 81 - "Isle.Core"
-Cohesion: 0.19
-Nodes (4): Isle.Views.Notes, Isle.Core, Isle.Modules.Notes, PillPriority
+### Community 81 - "NotesFormattingTests.Formatting_survives_save_and_load"
+Cohesion: 0.28
+Nodes (3): Isle.Views.Notes, Isle.Modules.Notes, NotesFormattingTests
 
 ### Community 82 - "Note"
-Cohesion: 0.13
-Nodes (11): Note, Created, Folder, Id, Pinned, Plain, Preview, Title (+3 more)
+Cohesion: 0.14
+Nodes (13): Note, Created, Folder, Id, Pinned, Plain, Preview, Title (+5 more)
 
-### Community 83 - "Action"
-Cohesion: 0.12
-Nodes (9): ControlServices, Brightness, Radios, VpnEnvironment, ControlSnapshots, Radios, BluetoothOn, Denied (+1 more)
+### Community 83 - "ControlServices"
+Cohesion: 0.31
+Nodes (5): ControlServices, Brightness, Radios, VpnEnvironment, ControlSnapshots
 
-### Community 84 - "IModule"
-Cohesion: 0.13
-Nodes (10): Entry, IModule, Id, ModuleState, Failed, Running, Stopped, Fake (+2 more)
+### Community 84 - "ModuleHost"
+Cohesion: 0.05
+Nodes (30): ARCHITECTURE, Core (`src/Isle/Core`), Process shape, Styles / Views, Tests (`tests/Isle.Tests`), DECISIONS, M0, M1 (+22 more)
 
 ### Community 85 - "DeviceState"
-Cohesion: 0.25
-Nodes (6): DeviceState, Active, All, Disabled, NotPresent, Unplugged
-
-### Community 88 - "Func"
-Cohesion: 0.19
-Nodes (4): ILiveSink, Ui, FakeSink, Ui
+Cohesion: 0.13
+Nodes (9): BluetoothDevices, DeviceState, Active, All, Disabled, NotPresent, Unplugged, IMMDevice (+1 more)
 
 ### Community 92 - "Gesture"
-Cohesion: 0.22
-Nodes (4): Isle.Modules.Hotkeys, Gesture, IsValid, HotkeyInfo
+Cohesion: 0.25
+Nodes (3): Gesture, IsValid, GestureTests
 
 ### Community 94 - "PlaybackMath.Choose"
-Cohesion: 0.22
-Nodes (4): M2, PlaybackMath, PlaybackTests, VERIFICATION
+Cohesion: 0.24
+Nodes (3): M2, PlaybackMath, VERIFICATION
 
-### Community 96 - "ARCHITECTURE"
-Cohesion: 0.29
-Nodes (4): ARCHITECTURE, Styles / Views, Tests (`tests/Isle.Tests`), TestSetup
+### Community 95 - "LyricsModule"
+Cohesion: 0.33
+Nodes (3): LyricsModule, Id, Service
+
+### Community 98 - "TempDir"
+Cohesion: 0.28
+Nodes (3): SettingsTests, TempDir, Path
 
 ### Community 99 - "NotesModule"
 Cohesion: 0.32
 Nodes (3): NotesModule, Id, Store
 
-### Community 100 - "RepeatKind"
-Cohesion: 0.25
-Nodes (8): RepeatKind, Daily, EveryNDays, EveryNHours, EveryNMinutes, Monthly, None, Weekly
+### Community 100 - "Calculator.TryEvaluate"
+Cohesion: 0.21
+Nodes (3): Calculator, Result, CurrencyQuery
+
+### Community 102 - "Units"
+Cohesion: 0.19
+Nodes (7): Kind, Data, Length, Mass, Temp, U, Units
+
+### Community 103 - "CommandItem"
+Cohesion: 0.20
+Nodes (9): CommandSnapshots, CommandItem, Confirm, IconKey, IconPath, Run, Score, Subtitle (+1 more)
 
 ### Community 104 - "LyricsStatus"
 Cohesion: 0.33
 Nodes (6): LyricsStatus, Error, Instrumental, NotFound, Plain, Synced
 
+### Community 105 - "system_windows_controls"
+Cohesion: 0.22
+Nodes (3): Isle.Views, Isle.Modules.Commands, Isle.Views.Commands
+
+### Community 107 - "LyricsServiceTests"
+Cohesion: 0.27
+Nodes (4): TrackQuery, CacheKey, FakeHttp, LyricsServiceTests
+
+### Community 109 - "Strings"
+Cohesion: 0.20
+Nodes (7): 8. Milestones (in order; commit after each; update PROGRESS.md and the graph), Strings, English, Instance, Language, this[], Ukrainian
+
+### Community 114 - "Radios"
+Cohesion: 0.25
+Nodes (4): Radios, BluetoothOn, Denied, WifiOn
+
 ## Knowledge Gaps
-- **270 isolated node(s):** `Host`, `Island`, `IsSnapshot`, `FileDropTarget`, `Pill` (+265 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 443 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **30 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **295 isolated node(s):** `Host`, `Island`, `IsSnapshot`, `PasteTarget`, `IsHiddenByUser` (+290 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 483 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **45 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Modules (`src/Isle/Modules`)` connect `Modules (`src/Isle/Modules`)` to `MediaSession`, `IReadOnlyList`, `Color`, `TimersController`, `MediaModule`, `ReminderParser`, `TimeSpan`, `FakeMediaSource`, `TimersSnapshots.Register`, `IntPtr`, `Modules (`src/Isle/Modules`)`, `App.StartModules`, `NotesStore`, `AudioVolume`, `LyricsTracker`, `Logger.Error`, `List`, `DateTimeOffset`, `Thickness`, `HotkeyService`, `Action`, `Gesture`, `PlaybackMath.Choose`, `ARCHITECTURE`, `NotesModule`, `BluetoothDevices.ListAsync`?**
-  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **Why does `IslandWindow` connect `IslandWindow` to `TabInfo`, `IntPtr`, `IslandWindow`, `App.StartModules`, `system_windows`, `ClipboardService`, `Screens.All`, `ForegroundWatcher`, `Window`, `IslandWindow`, `MediaModule`, `LiveEventsModule.Create`, `ShelfView`, `IslandWindow.Expand`?**
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 - **What connects `Host`, `Island`, `IsSnapshot` to the rest of the system?**
-  _270 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _295 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Native` be split into smaller, more focused modules?**
-  _Cohesion score 0.09250693802035152 - nodes in this community are weakly interconnected._
-- **Why does `Isle.Core` connect `Isle.Core` to `SystemControls.cs`, `App.xaml.cs`, `LyricsService.cs`, `Isle.Modules.Media`, `system_windows`, `TimerPill.cs`, `Project: "Isle" — a full-featured Dynamic-Island-style overlay for Windows (personal use)`, `Screens.All`, `Fact`, `Isle.Tests`, `IDisposable`, `NotesStore`, `Settings`, `IModule`, `Sources.cs`, `Strings.cs`, `Gesture`?**
-  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+  _Cohesion score 0.09696969696969697 - nodes in this community are weakly interconnected._
+- **Why does `Isle.Core` connect `Isle.Core` to `ShelfView`, `SystemControls.cs`, `Isle.Modules.Media`, `LyricsService.cs`, `system_windows`, `Logger.Error`, `system_windows_controls`, `Screens.All`, `Strings`, `system_windows_media`, `IDisposable`, `Spring`, `NotesFormattingTests.Formatting_survives_save_and_load`, `Action`, `Note`, `ModuleHost`, `IndicatorPill.cs`, `Strings.cs`?**
+  _High betweenness centrality (0.080) - this node is a cross-community bridge._
 - **Should `ShelfView` be split into smaller, more focused modules?**
-  _Cohesion score 0.08687943262411348 - nodes in this community are weakly interconnected._
-- **Why does `IslandWindow` connect `IslandWindow` to `ShelfView`, `IslandWindow`, `ClipboardService`, `Window`, `IntPtr`, `App.StartModules`, `system_windows`, `Screens.All`, `App`, `IslandWindow`, `Native.GetForegroundWindow`, `TabInfo`, `LiveEventsModule`, `Fact`, `Action`, `Sources.cs`, `Func`, `KeyboardLayoutSource`, `RegistryWatcher`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
-- **Should `IslandWindow` be split into smaller, more focused modules?**
-  _Cohesion score 0.11076923076923077 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10952380952380952 - nodes in this community are weakly interconnected._
+- **Why does `Modules (`src/Isle/Modules`)` connect `Modules (`src/Isle/Modules`)` to `TimersController`, `Logger.Error`, `Color`, `MusicView`, `TimerBook`, `MediaModule`, `ReminderParser`, `TimeSpan`, `MediaState`, `FakeMediaSource`, `TimersSnapshots.Register`, `IntPtr`, `Modules (`src/Isle/Modules`)`, `App.StartModules`, `AudioVolume`, `VpnDetector.Detect`, `Button`, `List`, `DateTimeOffset`, `LrclibHttp`, `ControlServices`, `ModuleHost`, `DeviceState`, `PlaybackMath.Choose`, `TimeSpan`, `NotesModule`, `Radios`?**
+  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+- **Should `SystemControls.cs` be split into smaller, more focused modules?**
+  _Cohesion score 0.13157894736842105 - nodes in this community are weakly interconnected._

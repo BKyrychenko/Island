@@ -137,6 +137,7 @@ public partial class IslandWindow
         _expanded = false;
         _sticky = false;
         HideMoreOverlay();
+        HideOverlay();
         NotifyCurrentView(shown: false);
         ReleaseFocus(restore: true);
         if (_hwnd != IntPtr.Zero) Native.UnregisterHotKey(_hwnd, EscHotkeyId);

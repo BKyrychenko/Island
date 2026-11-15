@@ -57,6 +57,7 @@ public partial class IslandWindow
             Modules.ControlCenter.ControlSnapshots.Register(SnapshotStates);
             Modules.LiveEvents.LiveSnapshots.Register(SnapshotStates);
             Modules.Clipboard.ClipSnapshots.Register(SnapshotStates);
+            Modules.Commands.CommandSnapshots.Register(SnapshotStates);
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");

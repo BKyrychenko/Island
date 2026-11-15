@@ -11,7 +11,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M5 Control Center
 - [x] M6 Live events + pill priority queue (+ perf measurement)
 - [x] M7 Clipboard + File shelf
-- [~] M8 Command bar
+- [x] M8 Command bar
 - [ ] M9 Screen tools
 - [ ] M10 Weather
 - [ ] M11 AI chat + text actions (+ perf measurement)
@@ -21,16 +21,17 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [ ] M15 Polish & release
 
 ## Last action
-M8 part 1: pure logic in `Modules/Commands` — Calculator (own parser, %, "x% of y", functions, thousands/decimal
-comma, units length/mass/temp/data incl. UK names), Fuzzy matcher, CurrencyParser (EN/UK aliases), NBU rates source +
-CurrencyService (12 h cache, offline fallback), `Core/IdleHttp`. 341 tests green.
+M8 complete: command bar overlay (Alt+Space) with providers for apps (shell:AppsFolder + Start menu + recent +
+folders, background index), calculator + units, currency (NBU, 12 h cache), timers/reminders, system commands with
+confirm, web/URL/`?` AI hand-off. Fixed live: selection now follows the best result. 342 tests green.
+Side effect during the buggy live run: a Chrome window with a Google search for "shutdown" was opened on the owner's
+machine (left open; mention it in the final report).
 
 ## Next step
-M8 part 2: providers (apps/recent/folders index in background with cache, calculator, currency, timers/reminders via
-TimersModule.Controller, system commands with confirm-by-second-Enter, web/URL/`g`, `?` → AI placeholder until M11),
-CommandBarView as an overlay over the whole panel (focused input, 80 ms debounce, arrows/Enter/Esc), CommandModule
-registering hotkey "commandBar" Alt+Space; snapshots; live check; docs; commit M8.
-Live helpers (outside the repo, `..\scratch`): live-m1..m7.ps1, live-m7-drag.ps1 + drag-source.ps1, fake-session.ps1.
+Start M9 (Screen tools, spec 4.11): read section 4.11 first. Tools tab + hotkeys Win+Alt+S screenshot (+ markup),
+Win+Alt+R recording, Win+Alt+C colour picker, Win+Alt+Q QR/OCR. OCR via Windows.Media.Ocr (WinRT, no package);
+QR decoding needs a decoder (ZXing.Net is the usual NuGet). Keep capture sessions lazy and disposed.
+Live scripts must call Guard (Isle in front) before sending keys — see ..\scratch\live-m8b.ps1.
 
 ## Known blockers
 - none

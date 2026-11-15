@@ -79,3 +79,12 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Shelf: drag files onto the island → expands to Shelf, drop hint, item saved | live (OLE drag from a helper window, screenshots m7/drag-over, m7/dropped) | ok |
 | Shelf: drag an item out into another window (FileDrop), remove after drop option | manual-needed | Open the Shelf tab, drag a tile onto the desktop or an Explorer window → the file is copied/linked there; with "Remove after drag-out" on, the tile disappears |
 | Shelf: missing file mark, open, copy path, clear | snapshot (shelf-tab) + manual-needed for open/copy | Select a tile → toolbar buttons |
+| Command bar: Alt+Space opens with focused input, results as you type | live (keys sent by script, screenshots m8/b1, b2) | ok |
+| Command bar: apps incl. Store apps (Notepad found via shell:AppsFolder), shell icons | live | ok |
+| Command bar: calculator (35 cases), units (15), Enter copies | auto-test + live (2^10 + 15% of 80 -> 1036 on the clipboard) | ok |
+| Command bar: currency parsing EN/UK, NBU rates, 12 h cache, offline fallback | auto-test (fake source) + live (100 USD = 4,542.74 UAH, rate date shown) | ok |
+| Command bar: fuzzy matcher ranking | auto-test | ok |
+| Command bar: system commands confirm with a second Enter; best result selected while results stream in | auto-test (CommandBarTests) | ok; manual-needed for the real actions: type "lock", Enter, Enter -> PC locks |
+| Command bar: timers/reminders ("timer 10m", "remind me in 5 min to stretch", "нагадай ...") | manual-needed (parsers auto-tested in M3) | Alt+Space -> "timer 10m" -> Enter -> timer pill appears |
+| Command bar: URL / g search / ? AI | manual-needed | "github.com" Enter opens the browser; "g wpf spring" searches; "? ..." goes to AI chat after M11 |
+| Command bar: configurable folders | manual-needed | Set option `cmd.folders` to e.g. `C:\Users\you\Documents` -> file names appear after the background index |

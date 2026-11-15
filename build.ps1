@@ -21,7 +21,7 @@ Step "publish (framework-dependent)" {
     dotnet publish $proj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained false -o dist\Isle -nologo -v q
 }
 Step "publish (self-contained)" {
-    dotnet publish $proj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true --self-contained true -o dist\Isle-selfcontained -nologo -v q
+    dotnet publish $proj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o dist\Isle-selfcontained -nologo -v q
 }
 
 if (Test-Path "src\Isle.Hook\Isle.Hook.csproj") {
@@ -29,6 +29,14 @@ if (Test-Path "src\Isle.Hook\Isle.Hook.csproj") {
         dotnet publish "src\Isle.Hook\Isle.Hook.csproj" -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o dist\Isle -nologo -v q
     }
     Copy-Item dist\Isle\Isle.Hook.* dist\Isle-selfcontained\ -Force
+}
+
+# Native DLLs stay loose next to the exe (Whisper looks for runtimes\win-x64\whisper.dll there; a bundled copy is
+# extracted elsewhere and not found). Other architectures are never loaded on this machine.
+foreach ($d in "dist\Isle", "dist\Isle-selfcontained") {
+    foreach ($arch in "win-arm64", "win-x86") {
+        if (Test-Path "$d\runtimes\$arch") { Remove-Item -Recurse -Force "$d\runtimes\$arch" }
+    }
 }
 
 Write-Host "Done:" -ForegroundColor Green

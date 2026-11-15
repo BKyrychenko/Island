@@ -42,6 +42,7 @@ public partial class IslandWindow : Window
 
         SourceInitialized += OnSourceInitialized;
         InitHover();
+        InitDrop();
         Settings.Changed += OnSettingsChanged;
         Theme.Changed += OnThemeChanged;
     }

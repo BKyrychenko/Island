@@ -85,6 +85,16 @@ One line each: decision — why.
 - Caps Lock: `WH_KEYBOARD_LL`; the callback only compares the vk code and posts to the UI thread.
 - Progress bar in pills uses a `ScaleTransform` (found in snapshots: width computed from `ActualWidth` before layout was NaN).
 
+## M7
+- Clipboard listener: `AddClipboardFormatListener` on a message-only `HwndSource` (HWND_MESSAGE) — event-driven, no viewer chain. A locked clipboard (COMException) is retried up to 4× at 80 ms via a DispatcherTimer, never by sleeping.
+- Privacy: skipped when the clipboard has `ExcludeClipboardContentFromMonitorProcessing` or `Clipboard Viewer Ignore`, or `CanIncludeInClipboardHistory` = 0 (if that value can't be read, the content is treated as private). Excluded apps = the island's ExcludedApps + option `clip.excludedApps`, matched against the clipboard owner's process (fallback: foreground process). Content is never logged.
+- Storage: `clipboard.json` holds text only as DPAPI (CurrentUser, app entropy) ciphertext; plaintext lives in memory only. Text dedupe is done in memory (no content hash on disk). Images are PNGs in `clip\`, deduped by SHA-256 of the pixels; clipboard DIBs with all-zero alpha are made opaque. Text > 1 M chars and images > 40 MP are ignored.
+- "Clear" removes unpinned entries only — pinned entries never expire, per spec. Limit option `clip.limit` (default 200, clamped 10–5000).
+- Paste: put the entry on the clipboard, collapse, `SetForegroundWindow(PasteTarget)` if needed, 90 ms later `SendInput` Ctrl+V (physically held Shift/Alt/Win are released first), 600 ms later the previous clipboard (text/image/file list) is restored. Our own writes are ignored via `GetClipboardSequenceNumber`. Verified live into a WinForms text box.
+- The list shows at most 60 rows (search reaches the rest) and is rebuilt only while the tab is visible.
+- Shelf keeps references only (never copies files). Drag-in: the island window has `AllowDrop`; drag-over a FileDrop expands to the Shelf tab (sticky) and shows an opaque "Drop to shelve" hint; transparent areas still pass drags through to windows below (layered window). Drag-out: `DoDragDrop(FileDrop)` with Copy|Move|Link while `HoldOpen("shelf-drag")` keeps the panel open; drops onto the island itself are refused during our own drag. "Remove after drag-out" is option `shelf.removeAfterDrop`.
+- Shelf tiles: selection + toolbar (open / copy path / remove) instead of per-tile hover buttons — fewer elements and works with the 76-px tiles; double-click opens; a missing file shows "missing" and Open goes to its folder if that still exists. Icons via `SHGetFileInfo`, images get a decoded 80-px thumbnail; cached per path.
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|

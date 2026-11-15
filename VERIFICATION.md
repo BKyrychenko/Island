@@ -70,3 +70,12 @@ Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real a
 | Live: Caps Lock flash | live (key sent by script, screenshot m6/3) + snapshot | ok |
 | Pill priority order (finished > agent > rec > mic/cam > timer > download > music) | auto-test | ok |
 | Idle budget (M6, all modules) | live | 55.5 MB WS / 0.29 % of one core over 60 s |
+| Clipboard store: dedupe, pins, limit, clear keeps pinned, search, DPAPI on disk, images, corruption | auto-test (14 tests) | ok |
+| Clipboard capture (text + image) via AddClipboardFormatListener | live (script copies text/image → tab screenshot m7/1) | ok |
+| Clipboard privacy: ExcludeClipboardContentFromMonitorProcessing skipped | live (private item never stored) | ok; CanIncludeInClipboardHistory=0 path: manual-needed (copy a password from a password manager → not in the list) |
+| Clipboard: click entry = paste into the previous window, previous clipboard restored | live (test window received the text; image was back on the clipboard) | ok |
+| Clipboard excluded apps | auto-test (matching) | ok |
+| Shelf store: add/dedupe/normalise/persist/missing/remove/clear/corruption | auto-test (6 tests) | ok |
+| Shelf: drag files onto the island → expands to Shelf, drop hint, item saved | live (OLE drag from a helper window, screenshots m7/drag-over, m7/dropped) | ok |
+| Shelf: drag an item out into another window (FileDrop), remove after drop option | manual-needed | Open the Shelf tab, drag a tile onto the desktop or an Explorer window → the file is copied/linked there; with "Remove after drag-out" on, the tile disappears |
+| Shelf: missing file mark, open, copy path, clear | snapshot (shelf-tab) + manual-needed for open/copy | Select a tile → toolbar buttons |

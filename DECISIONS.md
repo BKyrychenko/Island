@@ -147,6 +147,17 @@ One line each: decision — why.
 - Closing the popup (Esc/×/collapse) cancels a running answer; the panel is held open while an answer streams.
 - One request at a time across the tab and the popup (`AiModule.Busy`); the popup says so instead of queueing.
 
+## M12
+- Whisper via NuGet `Whisper.net` + `Whisper.net.Runtime` 1.9.1 (MIT, whisper.cpp binding; CPU runtime is ~2 MB of native DLLs per architecture in `runtimes\`). Works from the single-file publish (native DLLs stay next to the exe). No GPU runtimes (CUDA/Vulkan packages are hundreds of MB).
+- Model: multilingual ggml `base` (148 MB) by default, `small` (488 MB) via option `voice.model`; downloaded on the first hotkey press from the official `huggingface.co/ggerganov/whisper.cpp` repo into `%AppData%\Isle\models\`, written to `*.part`, then size + SHA-256 checked against the values the repository publishes (its LFS object ids, hard-coded) before the move. Progress pill with a bar; no resume (one-off download).
+- Language: option `voice.lang` = auto (default) / en / uk / nl. Auto = Whisper's own detection; a detected en/uk/nl is used as is, another language only when its probability is ≥ 0.75, otherwise the best of en/uk/nl (Whisper's candidate-restricted detection) — Ukrainian speech is often scored as Russian with low confidence.
+- Capture: NAudio `WasapiCapture` (shared mode, device mix format) on the default *Console* capture endpoint, downmixed to mono while recording, resampled to 16 kHz with NAudio's WDL resampler on release. Max 5 min per hold. Level for the pill = loudest chunk since the last 50 ms UI tick (lock-free from the capture thread), no dispatcher call per audio buffer.
+- Hold detection reuses `HotkeyService.Register(..., released)` (30 ms key-state poll only while held). Releases under 0.4 s show "hold the key while you speak"; recordings with a peak below −40 dBFS are not transcribed (Whisper hallucinates "Thank you." on silence); a peak of exactly 0 means a muted/blocked mic and says so.
+- Paste target = the foreground window at key press (or the island's previous window if the island had focus); text goes through `ClipboardOps.PasteTextAsync` (clipboard restored, history quiet). Non-speech markers (`[BLANK_AUDIO]`, `*laughs*`, wholly parenthesised segments) are removed.
+- Engine: `WhisperFactory` created on the first transcription (thread pool), threads = cores/2 (2–8), unloaded by a 2-min idle `DispatcherTimer`, then GC + trim. Measured here: cold load + auto-detect + transcribe of 6 s speech 2.1 s (1.2 s with a fixed language), warm 1–2 s; peak working set ~400 MB while loaded.
+- Debug CLI `--transcribe <in.wav> <out.txt> [--lang] [--model] [--unload]` runs the same engine on a file (downloads the model if missing) — verifies the pipeline without a microphone or speaking into the owner's room.
+- No Voice tab: the feature is a hotkey + pill; its options (model, language) go into the settings panel in M15.
+
 ## Performance measurements
 | When | State | Working set | Private | CPU |
 |---|---|---|---|---|
@@ -166,3 +177,6 @@ One line each: decision — why.
 | M11 | AI text action streaming (fake local server) | peak 92 MB | — | — |
 | M11 | AI chat tab streaming, tab open | peak 116 MB | — | — |
 | M11 | 6–8 s after an answer (trim) | 9–23 MB | — | — |
+| M12 | Whisper base loaded, transcribing 6 s of speech (auto language) | peak ~400 MB | — | 2.1 s per run (cold 1.2–2.1 s) |
+| M12 | 2 min 8 s after the last transcription (engine unloaded + trim) | 9 MB | — | — |
+| M12 | hold-to-talk recording (mic + pill), before Whisper | peak 67–73 MB | — | — |

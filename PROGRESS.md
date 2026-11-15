@@ -15,24 +15,25 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed
 - [x] M9 Screen tools
 - [x] M10 Weather
 - [x] M11 AI chat + text actions (+ perf measurement)
-- [ ] M12 Voice to text
+- [x] M12 Voice to text
 - [ ] M13 Agents integration
 - [ ] M14 Characters
 - [ ] M15 Polish & release
 
 ## Last action
-M11 done. Part 3: text actions (Win+Alt+A → `ClipboardOps.CopySelectionAsync` → `AiPopupView` with Summarise /
-→ EN·UK·NL / Fix / Explain / Reply, Copy / Replace selection) and command bar `? question` (streamed short answer,
-Open in chat). Clipboard paste code shared via `Core/ClipboardOps` (+ quiet window for the history). Live-tested with a
-local fake SSE server (`..\scratch\live-m11.ps1`, `live-m11b.ps1`): selection → stream → replace, clipboard restored,
-history untouched; `?` → popup → Open in chat → follow-up with history. Perf measured (DECISIONS). 442 tests green.
+M12 done: `Modules/Voice` (VoiceModule hold-to-talk Win+Alt+V, MicCapture NAudio WASAPI → 16 kHz, WhisperEngine
+Whisper.net 1.9.1 with 2-min idle unload, ModelDownloader with SHA-256, LanguagePick, TranscriptText), `Views/Voice/VoicePill`,
+snapshots `voice-*`, strings EN/UK, `VoiceTests`. Debug CLI `--transcribe <wav> <out.txt> [--lang] [--model] [--unload]`.
+Live: real model download + verified, exact English transcription (cold 2.1 s / warm 1–2 s, peak ~400 MB), scripted hold
+in a WinForms target (pill, real mic, silence message). Published single-file exe transcribes too. Idle unload verified (400 → 9 MB).
 
 ## Next step
-M12 Voice to text (§4.16): hold-to-talk hotkey `voice` (Win+Alt+V, `HotkeyService.Register(..., released)`), NAudio
-WASAPI capture 16 kHz mono with a level/waveform pill, Whisper.net (+ runtime) loaded on demand and unloaded after 2 min
-idle, model download (ggml `base` multilingual from the official Hugging Face whisper.cpp repo) into
-`%AppData%\Isle\models\` with progress + SHA check if published, paste via `ClipboardOps.PasteTextAsync` into the
-previous window. Clear messages for no mic / no model. Tests with fakes; record peak RAM while transcribing.
+M13 Agents integration (§4.14): read https://code.claude.com/docs/en/hooks first (exact field names), `src/Isle.Hook`
+named-pipe client (fail open, 60 s timeout), pipe server + Agents tab cards with Allow/Deny and option buttons, pill dot,
+install/remove hooks with backup + merge (`~/.claude/settings.json`), Codex `notify` (read its docs). Tests for pipe
+protocol and hook JSON with fakes.
+Note for M15: publish ships Whisper `runtimes\win-arm64` and `win-x86` too (~3.5 MB) — trim if easy; check the
+self-contained build loads whisper.dll.
 
 ## Known blockers
 - none

@@ -29,6 +29,13 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Length > 0 && e.Args[0] == "--transcribe")
+        {
+            IsSnapshot = true;
+            Dispatcher.InvokeAsync(async () => Shutdown(await Modules.Voice.VoiceSelfTest.RunAsync(e.Args)));
+            return;
+        }
+
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
         if (!isFirst)
         {
@@ -72,6 +79,7 @@ public partial class App : Application
             Host.Register("tools", () => new Modules.Tools.ToolsModule(Island!));
             Host.Register("weather", () => new Modules.Weather.WeatherModule(Island!));
             Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
+            Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
             Host.Sync();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
 

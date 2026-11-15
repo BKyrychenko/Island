@@ -102,5 +102,12 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   with `TextActions` prompts; Copy / Replace (`ClipboardOps.PasteTextAsync` into the previous window). Command bar
   `? question` → `AskAi` on the EventBus → `AiModule.Ask` → the same popup; "Open in chat" stores it as a chat.
 
+- **Voice to text** (`voice`, `Modules/Voice`) — `VoiceModule` (hold hotkey `voice` = Win+Alt+V: press → `MicCapture`
+  + `Views/Voice/VoicePill` level waveform; release → `WhisperEngine.TranscribeAsync` → `ClipboardOps.PasteTextAsync`
+  into the window that was active; first press without a model → `ModelDownloader` with a progress pill). `MicCapture`
+  (NAudio WASAPI → mono → 16 kHz), `AudioMath` (level, silence, resample), `WhisperEngine` (`ITranscriber`; Whisper.net
+  loaded on demand, unloaded 2 min after use), `LanguagePick`, `TranscriptText`, `WhisperModels` (base/small, URL, size,
+  SHA-256; files in `%AppData%\Isle\models\`). `VoiceSelfTest` = debug CLI `--transcribe`. Options `voice.model`, `voice.lang`.
+
 ## Tests (`tests/Isle.Tests`)
 xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).

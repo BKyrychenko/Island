@@ -28,7 +28,7 @@ Personal project: everything included, no accounts, no telemetry, no ads.
 Requires the .NET 10 SDK.
 
 ```powershell
-.\build.ps1                        # build + test + publish into dist\
+.\scripts\build.ps1                        # build + test + publish into dist\
 dist\Isle\Isle.exe                 # needs the .NET 10 Desktop Runtime
 dist\Isle-selfcontained\Isle.exe   # no runtime needed (bigger)
 ```
@@ -40,7 +40,7 @@ the `runtimes` folder next to the exe is needed for voice to text.
   Українська), monitor, auto-hide, click-through, excluded apps, modules on/off, per-module options, hotkeys.
 - **Start with Windows**: Settings → General → Start with Windows (or the tray menu).
 - **Quit**: tray icon → Quit.
-- **Updates**: pull/rebuild and run `build.ps1` again.
+- **Updates**: pull/rebuild and run `scripts/build.ps1` again.
 
 ## Hotkeys (all can be changed in Settings → Hotkeys)
 | Action | Default |
@@ -70,5 +70,5 @@ changed, backs up the config file, and Remove takes out only Isle's entries.
 - `Isle.exe --transcribe <in.wav> <out.txt> [--lang en|uk|nl|auto]` runs the voice engine on a file.
 - `ISLE_DATA_DIR=<folder>` uses another data folder (handy for trying things without touching your data).
 
-See `VERIFICATION.md` for what was tested and the few things to check by hand, `ARCHITECTURE.md` for the code map and
-`DECISIONS.md` for why things are the way they are.
+See `docs/VERIFICATION.md` for what was tested and the few things to check by hand, `docs/ARCHITECTURE.md` for the code map and
+`docs/DECISIONS.md` for why things are the way they are.

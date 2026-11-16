@@ -1,11 +1,11 @@
 # build.ps1 - builds, tests and publishes Isle into dist\
 #   dist\Isle\                framework-dependent single file (needs .NET 10 Desktop Runtime)
 #   dist\Isle-selfcontained\  self-contained single file (no runtime needed)
-# Usage: .\build.ps1 [-SkipTests]
+# Usage: .\scripts\build.ps1 [-SkipTests]
 param([switch]$SkipTests)
 
 $ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot
+Set-Location (Split-Path $PSScriptRoot -Parent)   # repo root
 
 function Step($name, [scriptblock]$body) {
     Write-Host "== $name" -ForegroundColor Cyan

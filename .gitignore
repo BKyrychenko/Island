@@ -9,3 +9,6 @@ TestResults/
 graphify-out/*
 !graphify-out/GRAPH_REPORT.md
 DONE.flag.tmp
+
+# local scratch copy of the audit (duplicate of docs/SOFTWARE-AUDIT.md)
+Claude outputs/

@@ -85,6 +85,12 @@ public partial class IslandWindow
         }
         SetTargets();
         UpdateEdgeHide();
+        var showFullscreenAlert = primary is { IsBanner: true, Priority: PillPriority.Finished };
+        if (_fullscreenAlert != showFullscreenAlert)
+        {
+            _fullscreenAlert = showFullscreenAlert;
+            CheckForeground();
+        }
     }
 
     // ---- tabs ----

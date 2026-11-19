@@ -23,6 +23,8 @@ public partial class IslandWindow : Window
     HwndSource? _source;
     readonly bool _snapshotMode;
     DispatcherTimer? _housekeeping;
+    ScreenInfo? _screen;
+    bool _fullscreenAlert;
 
     public PillQueue Pill { get; } = new();
     public HotkeyService Hotkeys { get; } = new();
@@ -106,7 +108,7 @@ public partial class IslandWindow : Window
     }
 
     /// <summary>The monitor the island currently lives on.</summary>
-    public ScreenInfo Screen => Screens.Selected(Settings.Current.Monitor);
+    public ScreenInfo Screen => _screen ??= Screens.Selected(Settings.Current.Monitor);
 
     /// <summary>Places the window at the top-centre of the selected monitor (physical pixels, mixed-DPI safe).</summary>
     public void Reposition()
@@ -114,7 +116,8 @@ public partial class IslandWindow : Window
         if (_hwnd == IntPtr.Zero) return;
         try
         {
-            var screen = Screen;
+            var screen = Screens.Selected(Settings.Current.Monitor);
+            _screen = screen;
             const uint flags = Native.SWP_NOSIZE | Native.SWP_NOACTIVATE;
             // First move onto the monitor so WPF adopts its DPI, then centre using the resulting pixel width.
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, screen.Left, screen.Top, 0, 0, flags);

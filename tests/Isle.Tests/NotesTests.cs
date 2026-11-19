@@ -4,6 +4,28 @@ namespace Isle.Tests;
 
 public class NotesStoreTests
 {
+    [Fact]
+    public void Failed_save_keeps_note_in_memory_and_can_be_retried()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("notes.json");
+        var store = new NotesStore(path);
+        var note = store.Create(plain: "original");
+        var failures = 0;
+        store.SaveFailed += () => failures++;
+        using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.False(store.Update(note.Id, "", "edited"));
+            Assert.True(store.HasUnsavedChanges);
+            Assert.Equal("edited", note.Plain);
+            Assert.Equal("original", new NotesStore(path).Find(note.Id)!.Plain);
+        }
+        Assert.Equal(1, failures);
+        Assert.True(store.Update(note.Id, "", "edited"));
+        Assert.False(store.HasUnsavedChanges);
+        Assert.Equal("edited", new NotesStore(path).Find(note.Id)!.Plain);
+    }
+
     static Func<DateTimeOffset> Clock()
     {
         var t = new DateTimeOffset(2026, 3, 11, 10, 0, 0, TimeSpan.Zero);

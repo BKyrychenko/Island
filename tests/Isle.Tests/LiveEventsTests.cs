@@ -129,7 +129,15 @@ public class DownloadDetectorTests
             {
                 using var src = new DownloadsSource(sink, dir);
                 src.Start();
+                Assert.False(src.Sampling);
                 Assert.False(sink.PumpUntil(() => sink.Items.ContainsKey("download"), 1500));
+                var partial = Path.Combine(dir, "stale.iso.crdownload");
+                File.AppendAllText(partial, "growth");
+                Assert.True(sink.PumpUntil(() => src.Sampling && sink.Items.ContainsKey("download")));
+                src.Sample(DateTimeOffset.Now.AddMinutes(2));
+                Assert.False(src.Sampling);
+                src.Dispose();
+                Assert.False(src.Sampling);
             });
         }
         finally { Directory.Delete(dir, true); }
@@ -272,4 +280,16 @@ public class LiveMiscTests
         Assert.True(PillPriority.TimerRunning > PillPriority.Download);
         Assert.True(PillPriority.Download > PillPriority.Music);
     }
+}
+
+public class ObsRetryTests
+{
+    [Theory]
+    [InlineData(0, 60)]
+    [InlineData(1, 120)]
+    [InlineData(2, 240)]
+    [InlineData(3, 300)]
+    [InlineData(20, 300)]
+    public void RetryBackoffIsBounded(int failures, int seconds) =>
+        Assert.Equal(TimeSpan.FromSeconds(seconds), ObsSource.RetryDelay(failures));
 }

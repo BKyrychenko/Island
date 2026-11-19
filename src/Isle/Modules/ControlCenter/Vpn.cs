@@ -48,7 +48,8 @@ public static class VpnDetector
         foreach (var name in env.Phonebooks().SelectMany(ParsePhonebook).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var up = adapters.Any(a => a.Up && string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
-            result.Add(new VpnEntry("windows", name, up, "rasdial.exe", [name], [name, "/disconnect"], null));
+            var rasdial = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "rasdial.exe");
+            result.Add(new VpnEntry("windows", name, up, rasdial, [name], [name, "/disconnect"], null));
         }
 
         foreach (var c in Clients(env))
@@ -76,6 +77,7 @@ public static class VpnDetector
     /// <summary>Runs a client CLI hidden. Returns (ok, needsElevation, output).</summary>
     public static async Task<(bool Ok, bool NeedsAdmin, string Output)> RunAsync(string exe, string[] args)
     {
+        if (!Path.IsPathFullyQualified(exe)) return (false, false, "");
         try
         {
             var psi = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };

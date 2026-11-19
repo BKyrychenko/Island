@@ -145,7 +145,7 @@ public sealed class SystemProvider : ICommandProvider
         return Task.FromResult<IEnumerable<CommandItem>>(list);
     }
 
-    static void Run(string exe, string args) => Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true });
+    static void Run(string exe, string args) => Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), exe), args) { UseShellExecute = false, CreateNoWindow = true });
     internal static void Open(string target) => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
 
     [DllImport("user32.dll")]

@@ -16,6 +16,28 @@ public sealed class TempDir : IDisposable
 public class SettingsTests
 {
     [Fact]
+    public async Task Atomic_writes_keep_complete_files_when_writers_overlap()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("notes.json");
+        var payloads = Enumerable.Range(0, 8).Select(i => new string((char)('a' + i), 100_000)).ToArray();
+        await Task.WhenAll(payloads.Select(value => Task.Run(() => JsonStore.WriteAtomic(path, value))));
+        Assert.Contains(File.ReadAllText(path), payloads);
+        Assert.Empty(Directory.GetFiles(dir.Path, "*.tmp"));
+    }
+
+    [Fact]
+    public void Empty_document_recovers_the_latest_readable_backup()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("notes.json");
+        File.WriteAllText(path + ".bak-1", """{"Theme":"Dark"}""");
+        File.WriteAllText(path, "");
+        Assert.Equal("Dark", JsonStore.Load<Settings>(path).Theme);
+        Assert.True(File.Exists(path + ".bak-1"));
+    }
+
+    [Fact]
     public void Missing_file_gives_defaults()
     {
         using var dir = new TempDir();

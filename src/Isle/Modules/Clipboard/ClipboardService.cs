@@ -151,20 +151,26 @@ public sealed class ClipboardService : IDisposable
         return true;
     }
 
-    /// <summary>Puts the entry on the clipboard, sends Ctrl+V to the window that was active before the island, and
-    /// restores the previous clipboard content (text/image/files) half a second later.</summary>
-    public void Paste(ClipEntry e)
+    public async void Paste(ClipEntry e)
     {
-        var previous = ClipboardOps.Snapshot();
-        if (!SetClipboard(e)) return;
-        var target = _pasteTarget();
-        if (target != IntPtr.Zero && Native.GetForegroundWindow() != target) Native.SetForegroundWindow(target);
-        // let the target take focus, then paste; then restore
-        After(TimeSpan.FromMilliseconds(90), () =>
+        try
         {
-            ClipboardOps.SendCtrl(Native.VK_V);
-            After(TimeSpan.FromMilliseconds(600), () => Restore(previous));
-        });
+            var payload = new DataObject();
+            if (e.Kind == ClipKind.Text) payload.SetText(e.Text);
+            else
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(_store.ImagePath(e));
+                image.EndInit();
+                payload.SetImage(image);
+            }
+            var result = await ClipboardOps.PasteDataAsync(payload, _pasteTarget());
+            if (ClipboardOps.PasteNotice(result) is { } notice) App.Island?.ShowToast(notice);
+            _ignoreSequence = Native.GetClipboardSequenceNumber();
+        }
+        catch (Exception ex) { Logger.Error("clipboard paste", ex); App.Island?.ShowToast(Strings.T("clipboard.pasteFailed")); }
     }
 
     /// <summary>Copies the entry to the clipboard only (no paste).</summary>
@@ -188,22 +194,6 @@ public sealed class ClipboardService : IDisposable
             return true;
         }
         catch (Exception ex) { Logger.Error("clipboard set", ex); return false; }
-    }
-
-    void Restore(DataObject? previous)
-    {
-        if (previous is not null && ClipboardOps.Restore(previous)) _ignoreSequence = Native.GetClipboardSequenceNumber();
-    }
-
-    void After(TimeSpan delay, Action action)
-    {
-        var t = new DispatcherTimer(DispatcherPriority.Normal, _ui) { Interval = delay };
-        t.Tick += (_, _) =>
-        {
-            t.Stop();
-            try { action(); } catch (Exception ex) { Logger.Error("clipboard paste", ex); }
-        };
-        t.Start();
     }
 
     public void Dispose()

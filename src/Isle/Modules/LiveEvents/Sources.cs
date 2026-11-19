@@ -44,6 +44,8 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
     DispatcherTimer? _tick;
     IndicatorPill? _view;
     string _dir = "";
+    bool _disposed;
+    internal bool Sampling => _tick?.IsEnabled == true;
 
     public void Start()
     {
@@ -56,14 +58,14 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
         _watcher.Deleted += (_, e) => sink.Ui.BeginInvoke(() => Removed(e.FullPath));
         _watcher.EnableRaisingEvents = true;
         _tick = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromSeconds(1) };
-        _tick.Tick += (_, _) => Sample();
+        _tick.Tick += (_, _) => Sample(DateTimeOffset.Now);
         try { foreach (var f in Directory.EnumerateFiles(_dir)) if (DownloadDetector.IsPartial(f)) Touch(f, existing: true); }
         catch (Exception ex) { Logger.Warn($"downloads scan: {ex.GetType().Name}"); }
     }
 
     void Touch(string path, bool existing = false)
     {
-        if (!DownloadDetector.IsPartial(path)) return;
+        if (_disposed || !DownloadDetector.IsPartial(path)) return;
         if (!_active.ContainsKey(path))
         {
             var item = new Item();
@@ -73,11 +75,12 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
             item.Speed.Add(DateTimeOffset.Now, item.Size);
             _active[path] = item;
         }
-        if (!_tick!.IsEnabled) _tick.Start();
+        if (!existing && !_tick!.IsEnabled) _tick.Start();
     }
 
     void Renamed(string oldPath, string newPath)
     {
+        if (_disposed) return;
         if (_active.Remove(oldPath))
         {
             if (DownloadDetector.IsPartial(newPath)) Touch(newPath);
@@ -89,6 +92,7 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
 
     void Removed(string path)
     {
+        if (_disposed) return;
         if (_active.Remove(path)) Update();
     }
 
@@ -103,9 +107,8 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
         }, 280, TimeSpan.FromSeconds(4));
     }
 
-    void Sample()
+    internal void Sample(DateTimeOffset now)
     {
-        var now = DateTimeOffset.Now;
         foreach (var (path, item) in _active.ToList())
         {
             if (!File.Exists(path)) { _active.Remove(path); continue; }
@@ -113,7 +116,7 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
             if (size != item.Size) { item.Size = size; item.LastGrowth = now; }
             item.Speed.Add(now, size);
         }
-        if (_active.Count == 0) _tick!.Stop();
+        if (!_active.Values.Any(item => now - item.LastGrowth < TimeSpan.FromSeconds(60))) _tick!.Stop();
         Update();
     }
 
@@ -121,7 +124,7 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
     {
         var now = DateTimeOffset.Now;
         var live = _active.Where(kv => now - kv.Value.LastGrowth < TimeSpan.FromSeconds(60)).ToList();
-        if (live.Count == 0) { sink.Hide(PillId); _view = null; return; }
+        if (live.Count == 0) { _tick?.Stop(); sink.Hide(PillId); _view = null; return; }
         var (path, item) = live[0];
         var name = DownloadDetector.FinalName(path) ?? Strings.T("live.downloading");
         var speed = item.Speed.BytesPerSecond;
@@ -157,6 +160,7 @@ public sealed class DownloadsSource(ILiveSink sink, string? folder = null) : ILi
 
     public void Dispose()
     {
+        _disposed = true;
         _watcher?.Dispose();
         _watcher = null;
         _tick?.Stop();
@@ -317,79 +321,108 @@ public sealed class ObsSource(ILiveSink sink, Func<string> password, int port = 
     const string PillId = "obs";
     DispatcherTimer? _probe, _tick;
     CancellationTokenSource? _cts;
-    bool _connecting;
+    bool _disposed;
+    int _failures;
     DateTimeOffset? _recordingSince;
     IndicatorPill? _view;
 
     public void Start()
     {
-        _probe = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromSeconds(15) };
+        _probe = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromSeconds(60) };
         _probe.Tick += (_, _) => Probe();
-        _probe.Start();
         _tick = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromSeconds(1) };
         _tick.Tick += (_, _) => UpdatePill();
         Probe();
     }
 
-    void Probe()
+    async void Probe()
     {
-        if (_connecting || _cts is not null) return;
-        if (Process.GetProcessesByName("obs64").Length == 0 && Process.GetProcessesByName("obs").Length == 0) return;
-        _ = RunAsync();
-    }
-
-    async Task RunAsync()
-    {
-        _connecting = true;
-        var cts = _cts = new CancellationTokenSource();
-        using var ws = new ClientWebSocket();
+        if (_disposed || _cts is not null) return;
+        _probe?.Stop();
+        using var cts = new CancellationTokenSource();
+        _cts = cts;
         try
         {
-            await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}"), cts.Token);
-            _connecting = false;
+            var secret = password();
+            var connected = await Task.Run(() => RunAsync(secret, cts));
+            _failures = connected ? 0 : Math.Min(_failures + 1, 3);
+        }
+        catch (Exception ex) { Logger.Error("obs probe", ex); }
+        finally
+        {
+            _cts = null;
+            if (!_disposed)
+            {
+                SetRecording(false, TimeSpan.Zero);
+                _probe!.Interval = RetryDelay(_failures);
+                _probe.Start();
+            }
+        }
+    }
+
+    internal static TimeSpan RetryDelay(int failures) => TimeSpan.FromSeconds(Math.Min(300, 60 * Math.Pow(2, Math.Clamp(failures, 0, 3))));
+
+    async Task<bool> RunAsync(string secret, CancellationTokenSource cts)
+    {
+        using var ws = new ClientWebSocket();
+        using var handshake = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+        handshake.CancelAfter(TimeSpan.FromSeconds(5));
+        var token = handshake.Token;
+        var helloReceived = false;
+        var identified = false;
+        try
+        {
+            using (var connect = CancellationTokenSource.CreateLinkedTokenSource(cts.Token))
+            {
+                connect.CancelAfter(TimeSpan.FromMilliseconds(500));
+                await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{port}"), connect.Token).ConfigureAwait(false);
+            }
             var buffer = new byte[64 * 1024];
             while (ws.State == WebSocketState.Open && !cts.IsCancellationRequested)
             {
-                var msg = await ReceiveAsync(ws, buffer, cts.Token);
+                var msg = await ReceiveAsync(ws, buffer, token);
                 if (msg is null) break;
                 var node = JsonNode.Parse(msg);
                 var op = (int?)node?["op"] ?? -1;
                 var d = node?["d"] as JsonObject;
                 var evt = (string?)d?["eventType"];
-                if (op == 0) // Hello → Identify (Outputs events = 1 << 6)
+                if (op == 0 && !helloReceived && !identified) // Hello → Identify (Outputs events = 1 << 6)
                 {
+                    if ((int?)d?["rpcVersion"] != 1) return false;
+                    helloReceived = true;
                     var identify = new JsonObject { ["rpcVersion"] = 1, ["eventSubscriptions"] = 64 };
                     if (d?["authentication"] is JsonObject auth)
-                        identify["authentication"] = ObsAuth.Response(password(), (string?)auth["salt"] ?? "", (string?)auth["challenge"] ?? "");
-                    await SendAsync(ws, new JsonObject { ["op"] = 1, ["d"] = identify }, cts.Token);
+                        identify["authentication"] = ObsAuth.Response(secret, (string?)auth["salt"] ?? "", (string?)auth["challenge"] ?? "");
+                    await SendAsync(ws, new JsonObject { ["op"] = 1, ["d"] = identify }, token);
                 }
-                else if (op == 2) // Identified → ask for the current state
-                    await SendAsync(ws, new JsonObject { ["op"] = 6, ["d"] = new JsonObject { ["requestType"] = "GetRecordStatus", ["requestId"] = "isle-rec" } }, cts.Token);
-                else if (op == 5 && evt == "RecordStateChanged")
+                else if (op == 2 && helloReceived && !identified) // Identified → ask for the current state
+                {
+                    identified = true;
+                    handshake.CancelAfter(Timeout.InfiniteTimeSpan);
+                    await SendAsync(ws, new JsonObject { ["op"] = 6, ["d"] = new JsonObject { ["requestType"] = "GetRecordStatus", ["requestId"] = "isle-rec" } }, token);
+                }
+                else if (identified && op == 5 && evt == "RecordStateChanged")
                 {
                     var ev = d!["eventData"] as JsonObject;
                     var active = (bool?)ev?["outputActive"] == true;
-                    sink.Ui.Invoke(() => SetRecording(active, TimeSpan.Zero));
+                    _ = sink.Ui.BeginInvoke(() => { if (!_disposed) SetRecording(active, TimeSpan.Zero); });
                 }
-                else if (op == 5 && evt == "ExitStarted") cts.Cancel();
-                else if (op == 7 && (string?)d?["requestId"] == "isle-rec")
+                else if (identified && op == 5 && evt == "ExitStarted") cts.Cancel();
+                else if (identified && op == 7 && (string?)d?["requestId"] == "isle-rec")
                 {
                     var data = d!["responseData"] as JsonObject;
                     var on = (bool?)data?["outputActive"] == true;
                     var ms = (double?)data?["outputDuration"] ?? 0;
-                    sink.Ui.Invoke(() => SetRecording(on, TimeSpan.FromMilliseconds(ms)));
+                    _ = sink.Ui.BeginInvoke(() => { if (!_disposed) SetRecording(on, TimeSpan.FromMilliseconds(ms)); });
                 }
+                else if (!identified) return false;
             }
+            return identified;
         }
         catch (OperationCanceledException) { }
-        catch (WebSocketException) { /* OBS closed or websocket server disabled: stay silent */ }
+        catch (WebSocketException) { /* OBS closed or websocket server disabled: retry with backoff. */ }
         catch (Exception ex) { Logger.Error("obs", ex); }
-        finally
-        {
-            _connecting = false;
-            _cts = null;
-            _ = sink.Ui.BeginInvoke(() => SetRecording(false, TimeSpan.Zero));
-        }
+        return false;
     }
 
     static async Task<string?> ReceiveAsync(ClientWebSocket ws, byte[] buffer, CancellationToken ct)
@@ -399,6 +432,7 @@ public sealed class ObsSource(ILiveSink sink, Func<string> password, int port = 
         {
             var r = await ws.ReceiveAsync(buffer, ct);
             if (r.MessageType == WebSocketMessageType.Close) return null;
+            if (r.MessageType != WebSocketMessageType.Text || sb.Length + r.Count > 1 << 20) return null;
             sb.Append(Encoding.UTF8.GetString(buffer, 0, r.Count));
             if (r.EndOfMessage) return sb.ToString();
         }
@@ -442,6 +476,7 @@ public sealed class ObsSource(ILiveSink sink, Func<string> password, int port = 
 
     public void Dispose()
     {
+        _disposed = true;
         _probe?.Stop();
         _tick?.Stop();
         _cts?.Cancel();
@@ -578,8 +613,8 @@ public sealed class KeyboardLayoutSource(ILiveSink sink, ForegroundWatcher watch
     {
         _last = Current();
         watcher.Changed += OnForeground;
-        // layout switches (Win+Space, Alt+Shift) raise no event for other processes: a cheap 500 ms check while enabled
-        _timer = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromMilliseconds(500) };
+        // Foreground changes are immediate; catch layout switches inside an unchanged window at a quiet cadence.
+        _timer = new DispatcherTimer(DispatcherPriority.Background, sink.Ui) { Interval = TimeSpan.FromSeconds(2) };
         _timer.Tick += (_, _) => Check();
         _timer.Start();
     }

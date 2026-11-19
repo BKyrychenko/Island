@@ -373,12 +373,11 @@ public sealed class NotesView : Grid, ITabView, IDisposable
     public void SaveNow()
     {
         _autosave.Stop();
-        if (!_dirty || _currentId is null) return;
-        _dirty = false;
+        if (!_dirty || _currentId is null) { _store.Flush(); return; }
         try
         {
             var (xaml, plain) = Serialize(_editor.Document);
-            _store.Update(_currentId, xaml, plain);
+            _dirty = !_store.Update(_currentId, xaml, plain);
         }
         catch (Exception ex) { Logger.Error("note save", ex); }
     }

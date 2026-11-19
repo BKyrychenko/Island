@@ -2,8 +2,8 @@
 
 ## WPF audit repairs
 
-- Latest: Tier 1 implemented. The Windows input probe confirmed Escape is available to other windows while the repaired island is expanded.
-- Next: Tier 2 starts with hover intent and background polling.
+- Latest: Tier 2 code integrated: hover intent, background polling, durable saves, media rebinding, fullscreen timer alerts, clipboard borrowing, and system tool paths. All 549 tests passed on Windows. The desktop probe verified Escape and held-button hover.
+- Next: Verify fullscreen alerts and idle usage on Windows. Tier 3 covers contrast, keyboard access, command confirmation, layout, and dependency weight.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

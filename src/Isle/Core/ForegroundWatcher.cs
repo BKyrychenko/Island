@@ -70,7 +70,8 @@ public sealed class ForegroundWatcher : IDisposable
     {
         if (hwnd == IntPtr.Zero || IsOwn(hwnd)) return false;
         // Windows' own verdict: 2 = busy (full-screen app), 3 = D3D exclusive full screen, 4 = presentation mode
-        if (Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4) return true;
+        if (screen.Handle != IntPtr.Zero && Native.MonitorFromWindow(hwnd, 0) == screen.Handle &&
+            Native.SHQueryUserNotificationState(out var state) == 0 && state is 2 or 3 or 4) return true;
         var cls = ClassName(hwnd);
         if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "XamlExplorerHostIslandWindow" or "Windows.UI.Core.CoreWindow") return false;
         // a maximized window (browsers draw their own title bar, so no WS_CAPTION) is not full screen

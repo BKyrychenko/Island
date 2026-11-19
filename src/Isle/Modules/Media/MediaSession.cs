@@ -90,7 +90,7 @@ public sealed class MediaSession : IMediaSource, IDisposable
     }
 
     static bool SameSession(GsmtcSession? a, GsmtcSession? b) =>
-        a is null ? b is null : b is not null && a.SourceAppUserModelId == b.SourceAppUserModelId;
+        ReferenceEquals(a, b);
 
     static bool IsPlaying(GsmtcSession s)
     {

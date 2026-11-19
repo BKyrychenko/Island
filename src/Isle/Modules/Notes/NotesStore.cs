@@ -60,6 +60,8 @@ public sealed class NotesStore
 
     public NotesDoc Doc { get; }
     public event Action? Changed;
+    public event Action? SaveFailed;
+    public bool HasUnsavedChanges { get; private set; }
 
     /// <param name="path">File to load/save; null = memory only (snapshots).</param>
     public NotesStore(string? path, Func<DateTimeOffset>? now = null)
@@ -91,12 +93,12 @@ public sealed class NotesStore
     public bool Update(string id, string xaml, string plain)
     {
         if (Find(id) is not { } n) return false;
-        if (n.Xaml == xaml && n.Plain == plain) return true;
+        if (n.Xaml == xaml && n.Plain == plain) return Flush();
         n.Xaml = xaml;
         n.Plain = plain;
         n.Updated = _now();
         Save();
-        return true;
+        return !HasUnsavedChanges;
     }
 
     /// <summary>Removes a note and returns it (with its position) so it can be restored by Undo.</summary>
@@ -169,8 +171,21 @@ public sealed class NotesStore
 
     void Save()
     {
-        if (_path is not null) JsonStore.Save(_path, Doc);
+        HasUnsavedChanges = true;
+        Flush();
         try { Changed?.Invoke(); }
         catch (Exception ex) { Logger.Error("notes changed handler", ex); }
+    }
+
+    public bool Flush()
+    {
+        if (!HasUnsavedChanges) return true;
+        if (_path is null || JsonStore.Save(_path, Doc))
+        {
+            HasUnsavedChanges = false;
+            return true;
+        }
+        SaveFailed?.Invoke();
+        return false;
     }
 }

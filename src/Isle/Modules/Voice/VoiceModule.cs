@@ -113,7 +113,8 @@ public sealed class VoiceModule(IslandWindow island) : IModule, IDisposable
             Logger.Info($"voice: {samples.Length / AudioMath.WhisperRate} s audio → {result.Text.Length} chars ({result.Language}) in {Environment.TickCount64 - started} ms");
             Finish();
             if (result.Text.Length == 0) { Message("Icon.Mic", Strings.T("voice.nothing")); return; }
-            await ClipboardOps.PasteTextAsync(result.Text, _target);
+            var pasted = await ClipboardOps.PasteTextAsync(result.Text, _target);
+            if (ClipboardOps.PasteNotice(pasted) is { } notice) Message("Icon.Mic", notice);
         }
         catch (OperationCanceledException) { Finish(); }
         catch (Exception ex)

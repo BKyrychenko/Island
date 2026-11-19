@@ -213,8 +213,12 @@ public sealed class AiPopupView : Grid, ITabView
     async void Replace(string text)
     {
         App.Island?.Collapse();
-        try { await ClipboardOps.PasteTextAsync(text, _target); }
-        catch (Exception ex) { Logger.Error("ai replace", ex); }
+        try
+        {
+            var result = await ClipboardOps.PasteTextAsync(text, _target);
+            if (ClipboardOps.PasteNotice(result) is { } notice) App.Island?.ShowToast(notice);
+        }
+        catch (Exception ex) { Logger.Error("ai replace", ex); App.Island?.ShowToast(Strings.T("clipboard.pasteFailed")); }
     }
 
     // ---- snapshot helpers ----

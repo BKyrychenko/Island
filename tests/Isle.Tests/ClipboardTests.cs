@@ -177,3 +177,39 @@ public class ClipStoreTests : IDisposable
     public void Excluded_apps(string process, string excluded, bool result) =>
         Assert.Equal(result, ClipPrivacy.IsExcludedApp(process, [excluded, " "]));
 }
+
+public class ClipboardBorrowTests
+{
+    [Fact]
+    public void PreservesExactRichFormatsAndStreamsWithoutUsingTheSystemClipboard()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var source = new System.Windows.DataObject();
+                source.SetData(System.Windows.DataFormats.Html, "<b>formatted</b>", false);
+                source.SetData(System.Windows.DataFormats.Rtf, "{\\rtf1 sample}", false);
+                using var stream = new MemoryStream([1, 2, 3, 4]);
+                stream.Position = 2;
+                source.SetData("Isle.Custom.Binary", stream, false);
+                var copy = Isle.Core.ClipboardOps.CopyFormats(source);
+                Assert.Equal(source.GetFormats(false).Order(), copy.GetFormats(false).Order());
+                Assert.Equal("<b>formatted</b>", copy.GetData(System.Windows.DataFormats.Html, false));
+                var preserved = Assert.IsType<MemoryStream>(copy.GetData("Isle.Custom.Binary", false));
+                Assert.Equal(new byte[] { 1, 2, 3, 4 }, preserved.ToArray());
+                Assert.Equal(2, stream.Position);
+                Assert.NotSame(stream, preserved);
+                Isle.Core.ClipboardOps.ExcludeFromHistory(copy);
+                foreach (var name in new[] { "ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard" })
+                    Assert.Equal(new byte[4], Assert.IsType<MemoryStream>(copy.GetData(name, false)).ToArray());
+            }
+            catch (Exception ex) { error = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        if (error is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+    }
+}

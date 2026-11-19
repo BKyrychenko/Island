@@ -7,6 +7,14 @@ One line each: decision — why.
 - SW-C3 / UI-H2 presents the complete tool input, requires scrolling long inputs before Allow, and defers oversized or missing inputs to the terminal.
 - SW-C1 keeps the Caps Lock indicator, with hook installation and message dispatch on a dedicated background thread.
 - UI-C1 handles Escape through focus inside the island. The expanded WPF panel no longer reserves the system key.
+- UI-C2 rearms hover after leaving the pill and requires cursor movement without a held mouse button.
+- SW-H1 / H2 / M2 bounds background polling, suspends idle download sampling, and moves OBS socket work off the UI dispatcher.
+- SW-H3 removes the forced collection and working-set trim from ordinary collapse.
+- SW-M4 flushes uniquely named temporary files before replacement. Notes retain unsaved edits and surface save errors.
+- SW-M1 distinguishes WinRT media sessions by object identity so a restarted player is rebound.
+- UI-H3 shows only priority timer/reminder banners over fullscreen and scopes shell fullscreen hints to the selected display.
+- UI-H1 serializes clipboard borrowing, preserves supported exact formats, protects temporary data from history and sync, checks foreground, and respects intervening clipboard changes.
+- SW-H6 launches System32 commands by absolute path and rejects relative VPN CLI paths.
 
 ## M0
 - Repo root is the solution root (`Isle.sln` next to `SPEC.md`) — the working folder already is the dedicated project folder.

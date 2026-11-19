@@ -18,25 +18,57 @@ public static class ClipboardOps
 
     public static void Quiet(TimeSpan span) => Interlocked.Exchange(ref _quietUntil, Environment.TickCount64 + (long)span.TotalMilliseconds);
 
-    /// <summary>Text / image / file list currently on the clipboard (null when empty or unreadable).</summary>
-    public static DataObject? Snapshot()
+    static readonly SemaphoreSlim Borrow = new(1, 1);
+
+    /// <summary>Eagerly preserve every exact format before changing clipboard ownership.</summary>
+    public static DataObject Snapshot()
     {
-        try
-        {
-            var d = new DataObject();
-            var any = false;
-            if (Clipboard.ContainsText()) { d.SetText(Clipboard.GetText()); any = true; }
-            if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } img) { d.SetImage(img); any = true; }
-            if (Clipboard.ContainsFileDropList()) { d.SetFileDropList(Clipboard.GetFileDropList()); any = true; }
-            return any ? d : null;
-        }
-        catch { return null; }
+        var sequence = Native.GetClipboardSequenceNumber();
+        var source = Clipboard.GetDataObject();
+        var copy = CopyFormats(source);
+        if (Native.GetClipboardSequenceNumber() != sequence)
+            throw new InvalidOperationException("Clipboard changed while preserving its formats.");
+        return copy;
     }
 
-    /// <summary>Puts a snapshot back (null = leave the clipboard as it is). Returns false when the clipboard was busy.</summary>
-    public static bool Restore(DataObject? previous)
+    internal static DataObject CopyFormats(IDataObject? source)
     {
-        if (previous is null) return true;
+        var copy = new DataObject();
+        if (source is null) return copy;
+        foreach (var format in source.GetFormats(autoConvert: false))
+        {
+            var value = source.GetData(format, autoConvert: false)
+                ?? throw new InvalidOperationException("Clipboard format could not be preserved.");
+            if (value is Stream stream)
+            {
+                if (!stream.CanSeek) throw new InvalidOperationException("Clipboard stream cannot be preserved.");
+                var position = stream.Position;
+                try
+                {
+                    stream.Position = 0;
+                    var bytes = new MemoryStream();
+                    stream.CopyTo(bytes);
+                    bytes.Position = 0;
+                    value = bytes;
+                }
+                finally { stream.Position = position; }
+            }
+            copy.SetData(format, value, autoConvert: false);
+        }
+        return copy;
+    }
+
+    /// <summary>The temporary payload opts out of Windows history and cloud synchronization.</summary>
+    internal static void ExcludeFromHistory(DataObject payload)
+    {
+        payload.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
+        payload.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
+        payload.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+    }
+
+    static bool Restore(DataObject previous, uint sequence)
+    {
+        if (Native.GetClipboardSequenceNumber() != sequence) return true;
         try { Clipboard.SetDataObject(previous, true); return true; }
         catch (Exception ex) { Logger.Warn($"clipboard restore: {ex.GetType().Name}"); return false; }
     }
@@ -50,7 +82,7 @@ public static class ClipboardOps
     }
 
     /// <summary>Sends Ctrl+<paramref name="vk"/> to the foreground window, first releasing physically held Shift/Alt/Win.</summary>
-    public static void SendCtrl(ushort vk)
+    public static bool SendCtrl(ushort vk)
     {
         var inputs = new List<Native.INPUT>();
         foreach (var m in new[] { Native.VK_SHIFT, Native.VK_MENU, Native.VK_LWIN, Native.VK_RWIN })
@@ -59,8 +91,11 @@ public static class ClipboardOps
         inputs.Add(Key(vk, false));
         inputs.Add(Key(vk, true));
         inputs.Add(Key(Native.VK_CONTROL, true));
-        if (Native.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<Native.INPUT>()) == 0)
-            Logger.Warn($"SendInput failed ({Marshal.GetLastWin32Error()})");
+        var sent = Native.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<Native.INPUT>());
+        if (sent == inputs.Count) return true;
+        Logger.Warn($"SendInput incomplete ({Marshal.GetLastWin32Error()})");
+        Native.SendInput(2, [Key(vk, true), Key(Native.VK_CONTROL, true)], Marshal.SizeOf<Native.INPUT>());
+        return false;
 
         static Native.INPUT Key(ushort vk, bool up) => new()
         {
@@ -97,41 +132,80 @@ public static class ClipboardOps
     /// </summary>
     public static async Task<string> CopySelectionAsync()
     {
-        await WaitFor(() => !ModifiersHeld(), TimeSpan.FromMilliseconds(1500));
-        Quiet(TimeSpan.FromSeconds(2));
-        var previous = Snapshot();
-        var seq = Native.GetClipboardSequenceNumber();
-        SendCtrl(Native.VK_C);
-        var changed = await WaitFor(() => Native.GetClipboardSequenceNumber() != seq, TimeSpan.FromMilliseconds(700));
-        var text = "";
-        if (changed)
+        await Borrow.WaitAsync();
+        try
         {
-            // the owner may still be writing; a short retry loop handles "clipboard busy"
-            await WaitFor(() =>
+            var target = Native.GetForegroundWindow();
+            if (!await WaitFor(() => !ModifiersHeld(), TimeSpan.FromMilliseconds(1500)) ||
+                !Native.IsWindow(target) || Native.GetForegroundWindow() != target) return "";
+            var previous = Snapshot();
+            var seq = Native.GetClipboardSequenceNumber();
+            Quiet(TimeSpan.FromSeconds(3));
+            if (!SendCtrl(Native.VK_C)) return "";
+            if (!await WaitFor(() => Native.GetClipboardSequenceNumber() != seq, TimeSpan.FromMilliseconds(700))) return "";
+            var copiedSequence = Native.GetClipboardSequenceNumber();
+            var text = "";
+            try
             {
-                try { text = Clipboard.ContainsText() ? Clipboard.GetText() : ""; return true; }
-                catch (COMException) { return false; }
-            }, TimeSpan.FromMilliseconds(400));
-            Quiet(TimeSpan.FromSeconds(1));
-            if (!Restore(previous)) { await WaitFor(() => Restore(previous), TimeSpan.FromMilliseconds(400), 80); }
+                await WaitFor(() =>
+                {
+                    if (Native.GetClipboardSequenceNumber() != copiedSequence) return true;
+                    try { text = Clipboard.ContainsText() ? Clipboard.GetText() : ""; return true; }
+                    catch (COMException) { return false; }
+                }, TimeSpan.FromMilliseconds(400));
+            }
+            finally
+            {
+                if (!await WaitFor(() => Restore(previous, copiedSequence), TimeSpan.FromMilliseconds(400), 80))
+                    throw new InvalidOperationException("Clipboard could not be restored after copying the selection.");
+            }
+            return text;
         }
-        return text;
+        finally { Borrow.Release(); }
     }
 
-    /// <summary>Puts <paramref name="text"/> on the clipboard, focuses <paramref name="target"/>, sends Ctrl+V, and
-    /// restores the previous clipboard 600 ms later. Used by "Replace selection".</summary>
-    public static async Task PasteTextAsync(string text, IntPtr target)
+    public enum PasteResult { Pasted, Manual, Changed, RestoreFailed }
+
+    public static string? PasteNotice(PasteResult result) => result switch
     {
-        var previous = Snapshot();
-        Quiet(TimeSpan.FromSeconds(2));
-        try { Clipboard.SetText(text); }
-        catch (Exception ex) { Logger.Warn($"paste set: {ex.GetType().Name}"); return; }
-        if (target != IntPtr.Zero && Native.GetForegroundWindow() != target) Native.SetForegroundWindow(target);
-        await Task.Delay(90);
-        await WaitFor(() => !ModifiersHeld(), TimeSpan.FromMilliseconds(1000));
-        SendCtrl(Native.VK_V);
-        await Task.Delay(600);
-        Quiet(TimeSpan.FromSeconds(1));
-        Restore(previous);
+        PasteResult.Manual => Strings.T("clipboard.pasteManual"),
+        PasteResult.Changed => Strings.T("clipboard.pasteChanged"),
+        PasteResult.RestoreFailed => Strings.T("clipboard.restoreFailed"),
+        _ => null,
+    };
+
+    public static Task<PasteResult> PasteTextAsync(string text, IntPtr target)
+    {
+        var data = new DataObject();
+        data.SetText(text);
+        return PasteDataAsync(data, target);
+    }
+
+    /// <summary>Paste result identifies whether our payload is still available for a manual paste.</summary>
+    static PasteResult ManualResult(uint sequence) => Native.GetClipboardSequenceNumber() == sequence
+        ? PasteResult.Manual : PasteResult.Changed;
+
+    public static async Task<PasteResult> PasteDataAsync(DataObject payload, IntPtr target)
+    {
+        await Borrow.WaitAsync();
+        try
+        {
+            var previous = Snapshot();
+            Quiet(TimeSpan.FromSeconds(4));
+            ExcludeFromHistory(payload);
+            Clipboard.SetDataObject(payload, true);
+            var sequence = Native.GetClipboardSequenceNumber();
+            if (!Native.IsWindow(target)) return ManualResult(sequence);
+            if (Native.GetForegroundWindow() != target) Native.SetForegroundWindow(target);
+            if (!await WaitFor(() => Native.GetForegroundWindow() == target, TimeSpan.FromMilliseconds(300))) return ManualResult(sequence);
+            if (!await WaitFor(() => !ModifiersHeld(), TimeSpan.FromMilliseconds(1000))) return ManualResult(sequence);
+            if (!Native.IsWindow(target) || Native.GetForegroundWindow() != target ||
+                Native.GetClipboardSequenceNumber() != sequence || !SendCtrl(Native.VK_V)) return ManualResult(sequence);
+            await WaitFor(() => Native.GetClipboardSequenceNumber() != sequence, TimeSpan.FromMilliseconds(1500));
+            Quiet(TimeSpan.FromSeconds(1));
+            return await WaitFor(() => Restore(previous, sequence), TimeSpan.FromMilliseconds(400), 80)
+                ? PasteResult.Pasted : PasteResult.RestoreFailed;
+        }
+        finally { Borrow.Release(); }
     }
 }

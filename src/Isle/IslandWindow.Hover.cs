@@ -12,10 +12,13 @@ namespace Isle;
 // the island (fullscreen app, excluded app, user).
 public partial class IslandWindow
 {
-    const int HoverIntentMs = 120, LeaveDelayMs = 250, EdgeHideDelayMs = 1500;
+    const int HoverIntentMs = 120, HoverRearmMs = 150, LeaveDelayMs = 250, EdgeHideDelayMs = 1500;
 
     DispatcherTimer? _hoverTimer;
     long _insideSince, _outsideSince;
+    int _intentMs;
+    Native.POINT _lastCursor;
+    bool _hoverMoved, _awaitLeave;
     bool _sticky;           // opened by hotkey/API: stay open until the cursor has visited once
     bool _hasFocus;         // island took keyboard focus for a text box
     IntPtr _previousForeground;
@@ -28,6 +31,7 @@ public partial class IslandWindow
         // The 30 ms cursor timer only runs while the pointer is engaged with the island (or it is expanded).
         _hoverTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(30) };
         _hoverTimer.Tick += OnHoverTick;
+        Native.GetCursorPos(out _lastCursor);
         MouseEnter += (_, _) => EngagePointer();
         MouseMove += (_, _) => { if (!_hoverTimer.IsEnabled) EngagePointer(); };
         PreviewMouseLeftButtonDown += OnPreviewMouseDown;
@@ -60,22 +64,45 @@ public partial class IslandWindow
     {
         if (!IsVisible) { _hoverTimer!.Stop(); return; }
         var now = Environment.TickCount64;
-        var inside = IsCursorInside();
+        var down = (Native.GetAsyncKeyState(0x01) & 0x8000) != 0 ||
+            (Native.GetAsyncKeyState(0x02) & 0x8000) != 0;
+        var inside = false;
+        if (Native.GetCursorPos(out var cursor))
+        {
+            inside = IsCursorInside(CursorOnStage(cursor));
+            if (Math.Abs(cursor.X - _lastCursor.X) + Math.Abs(cursor.Y - _lastCursor.Y) >= 2)
+            {
+                _lastCursor = cursor;
+                if (inside && !down && !_awaitLeave) _hoverMoved = true;
+            }
+        }
         if (inside)
         {
             _outsideSince = 0;
-            if (_insideSince == 0) _insideSince = now;
-            _sticky = false;
-            if (!_expanded && now - _insideSince >= HoverIntentMs && Pill.Primary?.HoverExpands != false) Expand();
+            if (_expanded) { _sticky = false; return; }
+            if (down) _hoverMoved = false;
+            if (_awaitLeave || !_hoverMoved) { _insideSince = 0; return; }
+            if (_insideSince == 0)
+            {
+                _insideSince = now;
+                _intentMs = Native.IsZoomed(Native.GetForegroundWindow()) ? 150 : HoverIntentMs;
+            }
+            if (now - _insideSince >= _intentMs && Pill.Primary?.HoverExpands != false) Expand();
             return;
         }
 
         _insideSince = 0;
+        _hoverMoved = false;
         if (_outsideSince == 0) _outsideSince = now;
         if (_expanded)
         {
             if (now - _outsideSince >= LeaveDelayMs && !_sticky && !_hasFocus && _holdOpen.Count == 0) Collapse();
             return;
+        }
+        if (_awaitLeave)
+        {
+            if (now - _outsideSince < HoverRearmMs) return;
+            _awaitLeave = false;
         }
         if (Settings.Current.AutoHideEdge && !_edgeHidden)
         {
@@ -86,9 +113,9 @@ public partial class IslandWindow
     }
 
     /// <summary>Cursor position in stage coordinates (DIPs at 100% scale), or null if unavailable.</summary>
-    Point? CursorOnStage()
+    Point? CursorOnStage(Native.POINT pt)
     {
-        if (_source is null || !Native.GetCursorPos(out var pt)) return null;
+        if (_source is null) return null;
         try
         {
             var p = PointFromScreen(new Point(pt.X, pt.Y));
@@ -98,9 +125,11 @@ public partial class IslandWindow
         catch { return null; }
     }
 
-    bool IsCursorInside()
+    bool IsCursorInside() => Native.GetCursorPos(out var cursor) && IsCursorInside(CursorOnStage(cursor));
+
+    bool IsCursorInside(Point? position)
     {
-        if (CursorOnStage() is not { } p) return false;
+        if (position is not { } p) return false;
         double w = _expanded ? ExpandedWidth : _pillW, h = _expanded ? ExpandedHeight : _pillH;
         double m = _expanded ? 10 : 3;
         // the gap above the island counts as inside, so pushing the cursor to the screen edge keeps it open
@@ -134,12 +163,14 @@ public partial class IslandWindow
     {
         if (!_expanded) return;
         _expanded = false;
+        _insideSince = _outsideSince = 0;
+        _hoverMoved = false;
+        _awaitLeave = true;
         _sticky = false;
         HideMoreOverlay();
         HideOverlay();
         NotifyCurrentView(shown: false);
         ReleaseFocus(restore: true);
-        if (!_snapshotMode) Memory.TrimSoon(5); // tab views paged in while open go back out once the pill is idle
         SetTargets();
         if (_currentTab is not null && _currentTab != _lastSavedTab && !_snapshotMode)
         {
@@ -276,7 +307,7 @@ public partial class IslandWindow
         {
             var s = Settings.Current;
             var fg = Native.GetForegroundWindow();
-            SetHidden("fullscreen", s.HideInFullscreen && ForegroundWatcher.IsFullscreen(fg, Screen));
+            SetHidden("fullscreen", s.HideInFullscreen && !_fullscreenAlert && ForegroundWatcher.IsFullscreen(fg, Screen));
             var excluded = false;
             if (s.ExcludedApps.Count > 0 && fg != IntPtr.Zero && !ForegroundWatcher.IsOwn(fg))
             {

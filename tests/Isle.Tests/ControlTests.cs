@@ -35,7 +35,8 @@ public class VpnDetectorTests
         Assert.Equal(["Office VPN", "Home"], list.Select(v => v.Name));
         Assert.True(list[0].Connected);
         Assert.False(list[1].Connected);
-        Assert.Equal("rasdial.exe", list[0].Cli);
+        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "rasdial.exe"), list[0].Cli);
+        Assert.True(Path.IsPathFullyQualified(list[0].Cli!));
         Assert.Equal(["Home", "/disconnect"], list[1].DisconnectArgs);
     }
 
@@ -65,5 +66,16 @@ public class VpnDetectorTests
     public void Phonebook_parsing_ignores_other_lines()
     {
         Assert.Equal(["A", "B c"], VpnDetector.ParsePhonebook("x=1\n[A]\n  [B c]  \n[]\nfoo [bar]"));
+    }
+
+    [Theory]
+    [InlineData("rasdial.exe")]
+    [InlineData(".\\rasdial.exe")]
+    public async Task Relative_cli_paths_are_rejected(string path)
+    {
+        var result = await VpnDetector.RunAsync(path, []);
+        Assert.False(result.Ok);
+        Assert.False(result.NeedsAdmin);
+        Assert.Empty(result.Output);
     }
 }

@@ -10,6 +10,7 @@ static class AgentSnapshots
     public static void Register(Dictionary<string, Action<IslandWindow>> states)
     {
         states["agents-tab"] = w => Tab(w, Demo(), true);
+        states["agents-long-approval"] = w => Tab(w, Demo(longApproval: true), true);
         states["agents-question"] = w => Tab(w, Question(), true);
         states["agents-empty"] = w => Tab(w, new AgentBook(() => DateTimeOffset.Now), true);
         states["agents-setup"] = w => Tab(w, new AgentBook(() => DateTimeOffset.Now), false);
@@ -50,7 +51,7 @@ static class AgentSnapshots
         return [claude, codex];
     }
 
-    internal static AgentBook Demo()
+    internal static AgentBook Demo(bool longApproval = false)
     {
         var b = new AgentBook(() => DateTimeOffset.Now);
         Feed(b, "claude", "s3", @"C:\Code\notes-app", "Stop", new JsonObject { ["last_assistant_message"] = "Refactored the store; all 42 tests pass." });
@@ -58,7 +59,9 @@ static class AgentSnapshots
         Feed(b, "claude", "s1", @"C:\Code\island", "PermissionRequest", new JsonObject
         {
             ["tool_name"] = "Bash",
-            ["tool_input"] = new JsonObject { ["command"] = "dotnet test Isle.sln -c Release --filter Agents", ["description"] = "Run the agent tests" },
+            ["tool_input"] = new JsonObject { ["command"] = longApproval
+                ? string.Join("\n", Enumerable.Repeat("Write-Output 'Verify package metadata'", 18))
+                : "dotnet test Isle.sln -c Release --filter Agents", ["description"] = "Run the agent tests" },
         }, wait: true);
         return b;
     }

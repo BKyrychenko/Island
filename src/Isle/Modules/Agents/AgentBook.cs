@@ -38,7 +38,7 @@ public sealed class AgentRequest
     /// <summary>True: AskUserQuestion (options); false: permission (Allow / Deny).</summary>
     public bool IsQuestion { get; init; }
     public string Tool { get; init; } = "";
-    public string Detail { get; init; } = "";
+    public string? ApprovalInput { get; init; }
     public IReadOnlyList<AgentQuestion> Questions { get; init; } = [];
     /// <summary>Completed with the reply line for the hook (<see cref="HookProtocol.Reply"/>).</summary>
     public TaskCompletionSource<string> Reply { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -145,7 +145,7 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
         if (m.Event == "PermissionRequest")
         {
             var ti = input["tool_input"] as JsonObject;
-            r = new AgentRequest { Session = s, Tool = tool, Detail = AgentText.Detail(tool, ti) };
+            r = new AgentRequest { Session = s, Tool = tool, ApprovalInput = AgentText.ApprovalInput(ti) };
         }
         else if (m.Event == "PreToolUse" && tool == HookProtocol.AskUserQuestion)
         {

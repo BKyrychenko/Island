@@ -153,7 +153,7 @@ public class AgentTests
         var r = b.Apply(Msg(Input("PermissionRequest", "Bash", new JsonObject { ["command"] = "rm -rf build" }), wait: true))!;
         Assert.NotNull(r);
         Assert.False(r.IsQuestion);
-        Assert.Equal("rm -rf build", r.Detail);
+        Assert.Equal("rm -rf build", (string?)JsonNode.Parse(r.ApprovalInput!)!["command"]);
         Assert.Equal(AgentState.Waiting, b.Urgent);
         // status messages do not hide a pending request
         b.Apply(Msg(Input("PreToolUse", "Read", new JsonObject { ["file_path"] = @"C:\a\b.cs" })));
@@ -251,6 +251,18 @@ public class AgentTests
         Assert.Equal(0, b.Count);
     }
 
+    [Fact]
+    public void ApprovalShowsAllInputOrDefersToTheTerminal()
+    {
+        var longText = new string('a', 750) + " last line";
+        var input = new JsonObject { ["title"] = "Preview", ["details"] = longText, ["enabled"] = true };
+        var output = JsonNode.Parse(AgentText.ApprovalInput(input)!)!.AsObject();
+        Assert.True(JsonNode.DeepEquals(input, output));
+        input["details"] = new string('b', 20_000);
+        Assert.Null(AgentText.ApprovalInput(input));
+        Assert.Null(AgentText.ApprovalInput(null));
+    }
+
     // ---- text ----
 
     [Theory]
@@ -260,7 +272,7 @@ public class AgentTests
     [InlineData("WebFetch", """{"url":"https://example.com","prompt":"x"}""", "WebFetch · https://example.com")]
     [InlineData("shell", """{"command":["npm","run","build"]}""", "shell · npm run build")]
     [InlineData("apply_patch", """{"input":"*** Begin Patch\n*** Update File: src/a.rs\n*** Add File: b.md\n*** End Patch"}""", "apply_patch · a.rs, b.md")]
-    [InlineData("mcp__db__query", """{"sql":"select 1"}""", "mcp__db__query · select 1")]
+    [InlineData("mcp__db__query", """{"sql":"select 1"}""", "mcp__db__query")]
     [InlineData("TodoWrite", """{"todos":[]}""", "TodoWrite")]
     public void DescribesTools(string tool, string json, string expected) =>
         Assert.Equal(expected, AgentText.Describe(tool, JsonNode.Parse(json) as JsonObject));

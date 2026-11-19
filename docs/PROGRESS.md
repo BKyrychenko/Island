@@ -2,8 +2,8 @@
 
 ## WPF audit repairs
 
-- Latest: SW-C2 reserves a random current-user pipe and checks the server PID and pinned executable before sending a hook request. Agent tests passed on Windows.
-- Next: SW-C3 / UI-H2, show the full request before approval.
+- Latest: SW-C2 and SW-C3 / UI-H2 are implemented. Agent tests and the Ukrainian long approval snapshot passed.
+- Next: SW-C1, isolate the Caps Lock hook from WPF.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

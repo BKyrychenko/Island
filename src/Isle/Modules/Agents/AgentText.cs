@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Isle.Agents;
 
@@ -9,6 +10,15 @@ public static class AgentText
 {
     public const int MaxLine = 160;
     public const int MaxDetail = 400;
+    const int MaxReviewChars = 16_384;
+    static readonly JsonSerializerOptions ReviewFormat = new() { WriteIndented = true };
+
+    /// <summary>The entire input for review. Large or missing inputs must be reviewed in the terminal.</summary>
+    public static string? ApprovalInput(JsonObject? input)
+    {
+        var text = input?.ToJsonString(ReviewFormat);
+        return text is { Length: <= MaxReviewChars } ? text : null;
+    }
 
     /// <summary>"Bash · npm test", "Edit · Program.cs", … for the "last action" line.</summary>
     public static string Describe(string tool, JsonObject? input)
@@ -42,9 +52,6 @@ public static class AgentText
             "apply_patch" => PatchFiles(Get("input") is { Length: > 0 } pi ? pi : Get("patch")),
             _ => "",
         };
-        if (text.Length == 0)
-            foreach (var (_, v) in input)
-                if (v is JsonValue jv && jv.TryGetValue<string>(out var s) && s.Length > 0) { text = s; break; }
         text = text.Trim();
         return text.Length > MaxDetail ? text[..MaxDetail] + "…" : text;
     }

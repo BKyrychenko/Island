@@ -4,6 +4,7 @@ One line each: decision — why.
 
 ## WPF audit repairs
 - SW-C2 publishes a per-launch endpoint and pins the executable at hook installation. Reinstall existing hooks to upgrade the helper and refresh the pin after moving the app.
+- SW-C3 / UI-H2 presents the complete tool input, requires scrolling long inputs before Allow, and defers oversized or missing inputs to the terminal.
 
 ## M0
 - Repo root is the solution root (`Isle.sln` next to `SPEC.md`) — the working folder already is the dedicated project folder.

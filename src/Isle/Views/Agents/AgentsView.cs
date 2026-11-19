@@ -151,17 +151,32 @@ public sealed class AgentsView : Grid
         var what = new TextBlock { Text = Strings.T("agents.wantsTool", r.Tool), FontSize = 11.5 };
         what.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
         stack.Children.Add(what);
-        if (r.Detail.Length > 0)
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        if (r.ApprovalInput is { } input)
         {
-            var detail = new TextBlock { Text = r.Detail, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, MaxHeight = 34, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = r.Detail };
+            var allow = Small("agents.allow", () => _a.Allow(r), accent: true);
+            allow.IsDefault = false;
+            allow.IsEnabled = false;
+            var detail = new TextBlock { Text = input, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(7, 3, 7, 3) };
             detail.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
             detail.SetResourceReference(TextBlock.ForegroundProperty, "FgBrush");
-            var box = new Border { Child = detail, CornerRadius = new CornerRadius(6), Padding = new Thickness(7, 3, 7, 3), Margin = new Thickness(0, 3, 0, 0) };
+            var scroll = new ScrollViewer
+            {
+                Content = detail, MaxHeight = 44, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = true,
+            };
+            System.Windows.Automation.AutomationProperties.SetName(scroll, Strings.T("agents.reviewInput"));
+            scroll.ScrollChanged += (_, _) =>
+                allow.IsEnabled = scroll.ViewportHeight > 0 && scroll.VerticalOffset >= scroll.ScrollableHeight - 0.5;
+            var box = new Border { Child = scroll, CornerRadius = new CornerRadius(6), Margin = new Thickness(0, 3, 0, 0) };
             box.SetResourceReference(Border.BackgroundProperty, "SurfaceHoverBrush");
             stack.Children.Add(box);
+            row.Children.Add(allow);
         }
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-        row.Children.Add(Small("agents.allow", () => _a.Allow(r), accent: true));
+        else
+        {
+            stack.Children.Add(Wrap(Strings.T("agents.reviewInTerminal")));
+        }
         row.Children.Add(Small("agents.deny", () => _a.Deny(r)));
         row.Children.Add(Small("agents.terminal", () => _a.Terminal(r), ghost: true, tipKey: "agents.terminalTip"));
         stack.Children.Add(row);

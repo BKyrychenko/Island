@@ -6,6 +6,8 @@
 |---|---|
 | Release suite | 556 passed on Windows 11 with .NET 10. |
 | Escape and pointer intent | An isolated desktop profile showed the old WPF version reserved Escape while expanded. The repaired version leaves Escape free and stays collapsed during a held-button hover. |
+| Keyboard navigation | Win+Alt+Space focused the expanded island, Tab reached a radio button, focused Escape collapsed it, and Ctrl+Alt+Space focused the command field. |
+| Published package | The .NET 10 x64 package and single-file hook helper were built. The package rendered a Ukrainian light-theme snapshot and opened its visible desktop window. |
 | Fullscreen timer banner | A borderless foreground window hid both versions before the timer fired. On expiry the repaired banner appeared over fullscreen. The original stayed hidden. |
 | Tier 2 idle budget | 60 one-second samples after startup on the i5-9300H with default modules. Average 19.0 MiB working set, 28.8 MiB private, 0.36% of one logical CPU and 0.045% of machine CPU. Peak working set 23.4 MiB. |
 | Agent approval | Authenticated pipe round trips passed and a long Ukrainian approval snapshot showed scrolling and a disabled Allow action. Existing agents need the hook helper upgraded through Isle before they connect to the new endpoint. |

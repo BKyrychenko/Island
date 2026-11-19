@@ -1,5 +1,19 @@
 # VERIFICATION
 
+## WPF audit repairs
+
+| Check | Result |
+|---|---|
+| Release suite | 556 passed on Windows 11 with .NET 10. |
+| Escape and pointer intent | An isolated desktop profile showed the old WPF version reserved Escape while expanded. The repaired version leaves Escape free and stays collapsed during a held-button hover. |
+| Fullscreen timer banner | A borderless foreground window hid both versions before the timer fired. On expiry the repaired banner appeared over fullscreen. The original stayed hidden. |
+| Tier 2 idle budget | 60 one-second samples after startup on the i5-9300H with default modules. Average 19.0 MiB working set, 28.8 MiB private, 0.36% of one logical CPU and 0.045% of machine CPU. Peak working set 23.4 MiB. |
+| Agent approval | Authenticated pipe round trips passed and a long Ukrainian approval snapshot showed scrolling and a disabled Allow action. Existing agents need the hook helper upgraded through Isle before they connect to the new endpoint. |
+| Contrast and layouts | Palette matrix tested both themes. Exported Ukrainian control center, settings, reminder, overflow, command and agent approval snapshots. |
+| Clipboard | In-memory tests covered exact HTML/RTF/custom formats and the three exclusions. No real Excel or elevated target was tested. Windows offers no reliable confirmation that an external app has finished reading after Ctrl+V. The sequence guard protects newer copies, but a target reading later than the 1.5-second restore window can get the restored content. External apps can also send their own Ctrl+C results to Windows history before Isle receives them. |
+| Media and monitors | Automated suite passed. Restarting a real media player under the same AUMID and mixed-DPI docking were not exercised. |
+| Anthropic | Fake HTTP/SSE covered attachments, errors, refusal and stream completion. No provider request using real credentials was sent. |
+
 Every feature → how it was verified and the result.
 Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real app and observed/measured),
 `manual-needed` (could not be truly exercised here — steps for the owner), `unavailable` (with reason).

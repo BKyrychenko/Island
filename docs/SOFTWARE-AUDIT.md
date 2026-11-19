@@ -35,7 +35,7 @@ it is not the state this app actually runs in all day, and the 25 MB is partly m
 
 # Critical
 
-## C1. Global low-level keyboard hook shares a thread with blocking work
+## C1. Global low-level keyboard hook shares a thread with blocking work — FIXED 2fcdb2a
 `src/Isle/Modules/LiveEvents/Sources.cs:626-643` (install), `src/Isle/Core/Memory.cs:37-50`,
 `src/Isle/Modules/Clipboard/ClipboardService.cs:131-146`, `src/Isle/Views/ShellIcons.cs:14-46`
 
@@ -88,7 +88,7 @@ system-wide is delayed by the duration of that work. Over ~1 s (Win10 1709+ caps
 2. Stop calling `Memory.TrimSoon` from `Collapse()` (see E1).
 3. Move clipboard image encoding/hashing to `Task.Run` (see H2).
 
-## C2. The pipe name is predictable and can be claimed by any same-user process before Isle starts
+## C2. The pipe name is predictable and can be claimed by any same-user process before Isle starts — FIXED 9e22d9b
 `src/Isle.Hook/HookProtocol.cs:24-32, 139-178`, `src/Isle/Modules/Agents/AgentPipeServer.cs:29-31`
 
 The name is `"Isle.Agents.v1." + sanitized(Environment.UserName)` — fully predictable. The server creates the pipe
@@ -131,7 +131,7 @@ my coding agent does" into "something decided for me".
    whose `v != HookProtocol.Version`, and cap `input` depth/size (`MaxLineBytes` is 1 MiB, which is already a
    1 MiB UI-thread JSON parse per connection).
 
-## C3. Permission prompts are approved from a truncated, sometimes wrong, summary
+## C3. Permission prompts are approved from a truncated, sometimes wrong, summary — FIXED e995dfa
 `src/Isle/Views/Agents/AgentsView.cs:148-168`, `src/Isle/Modules/Agents/AgentText.cs:33-49`
 
 `PermissionBody` renders `r.Detail` in a `TextBlock` with `MaxHeight = 34`, `TextTrimming.CharacterEllipsis`, and
@@ -162,7 +162,7 @@ Allow. Isle replies `allow`. Claude Code runs the **full, untruncated** command.
 
 # High
 
-## H1. `live` sources run unconditional periodic timers, including a full process enumeration
+## H1. `live` sources run unconditional periodic timers, including a full process enumeration — FIXED 76ee049
 `src/Isle/Modules/LiveEvents/Sources.cs:582` (500 ms), `:326` (15 s), `:337`
 
 - `KeyboardLayoutSource` starts a **500 ms** `DispatcherTimer` and never stops it while the module is enabled.
@@ -191,7 +191,7 @@ anything useful.
 - Both: gate every live source on "is the island actually shown" where the indicator is only meaningful when
   visible.
 
-## H2. One abandoned `*.crdownload` keeps a 1 Hz file poll alive for the life of the process
+## H2. One abandoned `*.crdownload` keeps a 1 Hz file poll alive for the life of the process — FIXED 76ee049
 `src/Isle/Modules/LiveEvents/Sources.cs:48-77, 106-118`
 
 `Start()` scans the Downloads folder and calls `Touch(f, existing: true)` for every partial file; `Touch`
@@ -216,7 +216,7 @@ void Sample() {
 ```
 `Touch` must then also restart `_tick` when a watcher event fires, which it already does.
 
-## H3. A blocking, compacting gen2 GC + `EmptyWorkingSet` after every collapse
+## H3. A blocking, compacting gen2 GC + `EmptyWorkingSet` after every collapse — FIXED 76ee049
 `src/Isle/IslandWindow.Hover.cs:144`, `src/Isle/Core/Memory.cs:21-50`
 
 `Collapse()` schedules `Memory.TrimSoon(5)`, whose tick runs `LargeObjectHeapCompactionMode.CompactOnce` +
@@ -287,7 +287,7 @@ The panel creature has the same behaviour while expanded (bounded by the hover s
   re-render.
 - Cap the pill creature to 12–15 fps; at 22 px nobody can tell.
 
-## H6. VPN and system commands launch executables by bare name
+## H6. VPN and system commands launch executables by bare name — FIXED 76ee049
 `src/Isle/Modules/ControlCenter/Vpn.cs:51, 81`, `src/Isle/Modules/Commands/Providers.cs:120-121, 148`
 
 `new ProcessStartInfo("rasdial.exe")` and `Run("shutdown.exe", "/r /t 0")` with `UseShellExecute = false` go to
@@ -311,7 +311,7 @@ The third-party VPN CLIs are already absolute paths from `Clients()`, which is r
 
 # Medium
 
-## M1. The media session is matched by app id, so a restarted player stops updating
+## M1. The media session is matched by app id, so a restarted player stops updating — FIXED 76ee049
 `src/Isle/Modules/Media/MediaSession.cs:92-93, 58-90`
 
 `SameSession` compares `SourceAppUserModelId` only. When Spotify (or any player) is closed and reopened, GSMTC
@@ -329,7 +329,7 @@ if (!ReferenceEquals(chosen, _session)) { Unsubscribe(); _session = chosen; … 
 for a fresh one. `UNVERIFIED — needs a run on Windows`: close and reopen Spotify mid-playback and confirm the pill
 keeps tracking. (RCW identity for WinRT objects is preserved per-object, so this should hold, but confirm.)
 
-## M2. `Dispatcher.Invoke` (blocking) from the OBS WebSocket read loop
+## M2. `Dispatcher.Invoke` (blocking) from the OBS WebSocket read loop — FIXED 76ee049
 `src/Isle/Modules/LiveEvents/Sources.cs:372, 380`
 
 Inside `RunAsync`, on a thread-pool thread, `sink.Ui.Invoke(...)` blocks the socket loop until the UI thread is
@@ -351,7 +351,7 @@ Every other callback in the file correctly uses `BeginInvoke`. These two are the
 **Fix:** `using` / explicit `Dispose()` in each place; add `_frameArrived.Dispose(); _stopSignal.Dispose();` to the
 end of `Recorder.Dispose()`.
 
-## M4. `WriteAtomic` is rename-atomic but not crash-durable, and has no retry
+## M4. `WriteAtomic` is rename-atomic but not crash-durable, and has no retry — FIXED 76ee049
 `src/Isle/Core/JsonStore.cs:54-68`
 
 `File.WriteAllText(tmp)` + `File.Move(tmp, path, overwrite: true)` gives atomic *replacement*, but the temp file's
@@ -381,7 +381,7 @@ public static void WriteAtomic(string path, string text) {
 And in `JsonStore.Load`, when the file exists but is empty or whitespace, prefer the newest `*.bak-*` sibling
 before giving up and returning `new T()`.
 
-## M5. Fullscreen housekeeping re-enumerates every monitor every 2 seconds
+## M5. Fullscreen housekeeping re-enumerates every monitor every 2 seconds — FIXED 76ee049
 `src/Isle/IslandWindow.Hover.cs:300-312, 274-291`, `src/Isle/Core/Screens.cs:10-35`
 
 `HideInFullscreen` defaults to **true** (`Settings.cs:22`), so a 2 s `DispatcherTimer` runs for the whole session.

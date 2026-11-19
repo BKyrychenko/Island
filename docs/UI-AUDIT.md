@@ -20,7 +20,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
 
 ## Critical
 
-### C1. Global bare-Esc hotkey while expanded
+### C1. Global bare-Esc hotkey while expanded — FIXED 3a90695
 - **Where:** `src/Isle/IslandWindow.Hover.cs:124` (`Native.RegisterHotKey(_hwnd, EscHotkeyId, 0, 0x1B)`), unregister at `:143`. Contrast the comment at `SettingsView.cs:556` ("a bare/shifted key would swallow normal typing"): the author already knows the consequence, and the app does it to itself.
 - **Scenario:** Hover the pill (it expands after 120 ms) and move on, or let it open from a pill event. While `_expanded` is true, Esc closes the Windows Start menu, a file dialog, a Chrome find bar, a Vim insert mode, an IDE popup, a combo-box dropdown: none of them receive it. The island collapses instead, and only then does Esc work again. Because `Collapse` is gated by the 250 ms leave timer and `_sticky`, the window of stolen Esc can last as long as the cursor stays near the top edge, and for sticky/held-open views (AI input, file dialog at `AiChatView.cs:315` with `HoldOpen`) it lasts as long as the view is open.
 - **Why it matters:** Esc is the key people hit reflexively. A global hotkey is consumed system-wide (`RegisterHotKey` posts WM_HOTKEY to the registering thread instead of delivering the key to the focused window; the behaviour is documented at https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey). The failure mode "Esc sometimes does nothing" is a classic daily irritation that is very hard to attribute. UNVERIFIED - needs a run on Windows: open the island by hover, then press Esc inside Notepad's Find dialog.
@@ -29,7 +29,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   2. For the non-focused hover-expanded state, offer click-outside or leave-timer collapse only; do not capture keys you do not own.
   3. If you want a "dismiss from anywhere" key, make it a user-configurable chord in the Hotkeys settings (for example Win+Alt+Esc), never bare.
 
-### C2. Hover logic re-expands under a resting cursor and ignores mouse buttons and drags
+### C2. Hover logic re-expands under a resting cursor and ignores mouse buttons and drags — FIXED 76ee049
 - **Where:** `IslandWindow.Hover.cs:59-86` (`OnHoverTick`), `:101-108` (`IsCursorInside`: margin 3 collapsed, 10 expanded, `Y >= -4`), `:15` constants. `_insideSince` is never reset on collapse. There is no `GetAsyncKeyState(VK_LBUTTON)` check anywhere in the file.
 - **Scenarios:**
   - Press Esc/click the close affordance to collapse while the cursor still sits in the pill rectangle: 120 ms later the island expands again. You cannot dismiss it without moving the mouse away first.
@@ -43,7 +43,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Poll interval: 30 ms is fine. Consider stopping the timer entirely when `HideInFullscreen` has hidden the window (the code already stops it in `SetHidden`).
 - UNVERIFIED - needs a run on Windows: drag a window by its title bar across the pill with the island collapsed.
 
-### C3. Contrast system: white on accent, faint text, light-theme controls
+### C3. Contrast system: white on accent, faint text, light-theme controls — FIXED 9521ebb
 - **Where:** `Core/Theme.cs:70` (`AccentFgBrush` is always white); `Theme.cs:53-66` (palette); `Modules/Media/ArtColors.cs:54-58` (`Readable`: saturation >= 0.45, lightness clamped 0.45-0.65); `Styles/Theme.xaml:75-79` (AccentButton), `:181-184` (checked Chip uses AccentFg), `:130` (Switch thumb `Fill="White"`). Contrast measured with the WCAG 2.2 relative-luminance formula (https://www.w3.org/TR/WCAG22/#contrast-minimum): script at `/home/claude/scratch/contrast.py`.
 - **Numbers:**
   - White on the default dark accent: **2.46:1**; on the default light accent **3.96:1**. Needed: 4.5:1 for button text.
@@ -80,7 +80,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Detect elevated target (`OpenProcess`/token elevation check) and fall back to the same "copied" message.
 - UNVERIFIED - needs a run on Windows: dictate into an elevated terminal, and into Excel with a range on the clipboard.
 
-### H2. Agent permission prompt: the command you approve can be truncated
+### H2. Agent permission prompt: the command you approve can be truncated — FIXED e995dfa
 - **Where:** `Views/Agents/AgentsView.cs:156` (permission detail `MaxHeight=34`, ellipsis), `Views/Agents/AgentText.cs:11,49` (`MaxDetail = 400`); `Modules/Agents/AgentsModule.cs:151-169` (`BuildPill`); `Views/Agents/AgentPill.cs` (no Allow/Deny in the pill).
 - **Scenario:** Claude Code asks permission for a multi-line shell command. The row shows about two lines at ~34 px; a long `&&` chain, a heredoc, or a command whose dangerous part (`rm -rf`, `curl | sh`) sits after the visible part is cut. Anything beyond 400 characters is dropped entirely. You click Allow on a command you have not read.
 - **Why it matters:** this is the one place in the app where the UI is a security control. The hook helper fails open (correct for availability), so the island is the only checkpoint.
@@ -90,7 +90,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Raise `MaxDetail` to 2000 and still show the truncation count.
   - Do not make Allow the focused/Enter-activated button; Deny (or no default) should be the safe default.
 
-### H3. Timer/reminder is invisible when a fullscreen app is in front
+### H3. Timer/reminder is invisible when a fullscreen app is in front — FIXED 76ee049
 - **Where:** `IslandWindow.Hover.cs:281` (`SetHidden("fullscreen", s.HideInFullscreen && IsFullscreen(fg, Screen))`), `:244-259` (hides the window completely), `Core/ForegroundWatcher.cs:69-80`, `Settings.cs:22` (`HideInFullscreen` default **true**); `Modules/Timers/TimersModule.cs:122-160` (banners persist, `Announce` = `MessageBeep` + `Pulse(3)` only).
 - **Scenarios:**
   - A timer or reminder fires while you watch a video, present, or play a game: you get a system beep and nothing else. The banner persists but the window is hidden, so you only see it after leaving fullscreen, possibly much later.
@@ -102,7 +102,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Add a distinct sound option for timers (own wav) instead of the sound scheme beep.
 - UNVERIFIED - needs a run on Windows: start a 10 s timer, switch a browser video to F11/fullscreen.
 
-### H4. Hotkey defaults collide and failures are silent
+### H4. Hotkey defaults collide and failures are silent — FIXED 9521ebb
 - **Where:** `Modules/Commands/CommandModule.cs:16` (default `Alt+Space`); `App.xaml.cs:87` (toggle `Win+Alt+Space`); `Modules/Hotkeys/HotkeyService.cs` (`Bind` logs a warning on failure); UI hint only in Settings (`SettingsView.cs:254`).
 - **Facts:** Alt+Space is the system window menu (Restore/Move/Size/Close) in every desktop app; registering it globally removes that menu everywhere. It is also the default activation key for PowerToys Run (https://learn.microsoft.com/en-us/windows/powertoys/powertoys-run) and for several launchers. For an EN/UK user, Win+Space and Alt+Shift/Ctrl+Shift switch keyboard layouts (https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec); Win+Alt+Space is not a documented Windows binding but sits next to Win+Space and is easy to mistype into the layout switch. Game Bar owns Win+Alt+R, Win+Alt+G etc.
 - **Scenario:** Another tool already holds Alt+Space (or starts first after reboot); `RegisterHotKey` fails; Isle logs a warning nobody reads and the command bar never opens. You find out only by opening Settings.
@@ -112,7 +112,7 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Settings should flag conflicts with a short list of known system/launcher chords before the user saves.
 - UNVERIFIED - needs a run on Windows: with PowerToys running, launch Isle and test both chords.
 
-### H5. Keyboard and assistive access: effectively mouse-only
+### H5. Keyboard and assistive access: effectively mouse-only — FIXED 9521ebb
 - **Where:** `Styles/Theme.xaml:44` (Buttons `Focusable=False`), `:30-34` (`FocusVisualNone`), `:88,418` (tooltip text reused as automation name), `Views/AiChat/AiChatView.cs:87` (`AutomationProperties.Name="ai-input"`); no occurrences of `HighContrast`, `ClientAreaAnimation`, `AnimationsEnabled` or `UISettings` anywhere in the source (grep-verified).
 - **Problems:**
   - Because every button is non-focusable and has no focus visual, Tab never reaches anything but text boxes. The tab bar, Allow/Deny, Clear, close, and timer controls cannot be operated by keyboard. Arrow-key tab switching and Enter/Space activation do not exist.
@@ -140,31 +140,31 @@ Counts: 3 Critical, 5 High, 6 Medium, 3 Low. Handled well: listed at the end.
   - Software rendering of a large layered window is expensive; the 30 ms cursor poll, the spring on `CompositionTarget.Rendering` and the shadow rings (alpha 8/16/26 over 3-8 px) all run per frame while animating. `Core/Memory.cs` does a full compacting GC + `EmptyWorkingSet` after every collapse, which causes page-in stutter on the next hover.
 - **Fix:** add `OffsetX` (-50%..+50% of screen width) and "dodge" option (shift pill 120-200 px right when the foreground window title/class is in a configurable list); shrink the stage window to the current shape bounds plus 24 px shadow margin during idle (resize in `ApplyShape` when settled); drop the forced `EmptyWorkingSet` or run it only after 60 s of idle.
 
-### M2. Monitor selection by index
+### M2. Monitor selection by index — FIXED 9521ebb
 - **Where:** `Core/Screens.cs` (monitors sorted primary first, then left to right), `Settings.cs` (`Monitor` index, -1 = primary), `IslandWindow.xaml.cs:129-155` (WM_DISPLAYCHANGE handled).
 - **Scenario:** Index 1 means "the second monitor in sorted order". Docking/undocking a laptop, a monitor waking after the others, or changing which display is primary re-sorts the list and the pill jumps to a different monitor or to a monitor with a different DPI (PerMonitorV2 is declared, so layout is recomputed on `WM_DPICHANGED`, but the user's choice is lost).
 - **Fix:** store the device name (`\\.\DISPLAY2`, from `GetMonitorInfo` `MONITORINFOEX.szDevice`) plus a fallback index; resolve by name first, fall back to primary, and re-resolve on `WM_DISPLAYCHANGE`.
 - UNVERIFIED - needs a run on Windows with two monitors and a dock.
 
-### M3. Ukrainian text and fixed widths
+### M3. Ukrainian text and fixed widths — FIXED 9521ebb
 - **Where:** `Modules/Voice/VoiceModule.cs:179` (message pill width `Math.Clamp(60 + text.Length * 6.6, 200, 420)`), `Views/Live/IndicatorPill.cs:14,29` (`_sub` Right-docked, no trimming), `Modules/Tools/ToolsModule.cs:172` (rec-saved pill width 250 with `Isle yyyy-MM-dd HH.mm.ss.mp4`), `Views/Timers/TimerPill.cs` (`TimerDoneBanner` 320x52, `ReminderBanner` 380x76), `Views/TabBar.cs:15` (TabWidth 34, LabelRoom 118).
 - **Problems:** the estimate 6.6 px/character is a Latin average; Cyrillic capitals and many lowercase letters are wider, and Ukrainian strings are 20-40% longer than English per the brief, so 420 px (the cap) will clip before the text finishes. `_sub` docked right with no `TextTrimming` overlaps the main label in longer languages. 250 px for a 31-character mono-ish filename plus icon is borderline in either language. Fixed 320x52 / 380x76 banners will clip a localised reminder title. `Strings` EN/UK files are not in the upload, so I cannot confirm actual lengths.
 - **Fix:** measure with `FormattedText` (or `Measure`) instead of `length * 6.6`; set `TextTrimming="CharacterEllipsis"` and `MaxWidth` on every label that sits next to another element; allow the banner height to grow (wrap up to 2 lines) instead of fixed 52/76; test with a pseudo-localised EN (wrap each string in "[" + text + "~~~~]", +40%) at scale 0.8, 1.0, 1.5 and 2.0.
 - UNVERIFIED - needs a run on Windows with UK strings.
 
-### M4. Tab overflow hides the two tabs you use most
+### M4. Tab overflow hides the two tabs you use most — FIXED 9521ebb
 - **Where:** `Views/TabBar.cs:15,119-135` (overflow into a "more" menu), `Modules/Characters/CharactersModule.cs:54` (mascot tab, enabled by default).
 - **Scenario:** With the mascot tab present, n=8 and the layout (34 px tabs, 118 px label room) pushes AI and Agents into the overflow menu. The selected hidden tab swaps in, so the layout reshuffles after each selection and muscle memory about tab positions breaks. The "more" menu uses the default WPF `ContextMenu`/`MenuItem` (there are no styles for them in `Theme.xaml`), so it renders in light Windows chrome inside a dark pill.
 - **Fix:** order tabs by user preference and put the mascot last / disable by default; make the overflow stable (never swap the selected tab in); style `ContextMenu`/`MenuItem`/`ComboBox` in `Theme.xaml` so they use `Surface`/`Fg` brushes; add Ctrl+1..9 or Alt+1..9 tab shortcuts while expanded.
 
-### M5. Command bar: Enter during debounce and two-Enter confirm on destructive commands
+### M5. Command bar: Enter during debounce and two-Enter confirm on destructive commands — FIXED 9521ebb
 - **Where:** `Views/Commands/CommandBarView.cs:244-248` (Enter during debounce re-queries only), `:258-268` (`Execute`/`_armed`), `Modules/Commands/Providers.cs:116-132` (shutdown `/s /t 0`, restart `/r /t 0`, `SHEmptyRecycleBin` with flags 0x7 = no confirmation, no progress UI, no sound).
 - **Scenarios:**
   - Typing "empty" Enter Enter fast (a double-tap habit) arms and executes in under 200 ms: the Recycle Bin is permanently emptied with no Windows confirmation, and there is no preview of what is in it. Same for shutdown/restart with a zero delay: apps get a close request immediately.
   - Enter during the query debounce only re-queries (`:244-248`), so the first Enter can be swallowed and the result list can change under a pending arm. `_armed` is cleared on arrow-key moves (`:237,:241`) and at `:100,:114`; verify it is also cleared when a late query replaces `_results`, otherwise the second Enter could confirm a different item. UNVERIFIED - needs a run on Windows.
 - **Fix:** ignore the confirming Enter within 400 ms of arming; auto-disarm after 3 s; render the armed state in `Danger`, not `Warn`, with the specific consequence ("Permanently empty Recycle Bin - 213 items, 1.4 GB"); use `/t 10` for shutdown/restart with an "abort" command available (`shutdown /a`); drop `SHERB_NOCONFIRMATION` from the flags so Windows' own prompt appears, since you already have one confirmation layer you do not need to disable the system one.
 
-### M6. Destructive buttons without confirm or undo; shelf drag-out effects
+### M6. Destructive buttons without confirm or undo; shelf drag-out effects — FIXED 9521ebb
 - **Where:** `Views/Clipboard/ClipboardView.cs:33` (Clear, no confirm or undo), `Views/Shelf/ShelfView.cs:51` (Clear, no confirm), `ShelfView.cs:154` (`DoDragDrop(... Copy | Move | Link)`).
 - **Scenarios:** One mis-click on Clear wipes the whole clipboard history (including pinned items, if pins live in the same list; I did not verify). Dragging a shelf file into Explorer with a modifier or into a folder on the same drive defaults to Move: the original may leave its source folder, and the shelf item then points at a path that no longer exists. UNVERIFIED - needs a run on Windows whether the shelf copies or references files.
 - **Fix:** replace confirm dialogs with a 6-second "Cleared - Undo" toast (keep the deleted list in memory until it expires); restrict `AllowedEffects` to `Copy | Link` unless the shelf owns a private copy of the file; keep pinned items out of Clear.

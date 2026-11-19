@@ -93,7 +93,7 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **Shelf** (`shelf`, `Modules/Shelf`) — `ShelfStore` (`shelf.json`, references only, missing-file flag), `ShelfModule`
   (tab `Views/Shelf/ShelfView`, drag-out with `DoDragDrop` FileDrop, option `shelf.removeAfterDrop`); drops arrive via
   `IslandWindow.Drop.cs` (expands to the Shelf on drag-over).
-- **Command bar** (`commands`, `Modules/Commands`) — `CommandModule` (hotkey `commandBar` = Alt+Space → full-panel
+- **Command bar** (`commands`, `Modules/Commands`) — `CommandModule` (hotkey `commandBar` = Ctrl+Alt+Space → full-panel
   overlay `Views/Commands/CommandBarView`, 80 ms debounce, providers run off the UI thread). Providers (`ICommandProvider`):
   `AppsProvider` (`AppIndex`: Start Menu shortcuts + recent files + `cmd.folders`, cached `index.json`; `Fuzzy` matcher),
   `CalculatorProvider` (`Calculator` + `Units`), `CurrencyProvider` (`CurrencyParser`, `CurrencyService` with

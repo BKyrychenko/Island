@@ -103,6 +103,7 @@ public sealed class HotkeyService
     Entry? _held;
 
     public event Action? Changed;
+    public event Action<string>? RegistrationFailed;
 
     /// <summary>Called by the island once its window handle exists; registers everything declared so far.</summary>
     public void Attach(IntPtr hwnd)
@@ -170,6 +171,7 @@ public sealed class HotkeyService
 
     void Bind(Entry e)
     {
+        Unbind(e);
         e.Registered = false;
         e.Gesture = default;
         if (_hwnd == IntPtr.Zero) return;
@@ -177,7 +179,11 @@ public sealed class HotkeyService
         if (text.Length == 0 || !Gesture.TryParse(text, out var g)) return;
         e.Gesture = g;
         e.Registered = Native.RegisterHotKey(_hwnd, e.NativeId, g.Modifiers | Native.MOD_NOREPEAT, g.Key);
-        if (!e.Registered) Logger.Warn($"hotkey {e.Id} ({text}) could not be registered (in use by another app?)");
+        if (!e.Registered)
+        {
+            Logger.Warn($"hotkey {e.Id} ({text}) could not be registered (in use by another app?)");
+            RegistrationFailed?.Invoke(text);
+        }
     }
 
     void Unbind(Entry e)

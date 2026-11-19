@@ -48,7 +48,12 @@ public sealed class ShelfView : Grid, ITabView
         _removeAfter.Click += (_, _) => { Settings.Current.SetOpt("shelf.removeAfterDrop", _removeAfter.IsChecked == true); Settings.Current.Save("Options"); };
         DockPanel.SetDock(_removeAfter, Dock.Left);
         bar.Children.Add(_removeAfter);
-        var clear = SmallButton("Icon.Trash", "shelf.clear", () => { _selected = null; _store.Clear(); });
+        var clear = SmallButton("Icon.Trash", "shelf.clear", () =>
+            _island?.ShowToast(Strings.T("shelf.confirmClear"), Strings.T("common.confirmClear"), () =>
+            {
+                _selected = null;
+                _store.Clear();
+            }));
         DockPanel.SetDock(clear, Dock.Right);
         bar.Children.Add(clear);
         _actions.Children.Add(SmallButton("Icon.Folder", "shelf.open", () => Open(_selected)));
@@ -151,7 +156,7 @@ public sealed class ShelfView : Grid, ITabView
         _island?.HoldOpen("shelf-drag");
         try
         {
-            var result = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+            var result = DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Link);
             if (result != DragDropEffects.None && Settings.Current.OptBool("shelf.removeAfterDrop")) _store.Remove(id);
         }
         catch (Exception ex) { Logger.Error("shelf drag", ex); }

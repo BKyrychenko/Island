@@ -27,9 +27,9 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
-    <Style x:Key="FocusVisualNone">
+    <Style x:Key="KeyboardFocus">
         <Setter Property="Control.Template">
-            <Setter.Value><ControlTemplate /></Setter.Value>
+            <Setter.Value><ControlTemplate><Border BorderBrush="{DynamicResource AccentTextBrush}" BorderThickness="2" CornerRadius="8" Margin="-2" /></ControlTemplate></Setter.Value>
         </Setter>
     </Style>
 
@@ -41,8 +41,8 @@
         <Setter Property="Padding" Value="12,5" />
         <Setter Property="MinHeight" Value="28" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Focusable" Value="False" />
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisualNone}" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="Template">
@@ -117,38 +117,25 @@
 
     <!-- toggle switch -->
     <Style x:Key="Switch" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Width" Value="36" />
         <Setter Property="Height" Value="20" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
                     <Grid Background="Transparent">
-                        <Border x:Name="Track" CornerRadius="10" Background="{DynamicResource SurfaceHoverBrush}" />
+                        <Border x:Name="Track" CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource FgDimBrush}" Background="{DynamicResource SurfaceHoverBrush}" />
                         <Border x:Name="On" CornerRadius="10" Background="{DynamicResource AccentBrush}" Opacity="0" />
-                        <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
-                            <Ellipse.RenderTransform><TranslateTransform x:Name="ThumbX" X="0" /></Ellipse.RenderTransform>
-                        </Ellipse>
+                        <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="{DynamicResource FgBrush}" HorizontalAlignment="Left" Margin="3,0,0,0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Trigger.EnterActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="ThumbX" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.14" />
-                                        <DoubleAnimation Storyboard.TargetName="On" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.14" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.EnterActions>
-                            <Trigger.ExitActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="ThumbX" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.14" />
-                                        <DoubleAnimation Storyboard.TargetName="On" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.14" />
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.ExitActions>
+                            <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0" />
+                            <Setter TargetName="On" Property="Opacity" Value="1" />
+                            <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource AccentFgBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4" />
@@ -161,13 +148,14 @@
 
     <!-- chip / segmented choice (RadioButton or ToggleButton) -->
     <Style x:Key="Chip" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Foreground" Value="{DynamicResource FgDimBrush}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="10,4" />
         <Setter Property="MinHeight" Value="26" />
         <Setter Property="Margin" Value="0,0,4,0" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
@@ -198,7 +186,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
                     <Grid Width="14" Height="14" Background="Transparent">
-                        <Ellipse Fill="White" Stroke="#30000000" StrokeThickness="1" />
+                        <Ellipse Fill="{DynamicResource FgBrush}" Stroke="{DynamicResource FgDimBrush}" StrokeThickness="1" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
@@ -218,7 +206,8 @@
         </Setter>
     </Style>
     <Style TargetType="Slider">
-        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="IsMoveToPointEnabled" Value="True" />
         <Setter Property="MinHeight" Value="18" />
         <Setter Property="Cursor" Value="Hand" />
@@ -259,7 +248,7 @@
         <Setter Property="Padding" Value="8,5" />
         <Setter Property="MinHeight" Value="28" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisualNone}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBoxBase">
@@ -289,7 +278,7 @@
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Padding" Value="8,5" />
         <Setter Property="MinHeight" Value="28" />
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisualNone}" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
@@ -368,6 +357,7 @@
 
     <!-- list -->
     <Style x:Key="FlatList" TargetType="ListBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource FgBrush}" />
@@ -375,7 +365,7 @@
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
-        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBox">
@@ -389,8 +379,8 @@
         <Setter Property="Padding" Value="8,5" />
         <Setter Property="Margin" Value="0,0,0,2" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="Focusable" Value="False" />
-        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisualNone}" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
@@ -415,12 +405,13 @@
     <!-- tab button (icon; selected one is highlighted by the sliding indicator drawn by TabBar) -->
     <Style x:Key="TabButton" TargetType="RadioButton">
         <!-- icon-only: the tooltip doubles as the accessible name (screen readers, UI Automation) -->
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}" />
         <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Foreground" Value="{DynamicResource FgDimBrush}" />
         <Setter Property="Height" Value="28" />
         <Setter Property="MinWidth" Value="34" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
@@ -469,7 +460,7 @@
     <!-- progress -->
     <Style TargetType="ProgressBar">
         <Setter Property="Height" Value="4" />
-        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
         <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
         <Setter Property="Template">
             <Setter.Value>

@@ -14,6 +14,7 @@ public sealed class Settings
     public string Theme { get; set; } = "System";      // Dark | Light | System
     public double Scale { get; set; } = 1.0;           // 0.8 .. 2.0
     public string Language { get; set; } = "en";       // en | uk
+    public string MonitorDevice { get; set; } = "";
     public int Monitor { get; set; } = -1;             // -1 = primary, else index
 
     // Behaviour

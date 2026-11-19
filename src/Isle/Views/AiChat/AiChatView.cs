@@ -84,7 +84,7 @@ public sealed class AiChatView : Grid, ITabView
         DockPanel.SetDock(_send, Dock.Right);
         row.Children.Add(_send);
         _input.SetResourceReference(StyleProperty, "FlatTextBox");
-        System.Windows.Automation.AutomationProperties.SetName(_input, "ai-input");
+        _input.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, new System.Windows.Data.Binding("[ai.inputName]") { Source = Strings.Instance });
         _input.PreviewKeyDown += OnInputKey;
         _input.TextChanged += (_, _) => UpdatePlaceholder();
         _placeholder.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");

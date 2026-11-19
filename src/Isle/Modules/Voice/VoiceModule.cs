@@ -177,7 +177,7 @@ public sealed class VoiceModule(IslandWindow island) : IModule, IDisposable
     {
         island.Pill.Set(new PillItem
         {
-            Id = MessagePillId, Priority = PillPriority.Transient, Width = Math.Clamp(60 + text.Length * 6.6, 200, 420), Peek = true, HoverExpands = false,
+            Id = MessagePillId, Priority = PillPriority.Transient, Width = IndicatorPill.MessageWidth(text), Peek = true, HoverExpands = false,
             View = () => new IndicatorPill(icon, text), Click = () => island.Pill.Remove(MessagePillId),
         });
         _msgTimer?.Stop();

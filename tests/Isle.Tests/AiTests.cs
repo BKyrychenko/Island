@@ -154,7 +154,7 @@ public class AiTests
         """;
 
     [Fact]
-    public async Task AnthropicStreamsThroughSdk()
+    public async Task AnthropicStreamsMessages()
     {
         var h = new FakeHandler(HttpStatusCode.OK, AnthropicSse.Replace("\r\n", "\n"), "text/event-stream");
         var c = Chat(("user", "hello"));
@@ -203,6 +203,18 @@ public class AiTests
         var p = new AnthropicProvider(new AiConfig(AiProviderKind.Anthropic, "claude-opus-5-5", "", "k"), http);
         var ex = await Assert.ThrowsAsync<AiException>(() => Collect(p, Chat(("user", "x"))));
         Assert.Equal(key, ex.Key);
+    }
+
+    [Theory]
+    [InlineData("event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"busy\"}}\n\n", "ai.err.overloaded")]
+    [InlineData("data: {broken}\n\n", "ai.err.server")]
+    [InlineData("data: {\"type\":\"ping\"}\n\n", "ai.err.network")]
+    public async Task AnthropicStreamErrorsAreReadable(string data, string key)
+    {
+        var provider = new AnthropicProvider(new AiConfig(AiProviderKind.Anthropic, "m", "", "k"),
+            new HttpClient(new FakeHandler(HttpStatusCode.OK, data, "text/event-stream")));
+        var error = await Assert.ThrowsAsync<AiException>(() => Collect(provider, Chat(("user", "hello"))));
+        Assert.Equal(key, error.Key);
     }
 
     [Fact]

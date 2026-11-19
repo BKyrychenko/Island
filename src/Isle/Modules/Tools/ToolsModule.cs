@@ -169,7 +169,7 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
         var path = rec.FilePath;
         island.Pill.Set(new PillItem
         {
-            Id = "rec.saved", Priority = PillPriority.Transient, Width = 250, Peek = true,
+            Id = "rec.saved", Priority = PillPriority.Transient, Width = Views.Live.IndicatorPill.MessageWidth(Strings.T("tools.recordSaved"), Path.GetFileName(path)), Peek = true,
             View = () => new Views.Live.IndicatorPill("Icon.Check", Strings.T("tools.recordSaved"), Path.GetFileName(path)),
             Click = () => { try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")); } catch { } island.Pill.Remove("rec.saved"); },
         });

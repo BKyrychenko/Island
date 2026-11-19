@@ -19,6 +19,8 @@ public sealed class CommandItem
     public Action? Run { get; init; }
     /// <summary>Ask "press Enter again" before <see cref="Run"/> (system commands).</summary>
     public bool Confirm { get; init; }
+    public string Confirmation { get; init; } = "";
+    public Action? Undo { get; init; }
 }
 
 /// <summary>Asks the AI chat (M11) a question from the command bar.</summary>
@@ -111,15 +113,16 @@ public sealed partial class TimerProvider(Func<TimersController?> controller, Ac
 /// <summary>Lock, sleep, restart, shut down (all confirmed), Settings pages, empty recycle bin.</summary>
 public sealed class SystemProvider : ICommandProvider
 {
-    sealed record Cmd(string Key, string[] Words, string Icon, bool Confirm, Action Run);
+    sealed record Cmd(string Key, string[] Words, string Icon, bool Confirm, Action Run, string? Consequence = null, Action? Undo = null);
 
     static readonly Cmd[] Commands =
     [
         new("cmd.sys.lock", ["lock", "заблокувати", "блокування"], "Icon.Lock", true, () => LockWorkStation()),
         new("cmd.sys.sleep", ["sleep", "suspend", "сон", "сплячий режим"], "Icon.Moon", true, () => SetSuspendState(false, false, false)),
-        new("cmd.sys.restart", ["restart", "reboot", "перезавантажити", "перезапуск"], "Icon.Power", true, () => Run("shutdown.exe", "/r /t 0")),
-        new("cmd.sys.shutdown", ["shutdown", "shut down", "power off", "вимкнути", "завершити роботу"], "Icon.Power", true, () => Run("shutdown.exe", "/s /t 0")),
-        new("cmd.sys.recycle", ["empty recycle bin", "recycle bin", "trash", "кошик", "очистити кошик"], "Icon.Trash", true, () => SHEmptyRecycleBin(IntPtr.Zero, null, 0x7)),
+        new("cmd.sys.restart", ["restart", "reboot", "перезавантажити", "перезапуск"], "Icon.Power", true, () => Run("shutdown.exe", "/r /t 10"), "cmd.restartWarning", () => Run("shutdown.exe", "/a")),
+        new("cmd.sys.shutdown", ["shutdown", "shut down", "power off", "вимкнути", "завершити роботу"], "Icon.Power", true, () => Run("shutdown.exe", "/s /t 10"), "cmd.shutdownWarning", () => Run("shutdown.exe", "/a")),
+        new("cmd.sys.abort", ["cancel shutdown", "abort shutdown", "скасувати вимкнення", "скасувати перезапуск"], "Icon.Close", false, () => Run("shutdown.exe", "/a")),
+        new("cmd.sys.recycle", ["empty recycle bin", "recycle bin", "trash", "кошик", "очистити кошик"], "Icon.Trash", true, () => SHEmptyRecycleBin(IntPtr.Zero, null, 0x6), "cmd.recycleWarning"),
         new("cmd.set.display", ["settings display", "display", "налаштування дисплей", "дисплей", "екран"], "Icon.Settings", false, () => Open("ms-settings:display")),
         new("cmd.set.sound", ["settings sound", "sound", "налаштування звук", "звук"], "Icon.Settings", false, () => Open("ms-settings:sound")),
         new("cmd.set.bluetooth", ["settings bluetooth", "bluetooth", "налаштування bluetooth", "блютуз"], "Icon.Settings", false, () => Open("ms-settings:bluetooth")),
@@ -140,7 +143,7 @@ public sealed class SystemProvider : ICommandProvider
         {
             var best = c.Words.Append(Strings.T(c.Key)).Select(w => Fuzzy.Score(q, w)).Max();
             if (best is not { } s || s < 500) continue; // system commands need a close match
-            list.Add(new CommandItem { Title = Strings.T(c.Key), Subtitle = c.Confirm ? Strings.T("cmd.needsConfirm") : Strings.T("cmd.system"), IconKey = c.Icon, Score = s + 100, Confirm = c.Confirm, Run = c.Run });
+            list.Add(new CommandItem { Title = Strings.T(c.Key), Subtitle = c.Consequence is { } key ? Strings.T(key) : c.Confirm ? Strings.T("cmd.needsConfirm") : Strings.T("cmd.system"), Confirmation = c.Consequence is { } consequence ? Strings.T(consequence) : "", IconKey = c.Icon, Score = s + 100, Confirm = c.Confirm, Run = c.Run, Undo = c.Undo });
         }
         return Task.FromResult<IEnumerable<CommandItem>>(list);
     }

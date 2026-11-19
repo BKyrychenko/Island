@@ -133,7 +133,7 @@ public sealed class WeatherView : Grid
         var p = Dim(precip >= 20 ? precip + "%" : " ");
         p.FontSize = 10.5;
         p.HorizontalAlignment = HorizontalAlignment.Center;
-        p.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        p.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextBrush");
         stack.Children.Add(p);
         var b = new Border { Child = stack, Width = width, CornerRadius = new CornerRadius(10), Padding = new Thickness(0, 6, 0, 4), Margin = new Thickness(0, 0, 2, 0) };
         if (highlight) b.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");

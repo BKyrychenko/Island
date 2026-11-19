@@ -14,7 +14,7 @@ namespace Isle.Views.AiChat;
 public sealed class AiPopupView : Grid, ITabView
 {
     readonly AiModule _m;
-    readonly Icon _icon = MarkdownView.SmallIcon("Icon.Ai", 16, "AccentBrush");
+    readonly Icon _icon = MarkdownView.SmallIcon("Icon.Ai", 16, "AccentTextBrush");
     readonly TextBlock _title = new() { FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock _preview = new() { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 2, 0, 0) };
     readonly WrapPanel _chips = new() { Margin = new Thickness(0, 6, 0, 0) };

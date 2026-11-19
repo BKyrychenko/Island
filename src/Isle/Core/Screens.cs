@@ -27,10 +27,17 @@ public static class Screens
     }
 
     /// <summary>The monitor chosen in settings (-1 or out of range = primary).</summary>
-    public static ScreenInfo Selected(int index)
+    public static ScreenInfo Selected(int index, string? device = null)
     {
         var all = All();
         if (all.Count == 0) return new ScreenInfo(IntPtr.Zero, 0, 0, 1920, 1080, true, 1.0, "");
+        return Resolve(all, index, device);
+    }
+
+    internal static ScreenInfo Resolve(IReadOnlyList<ScreenInfo> all, int index, string? device)
+    {
+        if (!string.IsNullOrEmpty(device))
+            return all.FirstOrDefault(s => string.Equals(s.Device, device, StringComparison.OrdinalIgnoreCase), all[0]);
         return index >= 0 && index < all.Count ? all[index] : all[0];
     }
 }

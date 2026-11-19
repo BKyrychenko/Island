@@ -21,7 +21,7 @@ public sealed class ClipboardView : Grid, ITabView
     readonly ScrollViewer _scroll;
     bool _visible, _stale = true;
 
-    public ClipboardView(ClipStore store, Action<ClipEntry> paste, Action<ClipEntry> copy)
+    public ClipboardView(ClipStore store, Action<ClipEntry> paste, Action<ClipEntry> copy, IslandWindow? island = null)
     {
         _store = store;
         _paste = paste;
@@ -30,7 +30,8 @@ public sealed class ClipboardView : Grid, ITabView
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var clear = SmallButton("Icon.Trash", "clip.clear", () => { _store.ClearUnpinned(); });
+        var clear = SmallButton("Icon.Trash", "clip.clear", () =>
+            island?.ShowToast(Strings.T("clip.confirmClear"), Strings.T("common.confirmClear"), _store.ClearUnpinned));
         DockPanel.SetDock(clear, Dock.Right);
         top.Children.Add(clear);
         var searchHost = new Grid();
@@ -93,7 +94,7 @@ public sealed class ClipboardView : Grid, ITabView
         var row = new DockPanel();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var id = e.Id;
-        var pin = SmallButton("Icon.Pin", e.Pinned ? "clip.unpin" : "clip.pin", () => _store.SetPinned(id, !(_store.Find(id)?.Pinned ?? false)), e.Pinned ? "AccentBrush" : null);
+        var pin = SmallButton("Icon.Pin", e.Pinned ? "clip.unpin" : "clip.pin", () => _store.SetPinned(id, !(_store.Find(id)?.Pinned ?? false)), e.Pinned ? "AccentTextBrush" : null);
         buttons.Children.Add(pin);
         buttons.Children.Add(SmallButton("Icon.Copy", "clip.copy", () => { if (_store.Find(id) is { } x) _copy(x); }));
         buttons.Children.Add(SmallButton("Icon.Close", "clip.delete", () => _store.Delete(id)));

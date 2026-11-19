@@ -38,6 +38,13 @@ public partial class IslandWindow
         PreviewKeyDown += (_, e) =>
         {
             if (_hasFocus && e.Key == Key.Escape) { Collapse(); e.Handled = true; }
+            if (_hasFocus && _expanded && Keyboard.Modifiers == ModifierKeys.Control &&
+                e.Key >= Key.D1 && e.Key <= Key.D9)
+            {
+                var tabs = TabList.OrderBy(t => t.Order).ToList();
+                var index = e.Key - Key.D1;
+                if (index < tabs.Count) { SelectTab(tabs[index].Id, animate: true); e.Handled = true; }
+            }
         };
         Deactivated += (_, _) => OnDeactivated();
         PillLayer.MouseLeftButtonUp += (_, e) =>
@@ -48,6 +55,7 @@ public partial class IslandWindow
             else Expand();
         };
         Loaded += (_, _) => UpdateEdgeHide();
+        KeyboardNavigation.SetTabNavigation(Panel, KeyboardNavigationMode.Cycle);
     }
 
     void EngagePointer()
@@ -184,7 +192,12 @@ public partial class IslandWindow
     public void Toggle()
     {
         if (_expanded) Collapse();
-        else Expand(sticky: true);
+        else
+        {
+            Expand(sticky: true);
+            AcquireFocus();
+            Dispatcher.BeginInvoke(() => Panel.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)), DispatcherPriority.Loaded);
+        }
     }
 
     /// <summary>Keeps the panel open regardless of the pointer until <see cref="ReleaseOpen"/> (drag, dialogs, busy work).</summary>

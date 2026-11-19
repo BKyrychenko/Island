@@ -50,7 +50,8 @@ public partial class IslandWindow : Window
 
     void ApplyScale()
     {
-        var s = Settings.Current.Scale;
+        var screen = Screen;
+        var s = Math.Min(Settings.Current.Scale, Math.Min(screen.Width / (BaseWidth * screen.DpiScale), screen.Height / (BaseHeight * screen.DpiScale)));
         UiScale.ScaleX = UiScale.ScaleY = s;
         Width = BaseWidth * s;
         Height = BaseHeight * s;
@@ -108,7 +109,7 @@ public partial class IslandWindow : Window
     }
 
     /// <summary>The monitor the island currently lives on.</summary>
-    public ScreenInfo Screen => _screen ??= Screens.Selected(Settings.Current.Monitor);
+    public ScreenInfo Screen => _screen ??= Screens.Selected(Settings.Current.Monitor, Settings.Current.MonitorDevice);
 
     /// <summary>Places the window at the top-centre of the selected monitor (physical pixels, mixed-DPI safe).</summary>
     public void Reposition()
@@ -116,8 +117,14 @@ public partial class IslandWindow : Window
         if (_hwnd == IntPtr.Zero) return;
         try
         {
-            var screen = Screens.Selected(Settings.Current.Monitor);
+            var screen = Screens.Selected(Settings.Current.Monitor, Settings.Current.MonitorDevice);
             _screen = screen;
+            if (string.IsNullOrEmpty(Settings.Current.MonitorDevice) && Settings.Current.Monitor >= 0)
+            {
+                Settings.Current.MonitorDevice = screen.Device;
+                JsonStore.Save(Paths.SettingsFile, Settings.Current);
+            }
+            ApplyScale();
             const uint flags = Native.SWP_NOSIZE | Native.SWP_NOACTIVATE;
             // First move onto the monitor so WPF adopts its DPI, then centre using the resulting pixel width.
             Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST, screen.Left, screen.Top, 0, 0, flags);

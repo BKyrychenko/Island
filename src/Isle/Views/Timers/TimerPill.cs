@@ -26,7 +26,7 @@ public sealed class Ring : FrameworkElement
     {
         Width = Height = size;
         IsHitTestVisible = false;
-        SetResourceReference(BrushProperty, "AccentBrush");
+        SetResourceReference(BrushProperty, "AccentTextBrush");
         SetResourceReference(TrackProperty, "SurfaceHoverBrush");
     }
 
@@ -125,17 +125,17 @@ public sealed class TimerPill : Grid
 /// <summary>"Time's up" banner: label, +1 min and Dismiss.</summary>
 public sealed class TimerDoneBanner : Grid
 {
-    public const double BannerWidth = 320, BannerHeight = 52;
+    public const double BannerWidth = 380, BannerHeight = 68;
 
     public TimerDoneBanner(TimersController ctl, TimerItem t)
     {
         var ring = new Ring(26) { Progress = 0, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(12, 0, 0, 0) };
         var check = new Icon { Width = 14, Height = 14, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(18, 0, 0, 0) };
         check.SetResourceReference(Icon.DataProperty, "Icon.Check");
-        check.SetResourceReference(Icon.ForegroundProperty, "AccentBrush");
-        var title = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold };
+        check.SetResourceReference(Icon.ForegroundProperty, "AccentTextBrush");
+        var title = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxHeight = 36 };
         title.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("[timers.timesUp]") { Source = Strings.Instance });
-        var sub = new TextBlock { Text = t.Label.Length > 0 ? t.Label : DurationParser.Describe(t.Duration, UnitName), TextTrimming = TextTrimming.CharacterEllipsis };
+        var sub = new TextBlock { Text = t.Label.Length > 0 ? t.Label : DurationParser.Describe(t.Duration, UnitName), TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = t.Label };
         sub.SetResourceReference(StyleProperty, "TextDim");
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(48, 0, 150, 0) };
         text.Children.Add(title);
@@ -168,15 +168,16 @@ public sealed class TimerDoneBanner : Grid
 /// <summary>Reminder banner: text on top, Done / Snooze 5 min / 1 h / Tomorrow below.</summary>
 public sealed class ReminderBanner : Grid
 {
-    public const double BannerWidth = 380, BannerHeight = 76;
+    public const double BannerWidth = 420, BannerHeight = 98;
 
     public ReminderBanner(TimersController ctl, Reminder r)
     {
         var bell = new Icon { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
         bell.SetResourceReference(Icon.DataProperty, "Icon.Bell");
-        bell.SetResourceReference(Icon.ForegroundProperty, "AccentBrush");
-        var title = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        bell.SetResourceReference(Icon.ForegroundProperty, "AccentTextBrush");
+        var title = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, MaxHeight = 38, VerticalAlignment = VerticalAlignment.Center };
         title.Text = r.Text.Length > 0 ? r.Text : Strings.T("rem.title");
+        title.ToolTip = title.Text;
         var top = new DockPanel { Margin = new Thickness(16, 10, 16, 0), VerticalAlignment = VerticalAlignment.Top, LastChildFill = true };
         top.Children.Add(bell);
         top.Children.Add(title);

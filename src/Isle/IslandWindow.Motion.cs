@@ -39,7 +39,7 @@ public partial class IslandWindow
         _h.Target = _expanded ? ExpandedHeight : _pillH;
         _e.Target = _expanded ? 1 : 0;
         _shift.Target = _edgeHidden && !_expanded ? -(TopGap + _pillH - 3) : 0;
-        if (immediate || _snapshotMode)
+        if (immediate || _snapshotMode || !SystemParameters.ClientAreaAnimation)
         {
             _w.Snap(); _h.Snap(); _e.Snap(); _shift.Snap();
             StopAnimation();
@@ -110,7 +110,7 @@ public partial class IslandWindow
     /// <summary>Attention pulse: the shape bounces <paramref name="times"/> times (finished timer, reminder).</summary>
     public void Pulse(int times = 3)
     {
-        if (_snapshotMode) return;
+        if (_snapshotMode || !SystemParameters.ClientAreaAnimation) return;
         for (var i = 0; i < times; i++)
         {
             var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30 + 420 * i) };

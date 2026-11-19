@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Isle.Core;
@@ -68,6 +69,17 @@ public sealed class TabBar : Grid
         _more.Visibility = Visibility.Collapsed;
         SetColumn(_more, 2);
         Children.Add(_more);
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Left or Key.Right) || _tabs.Count == 0) return;
+            var current = _tabs.FindIndex(t => t.Id == _selected);
+            var next = (current + (e.Key == Key.Right ? 1 : _tabs.Count - 1)) % _tabs.Count;
+            Select(_tabs[next].Id);
+            TabSelected?.Invoke(_tabs[next].Id);
+            if (_buttons.TryGetValue(_selected!, out var button)) button.Focus();
+            else _more.Focus();
+            e.Handled = true;
+        };
 
         _gear = SideIcon("Icon.Settings", "tray.settings");
         _gear.Click += (_, _) => SettingsRequested?.Invoke();
@@ -103,11 +115,9 @@ public sealed class TabBar : Grid
     public void Select(string id, bool animate = true)
     {
         if (_tabs.All(t => t.Id != id)) return;
-        var wasHidden = _hidden.Any(t => t.Id == id);
         _selected = id;
-        _animateNext = animate && !wasHidden;
-        if (wasHidden) Rebuild();
-        else UpdateButtons();
+        _animateNext = animate;
+        UpdateButtons();
     }
 
     void Rebuild()
@@ -116,24 +126,24 @@ public sealed class TabBar : Grid
         _buttons.Clear();
 
         // how many fit?
+        var labelRoom = _tabs.Count == 0 ? 0 : Math.Min(LabelRoom, _tabs.Max(t =>
+        {
+            var measure = new TextBlock { Text = Strings.T(t.TitleKey), FontSize = 12, FontWeight = FontWeights.SemiBold };
+            measure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            return measure.DesiredSize.Width + 10;
+        }));
         var avail = AvailableWidth - SideButton - (Mascot is { } m ? (double.IsNaN(m.Width) ? 28 : m.Width) + 4 : 0);
         var visible = _tabs;
         _hidden = [];
-        if (_tabs.Count * TabWidth + LabelRoom > avail)
+        if (_tabs.Count * TabWidth + labelRoom > avail)
         {
-            var n = Math.Max(1, (int)((avail - SideButton - LabelRoom) / TabWidth));
+            var n = Math.Max(1, (int)((avail - SideButton - labelRoom) / TabWidth));
             visible = [.. _tabs.Take(n)];
             _hidden = [.. _tabs.Skip(n)];
-            var sel = _hidden.FirstOrDefault(t => t.Id == _selected);
-            if (sel is not null)
-            {
-                // the selected tab takes the last visible slot
-                _hidden.Remove(sel);
-                _hidden.Insert(0, visible[^1]);
-                visible[^1] = sel;
-            }
         }
         _more.Visibility = _hidden.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _more.ToolTip = _hidden.Any(t => t.Id == _selected)
+            ? Strings.T(_hidden.First(t => t.Id == _selected).TitleKey) : Strings.T("tabs.more");
 
         foreach (var tab in visible)
         {
@@ -194,7 +204,7 @@ public sealed class TabBar : Grid
         _indicatorDirty = false;
         var x = rb.TranslatePoint(new Point(0, 0), _strip).X;
         var w = rb.ActualWidth;
-        if (_animateNext && _indicator.Width > 0)
+        if (_animateNext && SystemParameters.ClientAreaAnimation && _indicator.Width > 0)
         {
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             var d = TimeSpan.FromMilliseconds(220);

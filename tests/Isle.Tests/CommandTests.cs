@@ -261,7 +261,7 @@ public class CommandBarTests
     }
 
     [Fact]
-    public void Late_better_result_takes_the_selection_and_confirm_needs_two_enters()
+    public void Late_better_result_takes_the_selection_and_fast_double_enter_does_not_confirm()
     {
         FakeSink.Run(sink =>
         {
@@ -276,7 +276,48 @@ public class CommandBarTests
             view.Execute();
             Assert.Equal(0, runs); // first Enter only arms
             view.Execute();
+            Assert.Equal(0, runs); // a fast double Enter must not confirm
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            Assert.True(sink.PumpUntil(() => wait.ElapsedMilliseconds >= 450));
+            view.Execute();
             Assert.Equal(1, runs);
+        });
+    }
+
+    [Fact]
+    public void Enter_during_debounce_waits_for_all_results_and_runs_the_best_once()
+    {
+        FakeSink.Run(sink =>
+        {
+            var runs = 0;
+            var web = new CommandItem { Title = "web", Score = 5, Run = () => runs += 100 };
+            var best = new CommandItem { Title = "app", Score = 1000, Run = () => runs++ };
+            var view = new Isle.Views.Commands.CommandBarView([new Delayed(0, web), new Delayed(160, best)], i => i.Run!(), null);
+            view.Text = "app";
+            view.Execute();
+            Assert.True(sink.PumpUntil(() => runs != 0));
+            Assert.Equal(1, runs);
+        });
+    }
+
+    [Fact]
+    public void A_new_query_disarms_confirmation()
+    {
+        FakeSink.Run(sink =>
+        {
+            var runs = 0;
+            var item = new CommandItem { Title = "system", Score = 100, Confirm = true, Run = () => runs++ };
+            var view = new Isle.Views.Commands.CommandBarView([new Delayed(0, item)], i => i.Run!(), null);
+            view.Text = "system";
+            view.Query();
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 1));
+            view.Execute();
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            Assert.True(sink.PumpUntil(() => wait.ElapsedMilliseconds >= 450));
+            view.Query();
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 1));
+            view.Execute();
+            Assert.Equal(0, runs);
         });
     }
 }

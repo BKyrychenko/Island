@@ -29,6 +29,9 @@ public sealed class CommandBarView : Grid, ITabView
     int _selected, _queryId;
     bool _userMoved; // arrow keys used: keep that choice while late results arrive
     CommandItem? _armed;
+    long _armedAt;
+    bool _querying, _executeWhenReady;
+    readonly DispatcherTimer _confirmationExpiry;
 
     public CommandBarView(IReadOnlyList<ICommandProvider> providers, Action<CommandItem> run, IslandWindow? island)
     {
@@ -63,6 +66,8 @@ public sealed class CommandBarView : Grid, ITabView
         Children.Add(_scroll);
         _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(80), DispatcherPriority.Input, (_, _) => { _debounce!.Stop(); Query(); }, Dispatcher);
         _debounce.Stop();
+        _confirmationExpiry = new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Input, (_, _) => { _confirmationExpiry!.Stop(); _armed = null; Render(); }, Dispatcher);
+        _confirmationExpiry.Stop();
     }
 
     /// <summary>Re-runs the current query (e.g. the app index finished building while the bar is open).</summary>
@@ -98,6 +103,10 @@ public sealed class CommandBarView : Grid, ITabView
         _cts?.Cancel();
         _debounce.Stop();
         _armed = null;
+        _confirmationExpiry.Stop();
+        _executeWhenReady = false;
+        _querying = false;
+        _queryId++;
     }
 
     /// <summary>Clears the input and results (when the bar opens).</summary>
@@ -110,6 +119,11 @@ public sealed class CommandBarView : Grid, ITabView
 
     void OnTextChanged()
     {
+        _queryId++;
+        _cts?.Cancel();
+        _executeWhenReady = false;
+        _querying = false;
+        _confirmationExpiry.Stop();
         _hint.Visibility = _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         _armed = null;
         _debounce.Stop();
@@ -120,6 +134,10 @@ public sealed class CommandBarView : Grid, ITabView
     /// <summary>Runs every provider in the background; results merge in as each one finishes.</summary>
     public void Query()
     {
+        _debounce.Stop();
+        _armed = null;
+        _confirmationExpiry.Stop();
+        _querying = _providers.Count > 0;
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
         var id = ++_queryId;
@@ -150,6 +168,7 @@ public sealed class CommandBarView : Grid, ITabView
     void Merge(int id, List<CommandItem> items, bool last)
     {
         if (id != _queryId) return;
+        if (items.Count > 0) { _armed = null; _confirmationExpiry.Stop(); }
         var keep = _userMoved && _selected < _results.Count ? _results[_selected] : null;
         _results.AddRange(items);
         _results.Sort((a, b) => b.Score.CompareTo(a.Score));
@@ -157,6 +176,11 @@ public sealed class CommandBarView : Grid, ITabView
         // the best result stays selected until the user moves; then their choice is kept (if still listed)
         _selected = keep is null ? 0 : Math.Max(0, _results.IndexOf(keep));
         if (items.Count > 0 || last) Render();
+        if (last)
+        {
+            _querying = false;
+            if (_executeWhenReady) { _executeWhenReady = false; Execute(); }
+        }
     }
 
     internal int SelectedIndex => _selected;
@@ -165,6 +189,7 @@ public sealed class CommandBarView : Grid, ITabView
     internal void SetResultsForSnapshot(string text, IEnumerable<CommandItem> items)
     {
         _input.Text = text;
+        _debounce.Stop();
         _results.Clear();
         _results.AddRange(items.OrderByDescending(i => i.Score).Take(MaxRows));
         _selected = 0;
@@ -196,7 +221,7 @@ public sealed class CommandBarView : Grid, ITabView
         {
             var ic = new Icon { Width = 17, Height = 17 };
             ic.SetResourceReference(Icon.DataProperty, item.IconKey ?? "Icon.Search");
-            ic.SetResourceReference(Icon.ForegroundProperty, selected ? "AccentBrush" : "FgDimBrush");
+            ic.SetResourceReference(Icon.ForegroundProperty, selected ? "AccentTextBrush" : "FgDimBrush");
             glyph = ic;
         }
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
@@ -215,11 +240,11 @@ public sealed class CommandBarView : Grid, ITabView
         var title = new TextBlock { Text = item.Title, FontSize = 13.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         title.SetResourceReference(TextBlock.ForegroundProperty, "FgBrush");
         texts.Children.Add(title);
-        var subText = ReferenceEquals(item, _armed) ? Strings.T("cmd.confirm") : item.Subtitle;
+        var subText = ReferenceEquals(item, _armed) ? (item.Confirmation.Length > 0 ? item.Confirmation + "\n" : "") + Strings.T("cmd.confirmTimed") : item.Subtitle;
         if (subText.Length > 0)
         {
-            var sub = new TextBlock { Text = subText, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
-            sub.SetResourceReference(TextBlock.ForegroundProperty, ReferenceEquals(item, _armed) ? "WarnBrush" : "FgDimBrush");
+            var sub = new TextBlock { Text = subText, FontSize = 11, TextWrapping = TextWrapping.Wrap };
+            sub.SetResourceReference(TextBlock.ForegroundProperty, ReferenceEquals(item, _armed) ? "DangerBrush" : "FgDimBrush");
             texts.Children.Add(sub);
         }
         row.Children.Add(texts);
@@ -243,7 +268,7 @@ public sealed class CommandBarView : Grid, ITabView
                 break;
             case Key.Enter:
                 e.Handled = true;
-                if (_debounce.IsEnabled) { _debounce.Stop(); Query(); return; } // typed fast: show results first
+                if (e.IsRepeat) return;
                 Execute();
                 break;
             case Key.Escape:
@@ -255,16 +280,23 @@ public sealed class CommandBarView : Grid, ITabView
 
     internal void Execute()
     {
+        if (_debounce.IsEnabled) { Query(); _executeWhenReady = true; return; }
+        if (_querying) { _executeWhenReady = true; return; }
         if (_selected >= _results.Count) return;
         var item = _results[_selected];
         if (item.Run is null) return;
-        if (item.Confirm && !ReferenceEquals(_armed, item))
+        var now = Environment.TickCount64;
+        if (item.Confirm && (!ReferenceEquals(_armed, item) || now - _armedAt >= 3000))
         {
             _armed = item;
+            _armedAt = now;
+            _confirmationExpiry.Start();
             Render();
             return;
         }
+        if (item.Confirm && now - _armedAt < 400) return;
         _armed = null;
+        _confirmationExpiry.Stop();
         _run(item);
     }
 }

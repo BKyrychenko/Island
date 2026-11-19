@@ -15,6 +15,11 @@ One line each: decision — why.
 - UI-H3 shows only priority timer/reminder banners over fullscreen and scopes shell fullscreen hints to the selected display.
 - UI-H1 serializes clipboard borrowing, preserves supported exact formats, protects temporary data from history and sync, checks foreground, and respects intervening clipboard changes.
 - SW-H6 launches System32 commands by absolute path and rejects relative VPN CLI paths.
+- UI-C3 / H5 uses distinct accent text and fill contrast, adds keyboard focus and accessibility names, and respects reduced motion.
+- UI-H4 / M5 uses Ctrl+Alt+Space for the default command bar and guards confirmation while results are pending or the selected action changes.
+- UI-M1–M4 fits the rendered stage to its monitor, preserves stable display and tab choices, and measures or wraps translated labels.
+- UI-M6 asks for confirmation before clearing and restricts shelf drag-out to copy or link.
+- SW dependency weight removes the Anthropic SDK using the existing HTTP/SSE transport. Brightness support still uses WMI and the packaging script already sets ReadyToRun and single-file.
 
 ## M0
 - Repo root is the solution root (`Isle.sln` next to `SPEC.md`) — the working folder already is the dedicated project folder.

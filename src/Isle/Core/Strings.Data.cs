@@ -4,6 +4,18 @@ public sealed partial class Strings
 {
     static readonly Dictionary<string, string> En = new()
     {
+        ["ai.inputName"] = "Message",
+        ["hotkey.conflict"] = "{0} is unavailable. Open Settings → Hotkeys.",
+        ["cmd.confirmTimed"] = "Press Enter after a short pause to confirm. Expires in 3 seconds.",
+        ["cmd.shutdownWarning"] = "Windows will shut down in 10 seconds.",
+        ["cmd.restartWarning"] = "Windows will restart in 10 seconds.",
+        ["cmd.recycleWarning"] = "Permanently delete the contents of Recycle Bin. Windows will ask for confirmation.",
+        ["cmd.sys.abort"] = "Cancel scheduled shutdown",
+        ["cmd.shutdownScheduled"] = "Windows shutdown or restart is scheduled in 10 seconds.",
+        ["cmd.abortShutdown"] = "Cancel shutdown",
+        ["clip.confirmClear"] = "Clear unpinned clipboard entries?",
+        ["shelf.confirmClear"] = "Remove all items from the shelf?",
+        ["common.confirmClear"] = "Clear",
         ["app.name"] = "Isle",
         ["app.alreadyRunning"] = "Isle is already running.",
         ["tray.show"] = "Show island",
@@ -549,6 +561,18 @@ public sealed partial class Strings
 
     static readonly Dictionary<string, string> Uk = new()
     {
+        ["ai.inputName"] = "Повідомлення",
+        ["hotkey.conflict"] = "{0} недоступна. Відкрийте Налаштування → Гарячі клавіші.",
+        ["cmd.confirmTimed"] = "Натисніть Enter після короткої паузи для підтвердження. Діє 3 секунди.",
+        ["cmd.shutdownWarning"] = "Windows вимкнеться за 10 секунд.",
+        ["cmd.restartWarning"] = "Windows перезапуститься за 10 секунд.",
+        ["cmd.recycleWarning"] = "Назавжди видалити вміст кошика. Windows запитає підтвердження.",
+        ["cmd.sys.abort"] = "Скасувати заплановане вимкнення",
+        ["cmd.shutdownScheduled"] = "Вимкнення або перезапуск Windows заплановано через 10 секунд.",
+        ["cmd.abortShutdown"] = "Скасувати вимкнення",
+        ["clip.confirmClear"] = "Очистити незакріплені записи буфера?",
+        ["shelf.confirmClear"] = "Прибрати всі елементи з полиці?",
+        ["common.confirmClear"] = "Очистити",
         ["app.name"] = "Isle",
         ["app.alreadyRunning"] = "Isle вже запущено.",
         ["tray.show"] = "Показати острівець",

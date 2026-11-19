@@ -223,7 +223,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         {
             var pin = new Icon { Width = 11, Height = 11, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
             pin.SetResourceReference(Icon.DataProperty, "Icon.Pin");
-            pin.SetResourceReference(Icon.ForegroundProperty, "AccentBrush");
+            pin.SetResourceReference(Icon.ForegroundProperty, "AccentTextBrush");
             DockPanel.SetDock(pin, Dock.Right);
             row.Children.Add(pin);
         }

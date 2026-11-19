@@ -2,8 +2,8 @@
 
 ## WPF audit repairs
 
-- Latest: Tier 2 code integrated: hover intent, background polling, durable saves, media rebinding, fullscreen timer alerts, clipboard borrowing, and system tool paths. All 549 tests passed on Windows. The desktop probe verified Escape and held-button hover.
-- Next: Verify fullscreen alerts and idle usage on Windows. Tier 3 covers contrast, keyboard access, command confirmation, layout, and dependency weight.
+- Latest: Tier 1–3 repairs integrated. Release tests passed (556). Windows checks verified keyboard ownership, drag hover, fullscreen timer banners, and a 60-second idle sample.
+- Next: Finish live validation on a restarted media player, very slow clipboard targets, mixed-DPI docking, and live Anthropic API when those environments are available.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

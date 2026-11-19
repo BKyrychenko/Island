@@ -132,3 +132,16 @@ public class ExcludedAppTests
     public void Matches_process_names(string listed, string process, bool expected) =>
         Assert.Equal(expected, IslandWindow.IsSameApp(listed, process));
 }
+
+public class ScreenSelectionTests
+{
+    [Fact]
+    public void Device_selection_survives_monitor_reordering_and_falls_back_to_primary()
+    {
+        var primary = new ScreenInfo((IntPtr)1, 0, 0, 1920, 1080, true, 1, "DISPLAY1");
+        var secondary = new ScreenInfo((IntPtr)2, 1920, 0, 1920, 1080, false, 1.5, "DISPLAY2");
+        Assert.Equal(secondary, Screens.Resolve([primary, secondary], 0, "display2"));
+        Assert.Equal(primary, Screens.Resolve([primary], 1, "DISPLAY2"));
+        Assert.Equal(secondary, Screens.Resolve([primary, secondary], 1, ""));
+    }
+}

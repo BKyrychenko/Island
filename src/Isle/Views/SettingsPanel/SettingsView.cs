@@ -137,7 +137,8 @@ public sealed class SettingsView : Grid, ITabView
         {
             var ids = new List<string> { "-1" };
             for (var i = 0; i < screens.Count; i++) ids.Add(i.ToString(CultureInfo.InvariantCulture));
-            Row("set.monitor", Choice(ids, S.Monitor.ToString(CultureInfo.InvariantCulture), v => { S.Monitor = int.Parse(v, CultureInfo.InvariantCulture); Save("Monitor"); },
+            var selectedMonitor = S.MonitorDevice.Length > 0 ? screens.FindIndex(screen => string.Equals(screen.Device, S.MonitorDevice, StringComparison.OrdinalIgnoreCase)) : S.Monitor;
+            Row("set.monitor", Choice(ids, selectedMonitor.ToString(CultureInfo.InvariantCulture), v => { S.Monitor = int.Parse(v, CultureInfo.InvariantCulture); S.MonitorDevice = S.Monitor >= 0 ? screens[S.Monitor].Device : ""; Save("Monitor"); },
                 v => v == "-1" ? "set.monitor.primary" : null, v => (int.Parse(v, CultureInfo.InvariantCulture) + 1).ToString(CultureInfo.InvariantCulture)));
         }
         Row("set.clock", Switch(S.ShowClock, on => { S.ShowClock = on; Save("ShowClock"); }));

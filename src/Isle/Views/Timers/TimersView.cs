@@ -244,7 +244,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
     FrameworkElement StopwatchRow()
     {
         var s = _ctl.Timers.Stopwatch;
-        var row = Row(MakeIcon("Icon.Stopwatch", 18, "AccentBrush"), "", out var sub,
+        var row = Row(MakeIcon("Icon.Stopwatch", 18, "AccentTextBrush"), "", out var sub,
             s.IsRunning ? Action("Icon.Pause", "timers.pause", _ctl.StopwatchToggle, filled: true) : Action("Icon.Play", "timers.resume", _ctl.StopwatchToggle, filled: true),
             Action("Icon.Reset", "timers.reset", _ctl.StopwatchReset));
         var title = (TextBlock)((StackPanel)row.Children[2]).Children[0];
@@ -258,7 +258,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
     FrameworkElement ReminderRow(Reminder r)
     {
         var id = r.Id;
-        var row = Row(MakeIcon(r.Repeat is null ? "Icon.Bell" : "Icon.Repeat", 16, r.FiredAt is null ? "FgDimBrush" : "AccentBrush"),
+        var row = Row(MakeIcon(r.Repeat is null ? "Icon.Bell" : "Icon.Repeat", 16, r.FiredAt is null ? "FgDimBrush" : "AccentTextBrush"),
             r.Text.Length > 0 ? r.Text : Strings.T("rem.title"), out var sub,
             r.FiredAt is not null ? Action("Icon.Check", "rem.done", () => _ctl.ReminderDone(id)) : Action("Icon.Edit", "rem.edit", () => Prefill(r.Source, id)),
             Action("Icon.Trash", "rem.delete", () => _ctl.DeleteReminder(id)));

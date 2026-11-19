@@ -78,7 +78,7 @@ public partial class IslandWindow
         _pillH = primary?.Height ?? 32;
         PillLayer.Width = _pillW;
         PillLayer.Height = _pillH;
-        if (!_snapshotMode && IsLoaded)
+        if (!_snapshotMode && IsLoaded && SystemParameters.ClientAreaAnimation)
         {
             // quick fade so a content swap does not pop
             PillPrimary.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160)));
@@ -169,7 +169,7 @@ public partial class IslandWindow
         if (old is not null && !ReferenceEquals(old, view))
         {
             if (_expanded) Safe(() => (old as ITabView)?.OnHidden(), "tab hidden");
-            if (animate && !_snapshotMode)
+            if (animate && !_snapshotMode && SystemParameters.ClientAreaAnimation)
             {
                 var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(110));
                 fade.Completed += (_, _) =>
@@ -185,7 +185,7 @@ public partial class IslandWindow
             }
         }
         view.Visibility = Visibility.Visible;
-        if (animate && !_snapshotMode)
+        if (animate && !_snapshotMode && SystemParameters.ClientAreaAnimation)
             view.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170)) { BeginTime = TimeSpan.FromMilliseconds(60) });
         else
         {
@@ -239,7 +239,8 @@ public partial class IslandWindow
         Toast.Padding = actionText is null ? new Thickness(12, 6, 12, 6) : new Thickness(12, 4, 4, 4);
         Toast.Visibility = Visibility.Visible;
         if (_snapshotMode) return;
-        Toast.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
+        if (SystemParameters.ClientAreaAnimation)
+            Toast.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
         _toastTimer ??= new DispatcherTimer(DispatcherPriority.Background);
         _toastTimer.Stop();
         _toastTimer.Tick -= OnToastTick;

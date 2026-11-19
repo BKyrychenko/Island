@@ -4,7 +4,7 @@ using Isle.Views.Commands;
 
 namespace Isle.Modules.Commands;
 
-/// <summary>Command bar (module id "commands", hotkey "commandBar", default Alt+Space). The index and rates are created on first open.</summary>
+/// <summary>Command bar (module id "commands", hotkey "commandBar", default Ctrl+Alt+Space). The index and rates are created on first open.</summary>
 public sealed class CommandModule(IslandWindow island, Func<TimersController?> timers) : IModule, IDisposable
 {
     CommandBarView? _view;
@@ -13,7 +13,20 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
 
     public string Id => "commands";
 
-    public void Start() => island.Hotkeys.Register("commandBar", "hotkey.commandBar", "Alt+Space", Toggle);
+    readonly HashSet<string> _reportedConflicts = [];
+
+    public void Start()
+    {
+        island.Hotkeys.RegistrationFailed += OnRegistrationFailed;
+        island.Hotkeys.Register("commandBar", "hotkey.commandBar", "Ctrl+Alt+Space", Toggle);
+        foreach (var key in island.Hotkeys.List().Where(k => !k.Registered && k.Gesture.Length > 0)) OnRegistrationFailed(key.Gesture);
+    }
+
+    void OnRegistrationFailed(string gesture)
+    {
+        if (!_reportedConflicts.Add(gesture)) return;
+        island.ShowToast(Strings.T("hotkey.conflict", gesture), Strings.T("tray.settings"), () => App.OpenSettings("hotkeys"));
+    }
 
     public void Toggle()
     {
@@ -47,7 +60,11 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
     void Run(CommandItem item)
     {
         island.Collapse();
-        try { item.Run?.Invoke(); }
+        try
+        {
+            item.Run?.Invoke();
+            if (item.Undo is { } undo) island.ShowToast(Strings.T("cmd.shutdownScheduled"), Strings.T("cmd.abortShutdown"), undo, seconds: 10);
+        }
         catch (Exception ex) { Logger.Error("command run", ex); }
     }
 
@@ -59,6 +76,8 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
 
     public void Stop()
     {
+        island.Hotkeys.RegistrationFailed -= OnRegistrationFailed;
+        _reportedConflicts.Clear();
         island.Hotkeys.Unregister("commandBar");
         if (_view is not null) island.HideOverlay();
         _view = null;

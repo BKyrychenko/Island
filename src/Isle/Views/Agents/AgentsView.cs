@@ -247,7 +247,7 @@ public sealed class AgentsView : Grid
     static string StateBrush(AgentState s) => s switch
     {
         AgentState.Waiting => "WarnBrush",
-        AgentState.Working => "AccentBrush",
+        AgentState.Working => "AccentTextBrush",
         AgentState.Done => "OkBrush",
         _ => "FgFaintBrush",
     };

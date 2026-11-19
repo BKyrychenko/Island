@@ -67,7 +67,7 @@
                             CornerRadius="14" Padding="12,4,4,4" MaxWidth="460">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="ToastText" Style="{StaticResource Text}" MaxWidth="340" Margin="0,0,8,0" />
-                            <Button x:Name="ToastAction" Style="{StaticResource GhostButton}" Foreground="{DynamicResource AccentBrush}" MinHeight="22" Padding="8,2" />
+                            <Button x:Name="ToastAction" Style="{StaticResource GhostButton}" Foreground="{DynamicResource AccentTextBrush}" MinHeight="22" Padding="8,2" />
                         </StackPanel>
                     </Border>
                 </Grid>

@@ -15,7 +15,7 @@ Personal project: everything included, no accounts, no telemetry, no ads.
 - **Control** — Wi-Fi, Bluetooth (+ connect headphones), dark mode, volume, brightness, VPN profiles/clients.
 - **Clipboard** — text + image history (text encrypted), search, pins; click an entry to paste it where you were.
 - **Shelf** — drag files onto the island to park them, drag them out again later.
-- **Command bar** (Alt+Space) — apps and files, calculator and unit conversion, currency (NBU rates), timers and
+- **Command bar** (Ctrl+Alt+Space) — apps and files, calculator and unit conversion, currency (NBU rates), timers and
   reminders, system commands (with confirmation), web search, `? question` for AI.
 - **Screen tools** — screenshot with markup, text capture (OCR), QR reading, colour picker, screen recording to MP4.
 - **Weather** — Open-Meteo forecast (24 h + 7 days), temperature in the pill, rain alerts.
@@ -45,7 +45,7 @@ the `runtimes` folder next to the exe is needed for voice to text.
 ## Hotkeys (all can be changed in Settings → Hotkeys)
 | Action | Default |
 |---|---|
-| Command bar | Alt+Space |
+| Command bar | Ctrl+Alt+Space |
 | Show / hide island | Win+Alt+Space |
 | New note | Win+Alt+N |
 | AI text actions | Win+Alt+A |

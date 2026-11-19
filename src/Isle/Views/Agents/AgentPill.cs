@@ -57,7 +57,7 @@ public sealed class AgentPill : Grid
             return i;
         }
         var e = new Ellipse { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
-        e.SetResourceReference(Shape.FillProperty, state == AgentState.Waiting ? "WarnBrush" : "AccentBrush");
+        e.SetResourceReference(Shape.FillProperty, state == AgentState.Waiting ? "WarnBrush" : "AccentTextBrush");
         return e;
     }
 

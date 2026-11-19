@@ -25,7 +25,7 @@ public sealed class ClipboardModule(IslandWindow island) : IModule, IDisposable
         _service = new ClipboardService(_store, () => island.PasteTarget, island.Dispatcher);
         _service.Start();
         var store = _store;
-        island.AddTab(new TabInfo(TabId, "tab.clipboard", "Icon.Clipboard", () => new ClipboardView(store, Paste, e => _service?.Copy(e)), 40));
+        island.AddTab(new TabInfo(TabId, "tab.clipboard", "Icon.Clipboard", () => new ClipboardView(store, Paste, e => _service?.Copy(e), island), 40));
     }
 
     void Paste(ClipEntry e)

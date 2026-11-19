@@ -33,7 +33,7 @@ public partial class IslandWindow
         PreviewMouseLeftButtonDown += OnPreviewMouseDown;
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape) { Collapse(); e.Handled = true; }
+            if (_hasFocus && e.Key == Key.Escape) { Collapse(); e.Handled = true; }
         };
         Deactivated += (_, _) => OnDeactivated();
         PillLayer.MouseLeftButtonUp += (_, e) =>
@@ -121,7 +121,6 @@ public partial class IslandWindow
         _sticky = sticky;
         if (_edgeHidden) _edgeHidden = false;
         NotifyCurrentView(shown: true);
-        if (_hwnd != IntPtr.Zero) Native.RegisterHotKey(_hwnd, EscHotkeyId, 0, 0x1B);
         SetTargets();
         if (!_snapshotMode && _hoverTimer is { IsEnabled: false })
         {
@@ -140,7 +139,6 @@ public partial class IslandWindow
         HideOverlay();
         NotifyCurrentView(shown: false);
         ReleaseFocus(restore: true);
-        if (_hwnd != IntPtr.Zero) Native.UnregisterHotKey(_hwnd, EscHotkeyId);
         if (!_snapshotMode) Memory.TrimSoon(5); // tab views paged in while open go back out once the pill is idle
         SetTargets();
         if (_currentTab is not null && _currentTab != _lastSavedTab && !_snapshotMode)

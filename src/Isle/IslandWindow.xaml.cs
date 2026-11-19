@@ -18,7 +18,6 @@ public partial class IslandWindow : Window
     /// <summary>Window size at 100% UI scale (DIPs): room for the largest expanded state plus overshoot and shadow.</summary>
     public const double BaseWidth = 640, BaseHeight = 300;
     public const double ExpandedWidth = 520, ExpandedHeight = 220, TopGap = 6, MaxRadius = 30;
-    const int EscHotkeyId = 0x3FF0;
 
     IntPtr _hwnd;
     HwndSource? _source;
@@ -135,8 +134,7 @@ public partial class IslandWindow : Window
                 return new IntPtr(Native.MA_NOACTIVATE);
             case Native.WM_HOTKEY:
                 var id = wParam.ToInt32();
-                if (id == EscHotkeyId) Collapse();
-                else Hotkeys.HandleHotkey(id);
+                Hotkeys.HandleHotkey(id);
                 handled = true;
                 break;
             case Native.WM_DISPLAYCHANGE:

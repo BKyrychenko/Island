@@ -2,8 +2,8 @@
 
 ## WPF audit repairs
 
-- Latest: SW-C1 now runs the Caps Lock hook on a dedicated dispatcher. Release build passed.
-- Next: UI-C1, remove the global Escape registration.
+- Latest: Tier 1 implemented. The Windows input probe confirmed Escape is available to other windows while the repaired island is expanded.
+- Next: Tier 2 starts with hover intent and background polling.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

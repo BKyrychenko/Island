@@ -625,21 +625,36 @@ public sealed class KeyboardLayoutSource(ILiveSink sink, ForegroundWatcher watch
 /// <summary>Caps Lock on/off indicator via a low-level keyboard hook (the callback only looks for the Caps Lock key-up).</summary>
 public sealed class CapsLockSource(ILiveSink sink) : ILiveSource
 {
-    IntPtr _hook;
-    Native.LowLevelKeyboardProc? _proc;
+    CancellationTokenSource? _stop;
 
     public void Start()
     {
-        _proc = Hook;
-        _hook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, _proc, Native.GetModuleHandle(null), 0);
-        if (_hook == IntPtr.Zero) Logger.Warn("caps lock hook unavailable");
+        if (_stop is not null) return;
+        _stop = new CancellationTokenSource();
+        var cancellation = _stop.Token;
+        new Thread(() => RunHook(cancellation)) { IsBackground = true, Name = "Isle Caps Lock hook" }.Start();
     }
 
-    IntPtr Hook(int code, IntPtr wParam, IntPtr lParam)
+    void RunHook(CancellationToken cancellation)
     {
-        if (code >= 0 && (wParam == (IntPtr)Native.WM_KEYUP || wParam == (IntPtr)Native.WM_SYSKEYUP) && Marshal.ReadInt32(lParam) == 0x14)
-            sink.Ui.BeginInvoke(Show);
-        return Native.CallNextHookEx(_hook, code, wParam, lParam);
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        using var stop = cancellation.Register(() => dispatcher.BeginInvokeShutdown(DispatcherPriority.Send));
+        if (cancellation.IsCancellationRequested) return;
+        Native.LowLevelKeyboardProc callback = (code, message, data) =>
+        {
+            if (!cancellation.IsCancellationRequested && code >= 0 &&
+                (message == (IntPtr)Native.WM_KEYUP || message == (IntPtr)Native.WM_SYSKEYUP) && Marshal.ReadInt32(data) == 0x14)
+                sink.Ui.BeginInvoke(() => { if (!cancellation.IsCancellationRequested) Show(); });
+            return Native.CallNextHookEx(IntPtr.Zero, code, message, data);
+        };
+        var hook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, callback, Native.GetModuleHandle(null), 0);
+        if (hook == IntPtr.Zero) { Logger.Warn("caps lock hook unavailable"); return; }
+        try { Dispatcher.Run(); }
+        finally
+        {
+            Native.UnhookWindowsHookEx(hook);
+            GC.KeepAlive(callback);
+        }
     }
 
     void Show()
@@ -650,9 +665,10 @@ public sealed class CapsLockSource(ILiveSink sink) : ILiveSource
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero) Native.UnhookWindowsHookEx(_hook);
-        _hook = IntPtr.Zero;
-        _proc = null;
+        var stop = _stop;
+        _stop = null;
+        stop?.Cancel();
+        stop?.Dispose();
     }
 }
 

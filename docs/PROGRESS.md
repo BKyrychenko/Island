@@ -2,8 +2,8 @@
 
 ## WPF audit repairs
 
-- Latest: SW-C2 and SW-C3 / UI-H2 are implemented. Agent tests and the Ukrainian long approval snapshot passed.
-- Next: SW-C1, isolate the Caps Lock hook from WPF.
+- Latest: SW-C1 now runs the Caps Lock hook on a dedicated dispatcher. Release build passed.
+- Next: UI-C1, remove the global Escape registration.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

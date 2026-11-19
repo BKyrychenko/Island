@@ -410,15 +410,38 @@ public class AgentTests
 
     static string UniquePipe() => "Isle.Agents.test." + Guid.NewGuid().ToString("N");
 
+    static Task<string?> RunClientAsync(string[] args, string stdin, string name, int connectMs = 400) =>
+        HookProtocol.RunClientAsync(args, stdin, new(name, Environment.ProcessId), Environment.ProcessPath!, connectMs);
+
+    [Fact]
+    public void UnsupportedProtocolVersionsAreIgnored()
+    {
+        var request = (JsonObject)JsonNode.Parse(HookProtocol.Request("claude", false, 10, Input("SessionStart")))!;
+        request["v"] = HookProtocol.Version + 1;
+        Assert.Null(HookMessage.Parse(request.ToJsonString()));
+        request.Remove("v");
+        Assert.Null(HookMessage.Parse(request.ToJsonString()));
+    }
+
+    [Fact]
+    public void AgentEndpointIsRandomAndCanBeReadBack()
+    {
+        using var dir = new TempDir();
+        var endpoint = HookProtocol.Endpoint.Create();
+        Assert.NotEqual(endpoint, HookProtocol.Endpoint.Create());
+        endpoint.Publish(dir.Path);
+        Assert.Equal(endpoint, HookProtocol.Endpoint.Read(dir.Path));
+    }
+
     [Fact]
     public async Task ClientFailsOpenWithoutIsland()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var output = await HookProtocol.RunClientAsync(["claude", "--timeout", "5"], Input("PermissionRequest", "Bash").ToJsonString(), UniquePipe());
+        var output = await RunClientAsync(["claude", "--timeout", "5"], Input("PermissionRequest", "Bash").ToJsonString(), UniquePipe());
         Assert.Null(output);
         Assert.True(sw.ElapsedMilliseconds < 2000, $"took {sw.ElapsedMilliseconds} ms");
-        Assert.Null(await HookProtocol.RunClientAsync(["claude"], "not json", UniquePipe()));
-        Assert.Null(await HookProtocol.RunClientAsync([], "", UniquePipe()));
+        Assert.Null(await RunClientAsync(["claude"], "not json", UniquePipe()));
+        Assert.Null(await RunClientAsync([], "", UniquePipe()));
     }
 
     [Fact]
@@ -432,7 +455,7 @@ public class AgentTests
             return Task.FromResult<string?>(m.Wait ? HookProtocol.Reply("deny", "not now") : null);
         });
         server.Start();
-        var output = await HookProtocol.RunClientAsync(["claude", "--timeout", "10"], Input("PermissionRequest", "Bash", new JsonObject { ["command"] = "rm x" }).ToJsonString(), name, 2000);
+        var output = await RunClientAsync(["claude", "--timeout", "10"], Input("PermissionRequest", "Bash", new JsonObject { ["command"] = "rm x" }).ToJsonString(), name, 2000);
         var m = await got.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(m.Wait);
         Assert.Equal(10, m.TimeoutSeconds);
@@ -449,13 +472,13 @@ public class AgentTests
         var got = new TaskCompletionSource<HookMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = new AgentPipeServer(name, (m, ct) => { got.TrySetResult(m); return Task.FromResult<string?>(null); });
         server.Start();
-        var output = await HookProtocol.RunClientAsync(["claude", "--async"], Input("Stop").ToJsonString(), name, 2000);
+        var output = await RunClientAsync(["claude", "--async"], Input("Stop").ToJsonString(), name, 2000);
         Assert.Null(output);
         var m = await got.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(m.Wait);
         Assert.Equal("Stop", m.Event);
         // async status hook skips AskUserQuestion (the synchronous hook reports it)
-        Assert.Null(await HookProtocol.RunClientAsync(["claude", "--async"], AskInput().ToJsonString(), name, 2000));
+        Assert.Null(await RunClientAsync(["claude", "--async"], AskInput().ToJsonString(), name, 2000));
     }
 
     [Fact]
@@ -471,7 +494,7 @@ public class AgentTests
         });
         server.Start();
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var output = await HookProtocol.RunClientAsync(["claude", "--timeout", "5"], Input("PermissionRequest", "Bash").ToJsonString(), name, 2000);
+        var output = await RunClientAsync(["claude", "--timeout", "5"], Input("PermissionRequest", "Bash").ToJsonString(), name, 2000);
         Assert.Null(output); // timed out → no decision → terminal prompt
         Assert.InRange(sw.Elapsed.TotalSeconds, 4.5, 8);
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(3)); // the server noticed the hook left
@@ -484,7 +507,7 @@ public class AgentTests
         using var server = new AgentPipeServer(name, (m, ct) =>
             Task.FromResult<string?>(HookProtocol.Reply("answer", answers: new Dictionary<string, string> { ["Which framework?"] = "Vue" })));
         server.Start();
-        var output = await HookProtocol.RunClientAsync(["claude", "--timeout", "10"], AskInput().ToJsonString(), name, 2000);
+        var output = await RunClientAsync(["claude", "--timeout", "10"], AskInput().ToJsonString(), name, 2000);
         var o = JsonNode.Parse(output!)!["hookSpecificOutput"]!;
         Assert.Equal("allow", (string?)o["permissionDecision"]);
         Assert.Equal("Vue", (string?)o["updatedInput"]!["answers"]!["Which framework?"]);
@@ -500,7 +523,7 @@ public class AgentTests
             return HookProtocol.Reply("allow");
         });
         server.Start();
-        var output = await HookProtocol.RunClientAsync(["claude", "--timeout", "10"], Input("PermissionRequest", "Bash").ToJsonString(), name, 2000);
+        var output = await RunClientAsync(["claude", "--timeout", "10"], Input("PermissionRequest", "Bash").ToJsonString(), name, 2000);
         Assert.NotNull(output);
         Assert.Equal("allow", (string?)JsonNode.Parse(output!)!["hookSpecificOutput"]!["decision"]!["behavior"]);
     }

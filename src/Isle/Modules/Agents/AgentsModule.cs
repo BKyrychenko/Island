@@ -40,8 +40,20 @@ public sealed class AgentsModule(IslandWindow island) : IModule, IDisposable
             Render();
             return _view;
         }, 100));
-        _server = new AgentPipeServer(HookProtocol.PipeName, Handle);
-        _server.Start();
+        var endpoint = HookProtocol.Endpoint.Create();
+        _server = new AgentPipeServer(endpoint.PipeName, Handle);
+        try
+        {
+            _server.Start();
+            endpoint.Publish(Paths.Root);
+        }
+        catch (Exception ex)
+        {
+            _server.Dispose();
+            _server = null;
+            Logger.Error("agent pipe startup", ex);
+            island.ShowToast(Strings.T("agents.pipeUnavailable"));
+        }
         Settings.Changed += OnSettingsChanged;
     }
 

@@ -2,6 +2,9 @@
 
 One line each: decision — why.
 
+## WPF audit repairs
+- SW-C2 publishes a per-launch endpoint and pins the executable at hook installation. Reinstall existing hooks to upgrade the helper and refresh the pin after moving the app.
+
 ## M0
 - Repo root is the solution root (`Isle.sln` next to `SPEC.md`) — the working folder already is the dedicated project folder.
 - `Isle.sln` in classic `.sln` format (not `.slnx`) — matches the spec's file name and older tooling.

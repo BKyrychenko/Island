@@ -1,5 +1,10 @@
 # PROGRESS
 
+## WPF audit repairs
+
+- Latest: SW-C2 reserves a random current-user pipe and checks the server PID and pinned executable before sending a hook request. Agent tests passed on Windows.
+- Next: SW-C3 / UI-H2, show the full request before approval.
+
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 
 ## Milestones

@@ -16,45 +16,32 @@ public sealed class AgentPipeServer(string pipeName, Func<HookMessage, Cancellat
     public void Start()
     {
         if (_cts is not null) return;
+        var first = Create(first: true);
         _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
-        // The first instance is created here, so the pipe exists as soon as Start returns (a hook arriving right
-        // after start-up must not see "no island").
-        NamedPipeServerStream? first = null;
-        try { first = Create(); }
-        catch (Exception ex) { Logger.Warn($"agent pipe: {ex.GetType().Name}"); }
-        _ = Task.Run(() => AcceptLoop(first, ct));
+        _ = AcceptLoop(first, _cts.Token);
     }
 
-    NamedPipeServerStream Create() =>
+    NamedPipeServerStream Create(bool first = false) =>
         new(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly |
+            (first ? PipeOptions.FirstPipeInstance : PipeOptions.None));
 
-    async Task AcceptLoop(NamedPipeServerStream? next, CancellationToken ct)
+    async Task AcceptLoop(NamedPipeServerStream listener, CancellationToken ct)
     {
-        var failures = 0;
-        while (!ct.IsCancellationRequested)
+        try
         {
-            NamedPipeServerStream? server = next;
-            next = null;
-            try
+            while (!ct.IsCancellationRequested)
             {
-                server ??= Create();
-                await server.WaitForConnectionAsync(ct).ConfigureAwait(false);
-                failures = 0;
-                var s = server;
-                server = null;
-                _ = Task.Run(() => Serve(s, ct), CancellationToken.None);
-            }
-            catch (OperationCanceledException) { server?.Dispose(); break; }
-            catch (Exception ex)
-            {
-                server?.Dispose();
-                Logger.Warn($"agent pipe: {ex.GetType().Name}");
-                if (++failures > 5) { Logger.Warn("agent pipe stopped after repeated failures"); break; }
-                try { await Task.Delay(1000 * failures, ct).ConfigureAwait(false); } catch (OperationCanceledException) { break; }
+                await listener.WaitForConnectionAsync(ct).ConfigureAwait(false);
+                var connected = listener;
+                // Keep a listener open before handing the connected instance to its request.
+                listener = Create();
+                _ = Serve(connected, ct);
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex) { Logger.Error("agent pipe accept", ex); }
+        finally { listener.Dispose(); }
     }
 
     async Task Serve(NamedPipeServerStream pipe, CancellationToken ct)

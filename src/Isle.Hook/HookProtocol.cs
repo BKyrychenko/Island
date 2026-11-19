@@ -1,4 +1,8 @@
+using System.Diagnostics;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -9,26 +13,55 @@ namespace Isle.Agents;
 /// <summary>
 /// Wire protocol between Isle.Hook.exe (pipe client, one connection per hook call) and the island (pipe server).
 /// Compiled into both projects. One UTF-8 JSON line each way:
-///   hook → island: {"v":1,"agent":"claude","wait":true,"timeout":60,"input":{…the hook's stdin JSON…}}
+///   hook → island: {"v":2,"agent":"claude","wait":true,"timeout":60,"input":{…the hook's stdin JSON…}}
 ///   island → hook (only when wait = true): {"decision":"allow"|"deny"|"answer"|"none","message":"…","answers":{"question":"label"}}
 /// The hook turns the reply into the agent's hook output JSON (<see cref="BuildOutput"/>); "none" or any failure
 /// prints nothing and exits 0, so the agent's normal terminal prompt appears (fail open).
 /// </summary>
 public static class HookProtocol
 {
-    public const int Version = 1;
+    public const int Version = 2;
     public const int DefaultTimeoutSeconds = 60;
     public const int MaxLineBytes = 1 << 20;
 
-    /// <summary>Per-user pipe name (the pipe is also created with CurrentUserOnly).</summary>
-    public static string PipeName
+    public record Endpoint(string PipeName, int ProcessId)
     {
-        get
+        const string Prefix = "Isle.Agents.v2.";
+
+        public static Endpoint Create() => new(Prefix + Guid.NewGuid().ToString("N"), Environment.ProcessId);
+
+        public static Endpoint? Read(string root)
         {
-            var user = new StringBuilder();
-            foreach (var c in Environment.UserName) user.Append(char.IsLetterOrDigit(c) ? c : '_');
-            return "Isle.Agents.v1." + user;
+            var path = Path.Combine(root, "agents-endpoint.json");
+            if (!File.Exists(path) || new FileInfo(path).Length > 1024) return null;
+            var endpoint = JsonSerializer.Deserialize<Endpoint>(File.ReadAllText(path));
+            if (endpoint?.PipeName is not { } name || endpoint.ProcessId <= 0 ||
+                !name.StartsWith(Prefix, StringComparison.Ordinal) || !Guid.TryParseExact(name[Prefix.Length..], "N", out _))
+                return null;
+            return endpoint;
         }
+
+        public void Publish(string root) => WritePrivate(Path.Combine(root, "agents-endpoint.json"), JsonSerializer.Serialize(this));
+    }
+
+    public static string TrustedPathFile(string root) => Path.Combine(root, "bin", "Isle.Hook.server");
+
+    /// <summary>Atomically publish a file with access limited to the installing Windows account.</summary>
+    public static void WritePrivate(string path, string text)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        using var identity = WindowsIdentity.GetCurrent();
+        var security = new FileSecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(identity.User!, FileSystemRights.FullControl, AccessControlType.Allow));
+        var temp = new FileInfo(path + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            using (var stream = temp.Create(FileMode.CreateNew, FileSystemRights.Write, FileShare.None, 4096, FileOptions.None, security))
+            using (var writer = new StreamWriter(stream)) writer.Write(text);
+            File.Move(temp.FullName, path, overwrite: true);
+        }
+        finally { if (File.Exists(temp.FullName)) File.Delete(temp.FullName); }
     }
 
     public const string AskUserQuestion = "AskUserQuestion";
@@ -136,7 +169,7 @@ public static class HookProtocol
     /// The whole hook run: parse args + stdin, talk to the island, return the text for stdout (null = print nothing).
     /// Never throws; every failure means "no decision" (fail open).
     /// </summary>
-    public static async Task<string?> RunClientAsync(string[] args, string stdin, string pipeName, int connectMs = 400)
+    public static async Task<string?> RunClientAsync(string[] args, string stdin, Endpoint endpoint, string trustedPath, int connectMs = 400)
     {
         try
         {
@@ -153,10 +186,14 @@ public static class HookProtocol
 
             var wait = NeedsAnswer(input, async);
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(wait ? timeout : 5));
-            if (!PipeMayExist(pipeName)) return null; // no island → don't spend the connect timeout
-            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            if (!PipeMayExist(endpoint.PipeName)) return null; // no island → don't spend the connect timeout
+            using var pipe = new NamedPipeClientStream(".", endpoint.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             try { await pipe.ConnectAsync(connectMs, cts.Token).ConfigureAwait(false); }
             catch (Exception) { return null; } // island not running → normal flow
+
+            if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var pid) || pid != endpoint.ProcessId) return null;
+            using var server = Process.GetProcessById(endpoint.ProcessId);
+            if (!string.Equals(server.MainModule?.FileName, trustedPath, StringComparison.OrdinalIgnoreCase)) return null;
 
             await WriteLineAsync(pipe, Request(agent, wait, timeout, input), cts.Token).ConfigureAwait(false);
             if (!wait) return null;
@@ -181,26 +218,30 @@ public static class HookProtocol
     [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool WaitNamedPipe(string name, uint timeoutMs);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint serverProcessId);
+
     public static string Str(JsonObject o, string name) =>
         o.TryGetPropertyValue(name, out var v) && v is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : "";
 
     /// <summary>Reads one '\n'-terminated UTF-8 line (without the newline); null on end of stream or over-long line.</summary>
     public static async Task<string?> ReadLineAsync(Stream s, CancellationToken ct)
     {
-        var buf = new MemoryStream();
+        using var buf = new MemoryStream();
         var one = new byte[4096];
         while (true)
         {
             var n = await s.ReadAsync(one, ct).ConfigureAwait(false);
-            if (n == 0) return buf.Length > 0 ? Encoding.UTF8.GetString(buf.GetBuffer(), 0, (int)buf.Length) : null;
+            if (n == 0) return null;
             var nl = Array.IndexOf(one, (byte)'\n', 0, n);
+            if (buf.Length + (nl < 0 ? n : nl) > MaxLineBytes) return null;
             if (nl >= 0)
             {
                 buf.Write(one, 0, nl);
                 return Encoding.UTF8.GetString(buf.GetBuffer(), 0, (int)buf.Length);
             }
             buf.Write(one, 0, n);
-            if (buf.Length > MaxLineBytes) return null;
         }
     }
 

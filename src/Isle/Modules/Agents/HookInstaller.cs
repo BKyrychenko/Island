@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Isle.Agents;
 using Isle.Core;
 
 namespace Isle.Modules.Agents;
@@ -100,6 +101,7 @@ public static class HookInstaller
     {
         var root = File.Exists(t.ConfigPath) ? ReadRoot(t.ConfigPath) ?? new JsonObject() : new JsonObject();
         var exe = CopyHelper(sourceDir);
+        HookProtocol.WritePrivate(HookProtocol.TrustedPathFile(Paths.Root), Environment.ProcessPath!);
         var backup = Backup(t.ConfigPath, now);
         Merge(root, t.Agent, exe, timeoutSeconds);
         JsonStore.WriteAtomic(t.ConfigPath, root.ToJsonString(Write) + Environment.NewLine);

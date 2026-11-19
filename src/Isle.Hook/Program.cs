@@ -11,7 +11,12 @@ try
     using (var stdin = Console.OpenStandardInput())
     using (var reader = new StreamReader(stdin, new UTF8Encoding(false)))
         text = reader.ReadToEnd();
-    var output = await HookProtocol.RunClientAsync(args, text, HookProtocol.PipeName);
+    // The installer places the helper in the data directory's bin folder.
+    var root = Directory.GetParent(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory))!.FullName;
+    var endpoint = HookProtocol.Endpoint.Read(root);
+    if (endpoint is null) return 0;
+    var trustedPath = File.ReadAllText(HookProtocol.TrustedPathFile(root));
+    var output = await HookProtocol.RunClientAsync(args, text, endpoint, trustedPath);
     if (output is not null)
     {
         using var stdout = Console.OpenStandardOutput();

@@ -1,4 +1,3 @@
-using System.Net.Http;
 using System.Windows.Threading;
 using Isle.Core;
 using Isle.Views.AiChat;
@@ -6,19 +5,15 @@ using Isle.Views.AiChat;
 namespace Isle.Modules.AiChat;
 
 /// <summary>
-/// AI chat (module id "ai"): bring-your-own-key chat with Anthropic or any OpenAI-compatible server. Owns the
-/// conversations (`chats.json`), the AI tab, and one streaming request at a time. The HTTP client is created on the
-/// first request and disposed 2 minutes after the last one. No network unless the user sends something.
-/// Options: ai.provider ("anthropic"/"openai"), ai.anthropic.model/key, ai.openai.base/model/key (keys DPAPI).
+/// AI chat and text actions through a signed-in Codex or Claude Code CLI. Owns the conversations
+/// (`chats.json`), the AI tab and one active request at a time.
 /// </summary>
-public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, IChatProvider>? providerFactory = null, ChatStore? store = null) : IModule, IDisposable
+public sealed class AiModule(IslandWindow island, Func<AiProviderKind, IChatProvider>? providerFactory = null, ChatStore? store = null) : IModule, IDisposable
 {
     public const string TabId = "ai";
 
     ChatStore? _store;
     AiChatView? _view;
-    HttpClient? _http;
-    DispatcherTimer? _idle;
     CancellationTokenSource? _run;
     Conversation? _current;
     AiPopupView? _popup;
@@ -77,7 +72,7 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
         Popup.ShowQuestion(question.Trim());
     }
 
-    /// <summary>Opens the AI tab with its provider settings (from the popup's "no key" error).</summary>
+    /// <summary>Opens the AI tab with its provider settings.</summary>
     public void OpenSettings()
     {
         island.HideOverlay();
@@ -128,6 +123,7 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
         Store.Delete(c.Id);
         if (ReferenceEquals(c, _current)) Select(Store.All.FirstOrDefault());
         else _view?.ShowChat(_current);
+        _view?.ForgetDraft(c);
     }
 
     public void SetSystemPrompt(string text)
@@ -140,39 +136,56 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
     // ---- sending ----
 
     /// <summary>Adds the user's message to the current chat and streams the answer into it.</summary>
-    public async Task Send(string text, List<ChatAttachment> attachments)
+    public async Task Send(string text, List<ChatAttachment> attachments, Action? accepted = null)
     {
         if (Busy || (text.Trim().Length == 0 && attachments.Count == 0)) return;
         var chat = _current ?? NewChat();
-        chat.Messages.Add(new ChatMessage { Role = "user", Text = text.Trim(), Attachments = attachments });
+        var user = new ChatMessage { Role = "user", Text = text.Trim(), Attachments = attachments };
+        chat.Messages.Add(user);
         var answer = new ChatMessage { Role = "assistant" };
         chat.Messages.Add(answer);
         Store.Touch(chat);
         _view?.ShowChat(chat);
-        await StreamInto(chat, answer, d => { if (ReferenceEquals(_current, chat)) _view?.Streamed(answer); });
+        var acknowledged = false;
+        var stream = StreamInto(chat, answer, d =>
+        {
+            if (!acknowledged && !string.IsNullOrWhiteSpace(d)) { acknowledged = true; accepted?.Invoke(); }
+            if (ReferenceEquals(_current, chat)) _view?.Streamed(answer);
+        });
+        if (ReferenceEquals(_current, chat)) _view?.ShowChat(chat);
+        await stream;
+        if (!acknowledged) chat.Messages.Remove(user); // The editable draft is still in the composer.
         Store.Touch(chat);
         if (ReferenceEquals(_current, chat)) _view?.Finished(answer);
     }
 
     /// <summary>Streams an answer for <paramref name="chat"/> into <paramref name="answer"/>; failures become a readable
     /// error text on the message (never thrown). Used by the tab and (later) by text actions and the command bar.</summary>
-    public async Task StreamInto(Conversation chat, ChatMessage answer, Action<string>? delta = null)
+    public Task StreamInto(Conversation chat, ChatMessage answer, Action<string>? delta = null) =>
+        StreamInto(AiProviders.FromSettings(S), chat, answer, delta);
+
+    async Task StreamInto(AiProviderKind kind, Conversation chat, ChatMessage answer, Action<string>? delta = null)
     {
-        var cfg = AiConfig.FromSettings(S);
-        if (!cfg.IsReady) { Fail(answer, new AiException("ai.err.noKey")); return; }
+        if (!IsProviderInstalled(kind))
+        {
+            Fail(answer, new AiException(AiProviders.MissingKey(kind)));
+            return;
+        }
         if (_run is not null) return;
         _run = new CancellationTokenSource();
+        _view?.RefreshBusy();
         var ct = _run.Token;
-        _idle?.Stop();
-        Logger.Info($"ai request ({cfg.Provider})");
+        Logger.Info($"ai request ({kind})");
         try
         {
-            var provider = CreateProvider(cfg);
-            await foreach (var piece in provider.StreamAsync(chat, ct).WithCancellation(ct))
+            var provider = providerFactory?.Invoke(kind)
+                ?? (kind == AiProviderKind.ClaudeCode ? (IChatProvider)new ClaudeCodeProvider() : new CodexChatProvider());
+            await foreach (var text in provider.StreamAsync(chat, ct).WithCancellation(ct))
             {
-                answer.Text += piece;
-                delta?.Invoke(piece);
+                answer.Text = text;
+                delta?.Invoke(text);
             }
+            ct.ThrowIfCancellationRequested();
             if (answer.Text.Trim().Length == 0) Fail(answer, new AiException("ai.err.empty"));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { answer.Stopped = true; }
@@ -186,7 +199,7 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
         {
             _run.Dispose();
             _run = null;
-            ArmIdle();
+            _view?.RefreshBusy();
             Memory.TrimSoon(5);
         }
     }
@@ -201,51 +214,26 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
 
     public void Cancel() => _run?.Cancel();
 
-    IChatProvider CreateProvider(AiConfig cfg)
-    {
-        _http ??= new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        if (providerFactory is not null) return providerFactory(cfg, _http);
-        return cfg.Provider == AiProviderKind.OpenAi ? new OpenAiProvider(_http, cfg) : new AnthropicProvider(cfg, _http);
-    }
-
-    void ArmIdle()
-    {
-        if (_idle is null)
-        {
-            _idle = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMinutes(2) };
-            _idle.Tick += (_, _) => { _idle!.Stop(); if (!Busy) { _http?.Dispose(); _http = null; } };
-        }
-        _idle.Stop();
-        _idle.Start();
-    }
+    internal bool IsProviderInstalled(AiProviderKind kind) => providerFactory is not null ||
+        (kind == AiProviderKind.ClaudeCode ? ClaudeCodeProvider.FindExecutable() : CodexChatProvider.FindExecutable()) is not null;
 
     // ---- settings ----
 
-    /// <summary>Saves provider settings; an empty key field keeps the stored key.</summary>
-    public static void SaveConfig(AiProviderKind kind, string model, string baseUrl, string key)
+    internal static void SaveConfig(AiProviderKind kind)
     {
-        var p = kind == AiProviderKind.OpenAi ? "ai.openai" : "ai.anthropic";
-        S.SetOpt("ai.provider", kind == AiProviderKind.OpenAi ? "openai" : "anthropic");
-        S.SetOpt(p + ".model", model.Trim());
-        if (kind == AiProviderKind.OpenAi) S.SetOpt("ai.openai.base", baseUrl.Trim());
-        if (key.Trim().Length > 0) S.SetOpt(p + ".key", Secret.Protect(key.Trim()));
+        S.SetOpt("ai.provider", kind == AiProviderKind.ClaudeCode ? "claude" : "codex");
         S.Save("Options");
     }
 
-    public static void ForgetKey(AiProviderKind kind)
-    {
-        S.Options.Remove(kind == AiProviderKind.OpenAi ? "ai.openai.key" : "ai.anthropic.key");
-        S.Save("Options");
-    }
-
-    /// <summary>Sends a one-line test message with the saved settings. Returns null on success, else a readable error.</summary>
-    public async Task<string?> TestConnection()
+    /// <summary>Tests the selected provider without changing the saved choice.</summary>
+    internal async Task<string?> TestConnection(AiProviderKind kind)
     {
         var chat = new Conversation();
         chat.Messages.Add(new ChatMessage { Role = "user", Text = "Reply with the single word OK." });
         var answer = new ChatMessage { Role = "assistant" };
-        await StreamInto(chat, answer);
-        return answer.Error ? answer.Text : answer.Note.Length > 0 && !answer.Stopped ? answer.Note : null;
+        await StreamInto(kind, chat, answer);
+        if (answer.Stopped) return Strings.T("ai.stopped");
+        return answer.Error ? answer.Text : answer.Note.Length > 0 ? answer.Note : null;
     }
 
     public void Stop()
@@ -254,14 +242,10 @@ public sealed class AiModule(IslandWindow island, Func<AiConfig, HttpClient, ICh
         _askSub?.Dispose();
         _askSub = null;
         island.Hotkeys.Unregister("textActions");
-        if (_popup is not null) island.HideOverlay();
+        if (_popup is not null) island.HideOverlay(_popup);
         _popup = null;
-        _idle?.Stop();
-        _idle = null;
         island.RemoveTab(TabId);
         _view = null;
-        _http?.Dispose();
-        _http = null;
     }
 
     public void Dispose() => Stop();

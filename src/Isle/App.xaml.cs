@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
 using Isle.Core;
@@ -10,6 +11,8 @@ public partial class App : Application
 {
     const string MutexName = @"Local\Isle.SingleInstance.7c1f0b52";
     Mutex? _mutex;
+    Modules.Tools.ToolsModule? _tools;
+    bool _quitting;
 
     public static ModuleHost Host { get; } = new();
     public static IslandWindow? Island { get; private set; }
@@ -52,6 +55,7 @@ public partial class App : Application
         if (!Settings.Current.OptBool("render.hardware"))
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         Island = new IslandWindow();
+        Island.Closing += OnIslandClosing;
         Island.Show();
 
         // Everything else waits until the pill has been drawn once.
@@ -76,7 +80,7 @@ public partial class App : Application
             Host.Register("clipboard", () => new Modules.Clipboard.ClipboardModule(Island!));
             Host.Register("shelf", () => new Modules.Shelf.ShelfModule(Island!));
             Host.Register("commands", () => new Modules.Commands.CommandModule(Island!, () => Host.Get<Modules.Timers.TimersModule>("timers")?.Controller));
-            Host.Register("tools", () => new Modules.Tools.ToolsModule(Island!));
+            Host.Register("tools", () => _tools ??= new Modules.Tools.ToolsModule(Island!));
             Host.Register("weather", () => new Modules.Weather.WeatherModule(Island!));
             Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
             Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
@@ -134,7 +138,7 @@ public partial class App : Application
         if (Island is not { } w) return;
         var done = target switch
         {
-            "weather" when Host.IsEnabled("weather") => Do(() => { w.HideOverlay(); w.Expand("weather", sticky: true); }),
+            "weather" => Do(Host.Get<Modules.Weather.WeatherModule>("weather") is { } weather ? weather.OpenSetup : null),
             "ai" => Do(Host.Get<Modules.AiChat.AiModule>("ai") is { } ai ? ai.OpenSettings : null),
             "hooks" => Do(Host.Get<Modules.Agents.AgentsModule>("agents") is { } ag ? ag.OpenHooks : null),
             "characters" => Do(Host.Get<Modules.Characters.CharactersModule>("characters") is { } ch ? ch.OpenGallery : null),
@@ -150,7 +154,27 @@ public partial class App : Application
         }
     }
 
-    public static void Quit() => Current.Shutdown(0);
+    void OnIslandClosing(object? sender, CancelEventArgs e)
+    {
+        e.Cancel = true;
+        Quit();
+    }
+
+    async void Quit()
+    {
+        if (_quitting) return;
+        _quitting = true;
+        try
+        {
+            if (_tools is not null && !await _tools.FinishRecordingAsync(exiting: true)) return;
+            // Leave the native Closing callback before WPF begins shutting down its windows.
+            await Dispatcher.Yield(DispatcherPriority.Normal);
+            if (Island is not null) Island.Closing -= OnIslandClosing;
+            Shutdown(0);
+        }
+        catch (Exception ex) { Logger.Error("quit", ex); }
+        finally { _quitting = false; }
+    }
 
     protected override void OnExit(ExitEventArgs e)
     {

@@ -21,6 +21,7 @@ public partial class IslandWindow
     bool _hoverMoved, _awaitLeave;
     bool _sticky;           // opened by hotkey/API: stay open until the cursor has visited once
     bool _hasFocus;         // island took keyboard focus for a text box
+    bool _focusOnExpand;
     IntPtr _previousForeground;
     readonly HashSet<string> _holdOpen = [];
     readonly HashSet<string> _hideReasons = [];
@@ -37,8 +38,13 @@ public partial class IslandWindow
         PreviewMouseLeftButtonDown += OnPreviewMouseDown;
         PreviewKeyDown += (_, e) =>
         {
-            if (_hasFocus && e.Key == Key.Escape) { Collapse(); e.Handled = true; }
-            if (_hasFocus && _expanded && Keyboard.Modifiers == ModifierKeys.Control &&
+            if (_hasFocus && e.Key == Key.Escape)
+            {
+                if (MoreOverlay.IsVisible) HideMoreOverlay();
+                else Collapse();
+                e.Handled = true;
+            }
+            if (_hasFocus && _expanded && _overlay?.Visibility != Visibility.Visible && Keyboard.Modifiers == ModifierKeys.Control &&
                 e.Key >= Key.D1 && e.Key <= Key.D9)
             {
                 var tabs = TabList.OrderBy(t => t.Order).ToList();
@@ -54,7 +60,8 @@ public partial class IslandWindow
             if (click is not null) Safe(click, "pill click");
             else Expand();
         };
-        Loaded += (_, _) => UpdateEdgeHide();
+        Loaded += (_, _) => { CheckForeground(); UpdateEdgeHide(); };
+        Panel.IsVisibleChanged += (_, _) => FocusExpandedPanel();
         KeyboardNavigation.SetTabNavigation(Panel, KeyboardNavigationMode.Cycle);
     }
 
@@ -171,6 +178,7 @@ public partial class IslandWindow
     {
         if (!_expanded) return;
         _expanded = false;
+        _focusOnExpand = false;
         _insideSince = _outsideSince = 0;
         _hoverMoved = false;
         _awaitLeave = true;
@@ -196,8 +204,23 @@ public partial class IslandWindow
         {
             Expand(sticky: true);
             AcquireFocus();
-            Dispatcher.BeginInvoke(() => Panel.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)), DispatcherPriority.Loaded);
+            _focusOnExpand = _hasFocus;
+            FocusExpandedPanel();
         }
+    }
+
+    void FocusExpandedPanel()
+    {
+        if (!_focusOnExpand || !_hasFocus || !_expanded || !Panel.IsVisible) return;
+        _focusOnExpand = false;
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (!_hasFocus || !_expanded || !Panel.IsVisible) return;
+            if (_overlay is Views.SettingsPanel.SettingsView { IsVisible: true } settings && !settings.IsKeyboardFocusWithin)
+                settings.FocusSection();
+            else if (!Panel.IsKeyboardFocusWithin)
+                (_overlay is { IsVisible: true } view ? view : Panel).MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        }, DispatcherPriority.Loaded);
     }
 
     /// <summary>Keeps the panel open regardless of the pointer until <see cref="ReleaseOpen"/> (drag, dialogs, busy work).</summary>
@@ -212,12 +235,12 @@ public partial class IslandWindow
 
     void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (MoreOverlay.IsVisible && !MoreOverlay.IsMouseOver && !Tabs.MoreButton.IsMouseOver) HideMoreOverlay();
         // Text inputs need real keyboard focus; everything else works without activating the island.
         for (var d = e.OriginalSource as DependencyObject; d is not null; d = GetParent(d))
         {
             if (d is TextBoxBase or PasswordBox) { AcquireFocus(); return; }
         }
-        if (MoreOverlay.IsVisible && !MoreOverlay.IsMouseOver) HideMoreOverlay();
     }
 
     static DependencyObject? GetParent(DependencyObject d) =>
@@ -250,6 +273,7 @@ public partial class IslandWindow
     {
         if (!_hasFocus) return;
         _hasFocus = false;      // the user clicked another window: focus is already gone, do not pull it back
+        _focusOnExpand = false;
         ApplyExStyle();
         Keyboard.ClearFocus();
         if (_expanded && !IsCursorInside() && _holdOpen.Count == 0) Collapse();
@@ -326,10 +350,26 @@ public partial class IslandWindow
             {
                 var name = ForegroundWatcher.ProcessName(fg);
                 excluded = name.Length > 0 && s.ExcludedApps.Any(a => IsSameApp(a, name));
+                if (excluded && s.ExcludedAppsOnlyOnOverlap)
+                    excluded = ForegroundWatcher.TryGetExternalWindowBounds(fg, out var bounds) && CapsuleOverlaps(bounds);
             }
             SetHidden("excluded", excluded);
         }
         catch (Exception ex) { Logger.Error("foreground check", ex); }
+    }
+
+    bool CapsuleOverlaps(Native.RECT bounds)
+    {
+        var scale = UiScale.ScaleX * VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var screen = Screen;
+        return BoundsOverlapCapsule(bounds, screen, _pillW * scale, _pillH * scale, TopGap * scale);
+    }
+
+    internal static bool BoundsOverlapCapsule(Native.RECT bounds, ScreenInfo screen, double width, double height, double gap)
+    {
+        var left = screen.Left + (screen.Width - width) / 2;
+        var top = screen.Top + gap;
+        return bounds.Left < left + width && bounds.Right > left && bounds.Top < top + height && bounds.Bottom > top;
     }
 
     internal static bool IsSameApp(string listed, string processName)
@@ -339,11 +379,12 @@ public partial class IslandWindow
         return listed.Length > 0 && string.Equals(listed, processName, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>A 2-second check for windows that go fullscreen without a foreground change (F11, video). Only while the setting is on.</summary>
+    /// <summary>Recheck fullscreen or a moved window even when the foreground process stays the same.</summary>
     void UpdateHousekeeping()
     {
         if (_snapshotMode) return;
-        var needed = Settings.Current.HideInFullscreen;
+        var s = Settings.Current;
+        var needed = s.HideInFullscreen || (s.ExcludedAppsOnlyOnOverlap && s.ExcludedApps.Count > 0);
         if (needed && _housekeeping is null)
         {
             _housekeeping = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };

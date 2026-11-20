@@ -6,7 +6,7 @@ namespace Isle;
 public partial class IslandWindow
 {
     /// <summary>Set by the shelf module: tab to open on drag-over and what to do with dropped paths. Null = drops refused.</summary>
-    public (string TabId, Action<string[]> Drop, Action<bool> Hint)? FileDropTarget { get; set; }
+    public (string TabId, Func<string[], bool> Drop, Action<bool> Hint)? FileDropTarget { get; set; }
 
     void InitDrop()
     {
@@ -25,7 +25,8 @@ public partial class IslandWindow
             e.Effects = DragDropEffects.None;
             return;
         }
-        e.Effects = DragDropEffects.Link | DragDropEffects.Copy;
+        e.Effects = ShelfDropEffect(e.AllowedEffects);
+        if (e.Effects == DragDropEffects.None) return;
         if (!_expanded) Expand(t.TabId, sticky: true);
         else SelectTab(t.TabId, animate: true);
         t.Hint(true);
@@ -34,9 +35,15 @@ public partial class IslandWindow
     void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        e.Effects = DragDropEffects.None;
         if (FileDropTarget is not { } t) return;
         t.Hint(false);
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
-            Safe(() => t.Drop(files), "shelf drop");
+        var effect = ShelfDropEffect(e.AllowedEffects);
+        if (effect != DragDropEffects.None && !_holdOpen.Contains("shelf-drag") &&
+            e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            Safe(() => { if (t.Drop(files)) e.Effects = effect; }, "shelf drop");
     }
+
+    static DragDropEffects ShelfDropEffect(DragDropEffects allowed) =>
+        allowed.HasFlag(DragDropEffects.Link) ? DragDropEffects.Link : allowed & DragDropEffects.Copy;
 }

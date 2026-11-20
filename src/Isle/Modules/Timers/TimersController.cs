@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Isle.Core;
 using Isle.Modules.Reminders;
 
@@ -11,6 +12,9 @@ public sealed class TimersController
 {
     readonly bool _persist;
     readonly string _timersPath, _remindersPath;
+    string _savedTimers, _savedReminders;
+    public bool LastSaveFailed { get; private set; }
+    public event Action? SaveFailed;
 
     public Func<DateTimeOffset> Clock { get; }
     public TimeZoneInfo Zone { get; }
@@ -20,32 +24,40 @@ public sealed class TimersController
     /// <summary>Raised after any change (UI thread).</summary>
     public event Action? Changed;
 
-    public TimersController(Func<DateTimeOffset>? clock = null, TimeZoneInfo? zone = null, bool persist = true, TimerDoc? timers = null, ReminderDoc? reminders = null)
+    public TimersController(Func<DateTimeOffset>? clock = null, TimeZoneInfo? zone = null, bool persist = true, TimerDoc? timers = null, ReminderDoc? reminders = null, string? storageDirectory = null)
     {
         Clock = clock ?? (() => DateTimeOffset.Now);
         Zone = zone ?? TimeZoneInfo.Local;
         _persist = persist;
-        _timersPath = Paths.File("timers.json");
-        _remindersPath = Paths.File("reminders.json");
+        _timersPath = storageDirectory is null ? Paths.File("timers.json") : Path.Combine(storageDirectory, "timers.json");
+        _remindersPath = storageDirectory is null ? Paths.File("reminders.json") : Path.Combine(storageDirectory, "reminders.json");
         Timers = new TimerBook(timers ?? (persist ? JsonStore.Load<TimerDoc>(_timersPath) : new TimerDoc()), Clock);
         Reminders = new ReminderBook(reminders ?? (persist ? JsonStore.Load<ReminderDoc>(_remindersPath) : new ReminderDoc()), Clock, Zone);
+        _savedTimers = JsonSerializer.Serialize(Timers.Doc, JsonStore.Options);
+        _savedReminders = JsonSerializer.Serialize(Reminders.Doc, JsonStore.Options);
     }
 
-    public enum SubmitResult { Timer, Reminder, Invalid, Full }
+    public enum SubmitResult { Timer, Reminder, Invalid, Full, SaveFailed }
 
     /// <summary>Text from the input box: a duration starts a timer, a phrase with a time sets (or edits) a reminder.</summary>
     public SubmitResult Submit(string input, string? editReminderId = null)
     {
         input = input.Trim();
         if (input.Length == 0) return SubmitResult.Invalid;
-        if (editReminderId is null && DurationParser.TryParse(input, out var d, out var label))
-            return AddTimer(d, label) ? SubmitResult.Timer : SubmitResult.Full;
-        var parsed = ReminderParser.Parse(input, Clock(), Zone);
+        ParsedReminder? parsed;
+        if (editReminderId is null && DurationParser.TryParse(input, out var d, out var label, out var ambiguousPrefixLength))
+        {
+            parsed = ambiguousPrefixLength > 0 && label.Length > 0
+                ? ReminderParser.Parse(input, Clock(), Zone, ambiguousPrefixLength)
+                : null;
+            if (parsed is null)
+                return AddTimer(d, label) ? SubmitResult.Timer : LastSaveFailed ? SubmitResult.SaveFailed : SubmitResult.Full;
+        }
+        else parsed = ReminderParser.Parse(input, Clock(), Zone);
         if (parsed is null) return SubmitResult.Invalid;
         if (editReminderId is not null && Reminders.Replace(editReminderId, parsed, input)) { }
         else Reminders.Add(parsed, input);
-        Commit(reminders: true);
-        return SubmitResult.Reminder;
+        return Commit(reminders: true) ? SubmitResult.Reminder : SubmitResult.SaveFailed;
     }
 
     /// <summary>Adds a reminder from a phrase (command bar). Returns the reminder or null when not understood.</summary>
@@ -54,15 +66,14 @@ public sealed class TimersController
         var parsed = ReminderParser.Parse(phrase, Clock(), Zone);
         if (parsed is null) return null;
         var r = Reminders.Add(parsed, phrase);
-        Commit(reminders: true);
-        return r;
+        return Commit(reminders: true) ? r : null;
     }
 
     public bool AddTimer(TimeSpan duration, string label = "")
     {
+        LastSaveFailed = false;
         if (Timers.Add(duration, label) is null) return false;
-        Commit(timers: true);
-        return true;
+        return Commit(timers: true);
     }
 
     public void Pause(string id) { if (Timers.Pause(id)) Commit(timers: true); }
@@ -94,7 +105,8 @@ public sealed class TimersController
     {
         var t = Timers.CollectFinished();
         var r = Reminders.CollectDue();
-        if (t.Count > 0 || r.Count > 0) Commit(timers: t.Count > 0, reminders: r.Count > 0);
+        if (t.Count > 0 && !Commit(timers: true)) t.Clear();
+        if (r.Count > 0 && !Commit(reminders: true)) r.Clear();
         return (t, r);
     }
 
@@ -109,15 +121,36 @@ public sealed class TimersController
         }
     }
 
-    void Commit(bool timers = false, bool reminders = false)
+    bool Commit(bool timers = false, bool reminders = false)
     {
-        if (_persist)
+        var saved = true;
+        if (timers)
         {
-            if (timers) JsonStore.Save(_timersPath, Timers.Doc);
-            if (reminders) JsonStore.Save(_remindersPath, Reminders.Doc);
+            if (!_persist || JsonStore.Save(_timersPath, Timers.Doc))
+                _savedTimers = JsonSerializer.Serialize(Timers.Doc, JsonStore.Options);
+            else
+            {
+                var previous = JsonSerializer.Deserialize<TimerDoc>(_savedTimers, JsonStore.Options)!;
+                Timers.Doc.Timers = previous.Timers;
+                Timers.Doc.Stopwatch = previous.Stopwatch;
+                saved = false;
+            }
         }
+        if (reminders)
+        {
+            if (!_persist || JsonStore.Save(_remindersPath, Reminders.Doc))
+                _savedReminders = JsonSerializer.Serialize(Reminders.Doc, JsonStore.Options);
+            else
+            {
+                Reminders.Doc.Reminders = JsonSerializer.Deserialize<ReminderDoc>(_savedReminders, JsonStore.Options)!.Reminders;
+                saved = false;
+            }
+        }
+        LastSaveFailed = !saved;
         try { Changed?.Invoke(); }
         catch (Exception ex) { Logger.Error("timers changed handler", ex); }
+        if (!saved) SaveFailed?.Invoke();
+        return saved;
     }
 
     // ---- display helpers ----

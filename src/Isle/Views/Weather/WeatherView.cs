@@ -11,17 +11,18 @@ namespace Isle.Views.Weather;
 
 /// <summary>Callbacks from the Weather tab to its module.</summary>
 public sealed record WeatherActions(
-    Func<string, Task<List<Place>>> Search, Action<Place> Pick, Action UseIp, Action Refresh,
+    Func<string, CancellationToken, Task<List<Place>>> Search, Action<Place> Pick, Action<bool> SetIp, Action Refresh,
     Action<bool> SetFahrenheit, Action<bool> SetInPill, Action<bool> SetRainAlerts);
 
 /// <summary>
 /// Weather tab. Report: current conditions on top, then a 24-hour strip or the 7-day forecast (chips switch).
 /// Setup: city search (Open-Meteo geocoding), approximate-location chip, unit / pill / rain-alert chips.
 /// </summary>
-public sealed class WeatherView : Grid
+public sealed class WeatherView : Grid, ITabView
 {
     readonly WeatherActions _a;
     readonly ContentControl _body = new();
+    Action? _resetSearch;
     WeatherReport? _report;
     bool _failed, _fahrenheit, _days;
 
@@ -29,6 +30,16 @@ public sealed class WeatherView : Grid
     {
         _a = actions;
         Children.Add(_body);
+    }
+
+    public void OnShown() { }
+    public void OnHidden() => _resetSearch?.Invoke();
+
+    void SetBody(FrameworkElement content, Action? resetSearch = null)
+    {
+        _resetSearch?.Invoke();
+        _resetSearch = resetSearch;
+        _body.Content = content;
     }
 
     // ---- report ----
@@ -74,7 +85,7 @@ public sealed class WeatherView : Grid
         FrameworkElement body = _days ? Days(r) : Hours(r);
         SetRow(body, 1);
         grid.Children.Add(body);
-        _body.Content = grid;
+        SetBody(grid);
     }
 
     FrameworkElement Hours(WeatherReport r)
@@ -91,7 +102,7 @@ public sealed class WeatherView : Grid
         }
         var scroll = new ScrollViewer
         {
-            Content = strip, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = strip, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
         scroll.PreviewMouseWheel += (_, e) => { scroll.ScrollToHorizontalOffset(scroll.HorizontalOffset - e.Delta / 2.0); e.Handled = true; };
         return scroll;
@@ -142,11 +153,12 @@ public sealed class WeatherView : Grid
 
     // ---- other states ----
 
-    public void ShowLoading() => _body.Content = Centered(Strings.T("wx.loading"), null);
+    public void ShowLoading() => SetBody(Centered(Strings.T("wx.loading")));
 
-    public void ShowError() => _body.Content = Centered(Strings.T("wx.error"), ("wx.retry", _a.Refresh));
+    public void ShowError() => SetBody(Centered(Strings.T("wx.error"),
+        ("wx.retry", _a.Refresh), ("wx.change", () => ShowSetup(Settings.Current.OptBool("weather.ip")))));
 
-    FrameworkElement Centered(string text, (string Key, Action Click)? action)
+    FrameworkElement Centered(string text, params (string Key, Action Click)[] actions)
     {
         var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var i = WxIcon("Wx.Cloud", 24, "FgFaintBrush");
@@ -156,7 +168,7 @@ public sealed class WeatherView : Grid
         var t = Dim(text);
         t.HorizontalAlignment = HorizontalAlignment.Center;
         stack.Children.Add(t);
-        if (action is { } a)
+        foreach (var a in actions)
         {
             var b = Small(a.Key, a.Click);
             b.Margin = new Thickness(0, 8, 0, 0);
@@ -167,8 +179,9 @@ public sealed class WeatherView : Grid
     }
 
     /// <summary>Place search and options. With a report already shown, a Back button returns to it.</summary>
-    public void ShowSetup(bool ipOn)
+    public void ShowSetup(bool ipOn, bool clearReport = false)
     {
+        if (clearReport) _report = null;
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -176,23 +189,42 @@ public sealed class WeatherView : Grid
 
         var top = new DockPanel { LastChildFill = true };
         var results = new StackPanel();
-        var status = Dim(Strings.T(_report is null ? "wx.setupHint" : "wx.current", Settings.Current.Opt("weather.city")));
+        var hint = Strings.T(_report is null ? "wx.setupHint" : "wx.current", Settings.Current.Opt("weather.city"));
+        var status = Dim(hint);
         status.TextWrapping = TextWrapping.Wrap;
         status.Margin = new Thickness(2, 6, 0, 0);
         var box = new TextBox { MinHeight = 30 };
         box.SetResourceReference(StyleProperty, "FlatTextBox");
         var placeholder = new TextBlock { Text = Strings.T("wx.cityPlaceholder"), IsHitTestVisible = false, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         placeholder.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        box.TextChanged += (_, _) => placeholder.Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CancellationTokenSource? pending = null;
+        void ResetSearch()
+        {
+            pending?.Cancel();
+            results.Children.Clear();
+            status.Text = hint;
+        }
+        box.TextChanged += (_, _) =>
+        {
+            ResetSearch();
+            placeholder.Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        };
 
         async void DoSearch()
         {
+            ResetSearch();
             var q = box.Text.Trim();
             if (q.Length < 2) return;
+            using var request = new CancellationTokenSource();
+            pending = request;
             status.Text = Strings.T("wx.searching");
-            results.Children.Clear();
-            var found = await _a.Search(q);
-            ShowResults(results, status, found);
+            try
+            {
+                var found = await _a.Search(q, request.Token);
+                if (!request.IsCancellationRequested) ShowResults(results, status, found);
+            }
+            catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+            finally { if (ReferenceEquals(pending, request)) pending = null; }
         }
         box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; DoSearch(); } };
         if (_report is not null)
@@ -210,7 +242,7 @@ public sealed class WeatherView : Grid
         grid.Children.Add(top);
 
         var chips = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var ip = Toggle("wx.useIp", ipOn, on => { if (on) _a.UseIp(); });
+        var ip = Toggle("wx.useIp", ipOn, _a.SetIp);
         chips.Children.Add(ip);
         chips.Children.Add(Toggle("wx.fahrenheit", Settings.Current.Opt("weather.units") == "F", _a.SetFahrenheit));
         chips.Children.Add(Toggle("wx.inPill", Settings.Current.OptBool("weather.inPill", true), _a.SetInPill));
@@ -222,7 +254,7 @@ public sealed class WeatherView : Grid
         var scroll = new ScrollViewer { Content = lower, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         SetRow(scroll, 2);
         grid.Children.Add(scroll);
-        _body.Content = grid;
+        SetBody(grid, ResetSearch);
     }
 
     void ShowResults(StackPanel results, TextBlock status, List<Place> found)
@@ -243,7 +275,7 @@ public sealed class WeatherView : Grid
             dock.Children.Add(n);
             row.Content = dock;
             var place = p;
-            row.Click += (_, _) => _a.Pick(place);
+            row.Click += (_, _) => { if (row.Parent == results) _a.Pick(place); };
             results.Children.Add(row);
         }
     }

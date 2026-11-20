@@ -32,7 +32,7 @@ public sealed class ShelfView : Grid, ITabView
     string? _selected;
     Point _dragStart;
     string? _dragId;
-    bool _visible, _stale = true;
+    bool _visible;
 
     public ShelfView(ShelfStore store, IslandWindow? island)
     {
@@ -43,22 +43,25 @@ public sealed class ShelfView : Grid, ITabView
 
         var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 6), LastChildFill = false };
         _removeAfter.SetResourceReference(StyleProperty, "Chip");
-        _removeAfter.SetBinding(ContentControl.ContentProperty, Loc("shelf.removeAfterDrop"));
+        var removeLabel = new TextBlock();
+        var removeStyle = new Style(typeof(TextBlock));
+        removeStyle.Setters.Add(new Setter(TextBlock.TextProperty, Loc("shelf.removeAfterDropOff")));
+        var enabled = new DataTrigger { Binding = new System.Windows.Data.Binding(nameof(ToggleButton.IsChecked)) { Source = _removeAfter }, Value = true };
+        enabled.Setters.Add(new Setter(TextBlock.TextProperty, Loc("shelf.removeAfterDropOn")));
+        removeStyle.Triggers.Add(enabled);
+        removeLabel.Style = removeStyle;
+        _removeAfter.Content = removeLabel;
         _removeAfter.IsChecked = Settings.Current.OptBool("shelf.removeAfterDrop");
         _removeAfter.Click += (_, _) => { Settings.Current.SetOpt("shelf.removeAfterDrop", _removeAfter.IsChecked == true); Settings.Current.Save("Options"); };
         DockPanel.SetDock(_removeAfter, Dock.Left);
         bar.Children.Add(_removeAfter);
         var clear = SmallButton("Icon.Trash", "shelf.clear", () =>
-            _island?.ShowToast(Strings.T("shelf.confirmClear"), Strings.T("common.confirmClear"), () =>
-            {
-                _selected = null;
-                _store.Clear();
-            }));
+            _island?.ShowToast(Strings.T("shelf.confirmClear"), Strings.T("common.confirmClear"), _store.Clear));
         DockPanel.SetDock(clear, Dock.Right);
         bar.Children.Add(clear);
         _actions.Children.Add(SmallButton("Icon.Folder", "shelf.open", () => Open(_selected)));
         _actions.Children.Add(SmallButton("Icon.Copy", "shelf.copyPath", CopyPath));
-        _actions.Children.Add(SmallButton("Icon.Close", "shelf.remove", () => { if (_selected is { } id) { _selected = null; _store.Remove(id); } }));
+        _actions.Children.Add(SmallButton("Icon.Close", "shelf.remove", () => { if (_selected is { } id) _store.Remove(id); }));
         DockPanel.SetDock(_actions, Dock.Right);
         bar.Children.Add(_actions);
         Children.Add(bar);
@@ -81,14 +84,24 @@ public sealed class ShelfView : Grid, ITabView
         SetRowSpan(_dropHintHost, 2);
         Children.Add(_dropHintHost);
 
-        _store.Changed += () => { if (_visible) Rebuild(); else _stale = true; };
+        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 2, 4, 2) };
+        error.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        error.SetBinding(TextBlock.TextProperty, Loc("shelf.saveFailed"));
+        SetRow(error, 2);
+        Children.Add(error);
+        void UpdateError() => error.Visibility = _store.SaveFailed ? Visibility.Visible : Visibility.Collapsed;
+        _store.SaveStatusChanged += UpdateError;
+        UpdateError();
+
+        _store.Changed += () => { if (_visible) Rebuild(); };
         Rebuild();
     }
 
     public void OnShown()
     {
         _visible = true;
-        if (_stale) Rebuild();
+        Rebuild();
     }
 
     public void OnHidden()
@@ -101,12 +114,29 @@ public sealed class ShelfView : Grid, ITabView
 
     public void Rebuild()
     {
-        _stale = false;
+        var focused = _tiles.Children.OfType<Button>().FirstOrDefault(b => b.IsKeyboardFocusWithin);
+        var focusIndex = focused is null ? -1 : _tiles.Children.IndexOf(focused);
         _tiles.Children.Clear();
         if (_selected is not null && _store.Find(_selected) is null) _selected = null;
         foreach (var item in _store.Items) _tiles.Children.Add(Tile(item));
         _empty.Visibility = _store.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _actions.Visibility = _selected is null ? Visibility.Collapsed : Visibility.Visible;
+        if (focusIndex >= 0)
+        {
+            var replacement = _tiles.Children.OfType<Button>().FirstOrDefault(b => Equals(b.Tag, focused!.Tag))
+                ?? _tiles.Children.OfType<Button>().ElementAtOrDefault(Math.Min(focusIndex, _tiles.Children.Count - 1));
+            if (replacement is not null) replacement.Focus();
+            else _removeAfter.Focus();
+        }
+    }
+
+    void Select(string id)
+    {
+        _selected = id;
+        foreach (var tile in _tiles.Children.OfType<Button>())
+            if (Equals(tile.Tag, id)) tile.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "SurfaceHoverBrush");
+            else tile.Background = Brushes.Transparent;
+        _actions.Visibility = Visibility.Visible;
     }
 
     FrameworkElement Tile(ShelfItem item)
@@ -127,15 +157,23 @@ public sealed class ShelfView : Grid, ITabView
             m.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
             stack.Children.Add(m);
         }
-        var border = new Border { Child = stack, Padding = new Thickness(4, 6, 4, 6), Margin = new Thickness(0, 0, 4, 4), CornerRadius = new CornerRadius(12), Background = Brushes.Transparent, ToolTip = item.Path };
-        if (item.Id == _selected) border.SetResourceReference(Border.BackgroundProperty, "SurfaceHoverBrush");
+        var border = new Button { Content = stack, Tag = item.Id, Padding = new Thickness(4, 6, 4, 6), MinHeight = 0, Margin = new Thickness(0, 0, 4, 4), Background = Brushes.Transparent, ToolTip = item.Path };
+        border.SetResourceReference(StyleProperty, "GhostButton");
+        System.Windows.Automation.AutomationProperties.SetName(border, name + (missing ? ", " + Strings.T("shelf.missing") : ""));
+        if (item.Id == _selected) border.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "SurfaceHoverBrush");
         var id = item.Id;
-        border.MouseLeftButtonDown += (_, e) =>
+        border.Click += (_, _) => Select(id);
+        border.GotKeyboardFocus += (_, _) => Select(id);
+        border.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter) { e.Handled = true; Open(id); }
+        };
+        border.PreviewMouseLeftButtonDown += (_, e) =>
         {
             if (e.ClickCount == 2) { Open(id); e.Handled = true; return; }
             _dragStart = e.GetPosition(this);
             _dragId = missing ? null : id;
-            if (_selected != id) { _selected = id; Rebuild(); }
+            Select(id);
         };
         border.MouseMove += (_, e) =>
         {
@@ -145,7 +183,7 @@ public sealed class ShelfView : Grid, ITabView
             _dragId = null;
             DragOut(id);
         };
-        border.MouseLeftButtonUp += (_, _) => _dragId = null;
+        border.PreviewMouseLeftButtonUp += (_, _) => _dragId = null;
         return border;
     }
 

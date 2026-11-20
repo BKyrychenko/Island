@@ -47,7 +47,7 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
         [
             new CalculatorProvider(Copy),
             new CurrencyProvider(rates, Copy),
-            new TimerProvider(timers, _ => { }),
+            new TimerProvider(timers, message => island.ShowToast(message)),
             new SystemProvider(),
             new WebProvider(),
             new AppsProvider(_index),
@@ -79,7 +79,7 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
         island.Hotkeys.RegistrationFailed -= OnRegistrationFailed;
         _reportedConflicts.Clear();
         island.Hotkeys.Unregister("commandBar");
-        if (_view is not null) island.HideOverlay();
+        if (_view is not null) island.HideOverlay(_view);
         _view = null;
         _http?.Dispose();
         _http = null;

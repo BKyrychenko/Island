@@ -17,7 +17,7 @@ public sealed class ShelfModule(IslandWindow island) : IModule, IDisposable
         var store = _store = ShelfStore.OpenDefault();
         store.Load();
         island.AddTab(new TabInfo(TabId, "tab.shelf", "Icon.Shelf", () => _view = new ShelfView(store, island), 50));
-        island.FileDropTarget = (TabId, files => store.Add(files), on => (_view ??= island.TabViewFor(TabId) as ShelfView)?.ShowDropHint(on));
+        island.FileDropTarget = (TabId, files => store.TryAdd(files, out _), on => (_view ??= island.TabViewFor(TabId) as ShelfView)?.ShowDropHint(on));
     }
 
     public void Stop()

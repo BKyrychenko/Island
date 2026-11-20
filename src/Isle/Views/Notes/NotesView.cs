@@ -28,7 +28,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
     readonly TextBlock _folderLabel = new() { FontSize = 11, Margin = new Thickness(2, 4, 0, 2) };
     readonly RichTextBox _editor = new();
     readonly TextBlock _editorHint = new() { IsHitTestVisible = false, Margin = new Thickness(12, 9, 0, 0), VerticalAlignment = VerticalAlignment.Top };
-    readonly StackPanel _toolbar = new() { Orientation = Orientation.Horizontal };
+    readonly WrapPanel _toolbar = new();
     readonly Border _overlay = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, MinWidth = 168, MaxHeight = 150, Padding = new Thickness(4), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) };
     readonly StackPanel _overlayList = new();
     readonly TextBlock _empty = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center };
@@ -37,7 +37,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     string? _folder;          // null = all notes
     string? _currentId;
-    bool _loading, _dirty;
+    bool _loading, _dirty, _savingEditor;
 
     public NotesView(NotesStore store, IslandWindow? island)
     {
@@ -46,7 +46,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         _autosave = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => SaveNow(), Dispatcher);
         _autosave.Stop();
 
-        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(168) });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -95,19 +95,24 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         _toolbar.Children.Add(Separator());
         _toolbar.Children.Add(TextToolButton("H1", "notes.h1", FontWeights.Bold, FontStyles.Normal, false, () => ToggleHeading(H1Size)));
         _toolbar.Children.Add(TextToolButton("H2", "notes.h2", FontWeights.SemiBold, FontStyles.Normal, false, () => ToggleHeading(H2Size)));
-        var tools = new DockPanel { LastChildFill = false };
+        // Use the column gutter for toolbar targets while retaining the gap between the list and editor.
+        var tools = new DockPanel { Margin = new Thickness(-10, 0, 0, 0) };
+        tools.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = _editor });
         var del = SmallButton("Icon.Trash", "notes.delete", DeleteCurrent);
         var move = SmallButton("Icon.Folder", "notes.move", () => ShowFolderOverlay(move: true));
         _pinButton = SmallButton("Icon.Pin", "notes.pin", TogglePin);
-        foreach (var b in new[] { del, move, _pinButton }) { DockPanel.SetDock(b, Dock.Right); tools.Children.Add(b); }
-        DockPanel.SetDock(_toolbar, Dock.Left);
+        foreach (var b in new[] { del, move, _pinButton })
+        {
+            DockPanel.SetDock(b, Dock.Right);
+            b.VerticalAlignment = VerticalAlignment.Top;
+            tools.Children.Add(b);
+        }
         tools.Children.Add(_toolbar);
         right.Children.Add(tools);
 
         _editor.SetResourceReference(StyleProperty, "FlatTextBox");
         _editor.VerticalContentAlignment = VerticalAlignment.Top;
         _editor.Padding = new Thickness(6, 6, 6, 6);
-        _editor.Margin = new Thickness(0, 4, 0, 0);
         _editor.FontSize = BodySize;
         _editor.AcceptsTab = true;
         _editor.IsDocumentEnabled = true;
@@ -140,16 +145,14 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
         _store.Changed += OnStoreChanged;
         Strings.LanguageChanged += RebuildList;
-        var last = Settings.Current.Opt("notes.last");
-        RebuildList();
-        Open(_store.Find(last) ?? _store.Search(null).FirstOrDefault());
+        Open(Settings.Current.Opt("notes.last"));
     }
 
     static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
 
     static Button SmallButton(string icon, string tip, Action click)
     {
-        var b = new Button { Width = 28, Height = 28, Margin = new Thickness(2, 0, 0, 0) };
+        var b = new Button { Width = 28, Height = 28 };
         b.SetResourceReference(StyleProperty, "IconButton");
         var i = new Icon { Width = 15, Height = 15 };
         i.SetResourceReference(Icon.DataProperty, icon);
@@ -174,7 +177,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     static FrameworkElement Separator()
     {
-        var s = new Border { Width = 1, Height = 14, Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        var s = new Border { Width = 1, Height = 14, Margin = new Thickness(1, 0, 1, 0), VerticalAlignment = VerticalAlignment.Center };
         s.SetResourceReference(Border.BackgroundProperty, "StrokeBrush");
         return s;
     }
@@ -190,13 +193,26 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     // ---- list ----
 
-    void OnStoreChanged() => RebuildList();
-
-    void RebuildList()
+    void OnStoreChanged()
     {
+        if (!_savingEditor) RebuildList();
+    }
+
+    void RebuildList() => Open(_currentId);
+
+    void Open(string? preferredId)
+    {
+        if (_dirty && !SaveEditor()) return;
+        var notes = _store.Search(_search.Text, _folder);
+        var selected = notes.FirstOrDefault(n => n.Id == preferredId) ?? notes.FirstOrDefault();
+        if (selected?.Id != _currentId) ShowNote(selected);
+        _editor.IsEnabled = selected is not null;
+        _editor.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateEditorHint();
+        var focusedId = _list.Children.OfType<Button>().FirstOrDefault(b => b.IsKeyboardFocusWithin)?.Tag;
         _list.Children.Clear();
         _folderLabel.Text = _folder is null ? Strings.T("notes.allNotes") : _folder.Length == 0 ? Strings.T("notes.noFolder") : _folder;
-        foreach (var n in _store.Search(_search.Text, _folder))
+        foreach (var n in notes)
             _list.Children.Add(ListItem(n));
         if (_list.Children.Count == 0)
         {
@@ -206,8 +222,14 @@ public sealed class NotesView : Grid, ITabView, IDisposable
             _list.Children.Add(t);
         }
         _empty.Visibility = _currentId is null ? Visibility.Visible : Visibility.Collapsed;
-        _pinButton.Opacity = _store.Find(_currentId ?? "")?.Pinned == true ? 1 : 0.55;
+        _pinButton.Opacity = selected?.Pinned == true ? 1 : 0.55;
+        if (focusedId is not null)
+            _list.Children.OfType<Button>().FirstOrDefault(b => Equals(b.Tag, focusedId))?.Focus();
+        RevealCurrent();
     }
+
+    void RevealCurrent() => Dispatcher.BeginInvoke(() =>
+        _list.Children.OfType<Button>().FirstOrDefault(b => Equals(b.Tag, _currentId))?.BringIntoView(), DispatcherPriority.Loaded);
 
     FrameworkElement ListItem(Note n)
     {
@@ -228,11 +250,11 @@ public sealed class NotesView : Grid, ITabView, IDisposable
             row.Children.Add(pin);
         }
         row.Children.Add(texts);
-        var b = new Button { Content = row, Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(0, 0, 0, 2), MinHeight = 0 };
+        var b = new Button { Content = row, Tag = n.Id, Padding = new Thickness(8, 5, 8, 5), Margin = new Thickness(0, 0, 0, 2), MinHeight = 0 };
         b.SetResourceReference(StyleProperty, selected ? "FlatButton" : "GhostButton");
         b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         var id = n.Id;
-        b.Click += (_, _) => Open(_store.Find(id));
+        b.Click += (_, _) => Open(id);
         return b;
     }
 
@@ -241,7 +263,8 @@ public sealed class NotesView : Grid, ITabView, IDisposable
     void ShowFolderOverlay(bool move)
     {
         if (_overlay.IsVisible) { _overlay.Visibility = Visibility.Collapsed; return; }
-        if (move && _currentId is null) return;
+        var moveId = _currentId;
+        if (move && moveId is null) return;
         _overlayList.Children.Clear();
         void Item(string text, Action click, bool dim = false)
         {
@@ -254,11 +277,11 @@ public sealed class NotesView : Grid, ITabView, IDisposable
             _overlayList.Children.Add(b);
         }
         if (!move) Item(Strings.T("notes.allNotes"), () => { _folder = null; RebuildList(); });
-        Item(Strings.T("notes.noFolder"), () => { if (move) _store.Move(_currentId!, ""); else { _folder = ""; RebuildList(); } });
+        Item(Strings.T("notes.noFolder"), () => { if (move) _store.Move(moveId!, ""); else { _folder = ""; RebuildList(); } });
         foreach (var f in _store.Folders)
         {
             var name = f;
-            Item(name, () => { if (move) _store.Move(_currentId!, name); else { _folder = name; RebuildList(); } });
+            Item(name, () => { if (move) _store.Move(moveId!, name); else { _folder = name; RebuildList(); } });
         }
         // new folder: inline box
         var box = new TextBox { Margin = new Thickness(4, 4, 4, 2), MinHeight = 26 };
@@ -271,7 +294,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
             var name = box.Text.Trim();
             if (name.Length == 0) return;
             _store.AddFolder(name);
-            if (move) _store.Move(_currentId!, name);
+            if (move) _store.Move(moveId!, name);
             else { _folder = name; RebuildList(); }
             _overlay.Visibility = Visibility.Collapsed;
         };
@@ -286,9 +309,9 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     // ---- open / save ----
 
-    void Open(Note? n)
+    void ShowNote(Note? n)
     {
-        SaveNow();
+        _overlay.Visibility = Visibility.Collapsed;
         _currentId = n?.Id;
         _loading = true;
         try
@@ -298,15 +321,11 @@ public sealed class NotesView : Grid, ITabView, IDisposable
             _editor.Document = doc;
         }
         finally { _loading = false; }
-        _editor.Visibility = n is null ? Visibility.Collapsed : Visibility.Visible;
-        _toolbar.IsEnabled = n is not null;
-        UpdateEditorHint();
         if (n is not null && !App.IsSnapshot)
         {
             Settings.Current.SetOpt("notes.last", n.Id);
             JsonStore.Save(Paths.SettingsFile, Settings.Current);
         }
-        RebuildList();
     }
 
     internal static void Load(FlowDocument doc, Note n)
@@ -372,14 +391,23 @@ public sealed class NotesView : Grid, ITabView, IDisposable
     /// <summary>Writes the editor into the store now (autosave target; also on switch/hide).</summary>
     public void SaveNow()
     {
+        if (_dirty) RebuildList();
+        else _store.Flush();
+    }
+
+    bool SaveEditor()
+    {
         _autosave.Stop();
-        if (!_dirty || _currentId is null) { _store.Flush(); return; }
+        _savingEditor = true; // Update raises Changed synchronously; Open refreshes the list after saving.
         try
         {
             var (xaml, plain) = Serialize(_editor.Document);
-            _dirty = !_store.Update(_currentId, xaml, plain);
+            _store.Update(_currentId!, xaml, plain);
+            _dirty = false; // The store retains pending writes if persistence fails.
+            return true;
         }
-        catch (Exception ex) { Logger.Error("note save", ex); }
+        catch (Exception ex) { Logger.Error("note save", ex); return false; }
+        finally { _savingEditor = false; }
     }
 
     internal static (string Xaml, string Plain) Serialize(FlowDocument doc)
@@ -395,7 +423,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         SaveNow();
         var n = _store.Create(_folder ?? "");
         _search.Text = "";
-        Open(n);
+        Open(n.Id);
         if (focus) FocusEditor();
     }
 
@@ -434,16 +462,14 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     void DeleteCurrent()
     {
-        if (_currentId is null) return;
+        if (_currentId is not { } id) return;
         SaveNow();
-        var removed = _store.Delete(_currentId);
+        var removed = _store.Delete(id);
         if (removed is not { } r) return;
-        _currentId = null;
-        Open(_store.Search(_search.Text, _folder).FirstOrDefault());
         _island?.ShowToast(Strings.T("notes.deleted"), Strings.T("common.undo"), () =>
         {
             _store.Restore(r.Note, r.Index);
-            Open(_store.Find(r.Note.Id));
+            Open(r.Note.Id);
         }, seconds: 5);
     }
 
@@ -553,7 +579,11 @@ public sealed class NotesView : Grid, ITabView, IDisposable
 
     // ---- tab lifecycle ----
 
-    public void OnShown() { }
+    public void OnShown()
+    {
+        if (!_store.Flush() && !_store.HasUnsavedChanges) _island?.ShowToast(Strings.T("notes.loadFailed"));
+        RevealCurrent();
+    }
 
     public void OnHidden()
     {

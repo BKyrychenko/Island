@@ -7,6 +7,7 @@ using Isle.Agents;
 // the hook decision JSON. Fails open: island not running, pipe missing, bad input or timeout → exit 0, no output.
 try
 {
+    if (args is ["--terminal-probe", ..]) return await ConsoleTerminal.Probe(args);
     string text;
     using (var stdin = Console.OpenStandardInput())
     using (var reader = new StreamReader(stdin, new UTF8Encoding(false)))
@@ -16,7 +17,7 @@ try
     var endpoint = HookProtocol.Endpoint.Read(root);
     if (endpoint is null) return 0;
     var trustedPath = File.ReadAllText(HookProtocol.TrustedPathFile(root));
-    var output = await HookProtocol.RunClientAsync(args, text, endpoint, trustedPath);
+    var output = await HookProtocol.RunClientAsync(args, text, endpoint, trustedPath, terminal: ConsoleTerminal.Capture());
     if (output is not null)
     {
         using var stdout = Console.OpenStandardOutput();

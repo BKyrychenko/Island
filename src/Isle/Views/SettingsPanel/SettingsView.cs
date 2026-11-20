@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Isle.Core;
+using Isle.Modules.AiChat;
 using Isle.Modules.Hotkeys;
 
 namespace Isle.Views.SettingsPanel;
@@ -42,6 +43,7 @@ public sealed class SettingsView : Grid, ITabView
     readonly ScrollViewer _scroll;
     readonly TextBlock _title = new() { VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock _head = new();
+    readonly Button _close;
     readonly DispatcherTimer _scaleTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
     string _section = "general";
     string? _hotkeyNote;
@@ -66,9 +68,9 @@ public sealed class SettingsView : Grid, ITabView
         right.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         right.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var close = IconButton("Icon.Close", "set.close", () => _a.Close());
-        DockPanel.SetDock(close, Dock.Right);
-        top.Children.Add(close);
+        _close = IconButton("Icon.Close", "set.close", () => _a.Close());
+        DockPanel.SetDock(_close, Dock.Right);
+        top.Children.Add(_close);
         _title.SetResourceReference(StyleProperty, "Text");
         _title.FontWeight = FontWeights.SemiBold;
         top.Children.Add(_title);
@@ -79,13 +81,7 @@ public sealed class SettingsView : Grid, ITabView
         SetColumn(right, 1);
         Children.Add(right);
 
-        _scaleTimer.Tick += (_, _) =>
-        {
-            _scaleTimer.Stop();
-            if (Math.Abs(S.Scale - _pendingScale) < 0.001) return;
-            S.Scale = _pendingScale;
-            S.Save("Scale");
-        };
+        _scaleTimer.Tick += (_, _) => CommitScale();
         Render();
     }
 
@@ -101,12 +97,28 @@ public sealed class SettingsView : Grid, ITabView
 
     public void OnShown() => Render();
     internal void ScrollToEnd() { _scroll.UpdateLayout(); _scroll.ScrollToEnd(); }
-    public void OnHidden() => _scaleTimer.Stop();
+    public void OnHidden()
+    {
+        CommitScale();
+        _a.SuspendHotkeys(false);
+    }
+
+    void CommitScale()
+    {
+        if (!_scaleTimer.IsEnabled) return;
+        _scaleTimer.Stop();
+        if (Math.Abs(S.Scale - _pendingScale) < 0.001) return;
+        S.Scale = _pendingScale;
+        S.Save("Scale");
+    }
 
     /// <summary>Rebuilds the nav and the current page (cheap; called after every change that alters the page).</summary>
     public void Render()
     {
+        var navFocused = _nav.IsKeyboardFocusWithin;
         _head.Text = Strings.T("set.title");
+        _close.ToolTip = Strings.T("set.close");
+        System.Windows.Automation.AutomationProperties.SetName(_close, Strings.T("set.close"));
         _nav.Children.Clear();
         foreach (var s in Sections) _nav.Children.Add(NavItem(s));
         _title.Text = Strings.T("set." + _section);
@@ -122,16 +134,19 @@ public sealed class SettingsView : Grid, ITabView
         }
         _scroll.UpdateLayout();
         _scroll.ScrollToVerticalOffset(offset);
+        if (navFocused) FocusSection();
     }
+
+    internal void FocusSection() => _nav.Children.OfType<Button>().First(b => Equals(b.Tag, _section)).Focus();
 
     // ---- pages ----
 
     void General()
     {
         Group("set.appearance");
-        Row("set.theme", Choice(["Dark", "Light", "System"], S.Theme, v => { S.Theme = v; Save("Theme"); }, v => "set.theme." + v));
+        Row("set.theme", Choice(["Dark", "Light", "System"], S.Theme, v => { S.Theme = v; S.Save("Theme"); }, v => "set.theme." + v));
         Row("set.language", Choice(["en", "uk"], S.Language, v => { S.Language = v; Save("Language"); }, v => "set.lang." + v));
-        Row("set.scale", ScaleSlider());
+        Row("set.scale", ScaleSlider(), "set.scale.hint");
         var screens = SafeScreens();
         if (screens.Count > 1)
         {
@@ -153,6 +168,21 @@ public sealed class SettingsView : Grid, ITabView
             S.ExcludedApps = [.. v.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)];
             Save("ExcludedApps");
         }, "notepad, obs64"), "set.excluded.hint", wide: true);
+        var openApps = new WrapPanel { Margin = new Thickness(0, 0, 0, 5) };
+        _page.Children.Add(Link("", "set.excluded.pick", () =>
+        {
+            openApps.Children.Clear();
+            foreach (var name in ForegroundWatcher.OpenAppNames().Where(name => !S.ExcludedApps.Any(app => IslandWindow.IsSameApp(app, name))))
+            {
+                var button = new Button { Content = name, Margin = new Thickness(0, 3, 4, 0), Padding = new Thickness(8, 3, 8, 3) };
+                button.SetResourceReference(StyleProperty, "FlatButton");
+                button.Click += (_, _) => { S.ExcludedApps.Add(name); Save("ExcludedApps"); };
+                openApps.Children.Add(button);
+            }
+            if (openApps.Children.Count == 0) openApps.Children.Add(new TextBlock { Text = Strings.T("set.excluded.none") });
+        }));
+        _page.Children.Add(openApps);
+        Row("set.excluded.overlap", Switch(S.ExcludedAppsOnlyOnOverlap, on => { S.ExcludedAppsOnlyOnOverlap = on; Save("ExcludedAppsOnlyOnOverlap"); }));
     }
 
     void ModulesPage()
@@ -169,18 +199,37 @@ public sealed class SettingsView : Grid, ITabView
 
     void OptionsPage()
     {
-        Group("mod.media");
+        var jumps = new ComboBox { MinWidth = 150, Margin = new Thickness(0, 0, 0, 6), HorizontalAlignment = HorizontalAlignment.Left };
+        System.Windows.Automation.AutomationProperties.SetName(jumps, Strings.T("set.options.jump"));
+        jumps.Items.Add(new ComboBoxItem { Content = Strings.T("set.options.jump"), IsEnabled = false, IsSelected = true });
+        var groups = new Dictionary<string, FrameworkElement>();
+        _page.Children.Add(jumps);
+        void OptionGroup(string id)
+        {
+            Group("mod." + id);
+            groups[id] = (FrameworkElement)_page.Children[_page.Children.Count - 1];
+            jumps.Items.Add(new ComboBoxItem { Content = Strings.T("mod." + id), Tag = id });
+        }
+        jumps.SelectionChanged += (_, _) =>
+        {
+            if (jumps.SelectedItem is ComboBoxItem { Tag: string id } && groups.TryGetValue(id, out var group))
+            {
+                _page.UpdateLayout();
+                _scroll.ScrollToVerticalOffset(group.TranslatePoint(new Point(), _page).Y);
+            }
+        };
+        OptionGroup("media");
         Row("set.lyricsInPill", OptSwitch("lyrics.inPill", false));
         Row("set.lyricsAlways", OptSwitch("lyrics.alwaysFetch", false));
 
-        Group("mod.weather");
+        OptionGroup("weather");
         var city = S.Opt("weather.city");
         Row("set.wxPlace", Link(city.Length > 0 ? city : Strings.T(S.OptBool("weather.ip") ? "set.wxIp" : "set.wxNone"), "set.change", () => _a.Open("weather")));
         Row("set.wxUnits", Choice(["C", "F"], S.Opt("weather.units", "C") == "F" ? "F" : "C", v => { S.SetOpt("weather.units", v); Save("Options", restart: "weather"); }, null, v => "°" + v));
         Row("set.wxInPill", OptSwitch("weather.inPill", true, restart: "weather"));
         Row("set.wxRain", OptSwitch("weather.rainAlerts", true, restart: "weather"));
 
-        Group("mod.live");
+        OptionGroup("live");
         foreach (var name in Modules.LiveEvents.LiveEventsModule.SourceNames)
         {
             if (name == "notifications")
@@ -200,36 +249,36 @@ public sealed class SettingsView : Grid, ITabView
         Row("set.obsPassword", SecretField("live.obsPassword", restart: "live"));
         Row("set.downloads", TextField(S.Opt("live.downloadsFolder"), v => { S.SetOpt("live.downloadsFolder", v.Trim()); Save("Options", restart: "live"); }, Strings.T("set.default")), wide: true);
 
-        Group("mod.clipboard");
+        OptionGroup("clipboard");
         Row("set.clipLimit", Choice(["50", "100", "200", "500", "1000"], S.OptInt("clip.limit", 200).ToString(CultureInfo.InvariantCulture),
             v => { S.SetOpt("clip.limit", v); Save("Options", restart: "clipboard"); }, null, v => v));
         Row("set.clipExcluded", TextField(S.Opt("clip.excludedApps"), v => { S.SetOpt("clip.excludedApps", v.Trim()); Save("Options"); }, "keepass, 1password"), "set.clipExcluded.hint", wide: true);
 
-        Group("mod.shelf");
+        OptionGroup("shelf");
         Row("set.shelfRemove", OptSwitch("shelf.removeAfterDrop", false));
 
-        Group("mod.commands");
+        OptionGroup("commands");
         Row("set.cmdFolders", TextField(S.Opt("cmd.folders"), v => { S.SetOpt("cmd.folders", v.Trim()); Save("Options", restart: "commands"); }, @"C:\Users\me\Projects"), "set.cmdFolders.hint", wide: true);
 
-        Group("mod.tools");
+        OptionGroup("tools");
         Row("set.recAudio", OptSwitch("rec.systemAudio", true));
         Row("set.recMic", OptSwitch("rec.mic", false));
 
-        Group("mod.ai");
+        OptionGroup("ai");
         Row("set.aiProvider", Link(AiSummary(), "set.open", () => _a.Open("ai")));
 
-        Group("mod.voice");
+        OptionGroup("voice");
         Row("set.voiceModel", Choice(["base", "small"], S.Opt("voice.model", "base") == "small" ? "small" : "base", v => { S.SetOpt("voice.model", v); Save("Options"); }, v => "set.voice." + v));
         Row("set.voiceLang", Choice(["auto", "en", "uk", "nl"], S.Opt("voice.lang", "auto") is "en" or "uk" or "nl" ? S.Opt("voice.lang") : "auto",
             v => { S.SetOpt("voice.lang", v); Save("Options"); }, v => "set.voiceLang." + v));
 
-        Group("mod.agents");
+        OptionGroup("agents");
         Row("set.agentsApprovals", OptSwitch("agents.approvals", true), "set.agentsApprovals.hint");
         Row("set.agentsTimeout", Choice(["30", "60", "120", "300"], Modules.Agents.AgentsModule.TimeoutSeconds.ToString(CultureInfo.InvariantCulture),
             v => { S.SetOpt("agents.timeout", v); Save("Options"); }, null, v => Strings.T("set.seconds", v)));
         Row("set.hooks", Link("", "set.manage", () => _a.Open("hooks")), "set.hooks.hint");
 
-        Group("mod.characters");
+        OptionGroup("characters");
         Row("set.gallery", Link(Strings.T("chars." + S.Opt("chars.kind", "pebb")), "set.open", () => _a.Open("characters")));
     }
 
@@ -294,13 +343,7 @@ public sealed class SettingsView : Grid, ITabView
         catch (Exception ex) { Logger.Error("open path", ex); }
     }
 
-    static string AiSummary()
-    {
-        var openai = S.Opt("ai.provider") == "openai";
-        var key = S.Opt(openai ? "ai.openai.key" : "ai.anthropic.key").Length > 0;
-        var name = openai ? Strings.T("ai.openaiCompat") : "Anthropic";
-        return key ? name : $"{name} · {Strings.T("set.noKey")}";
-    }
+    static string AiSummary() => Strings.T(AiProviders.TitleKey(AiProviders.FromSettings(S)));
 
     static List<ScreenInfo> SafeScreens()
     {
@@ -317,13 +360,15 @@ public sealed class SettingsView : Grid, ITabView
     FrameworkElement NavItem(string section)
     {
         var selected = section == _section;
-        var t = new TextBlock { Text = Strings.T("set." + section), FontSize = 12.5, TextTrimming = TextTrimming.CharacterEllipsis };
+        var t = new TextBlock { Text = Strings.T("set." + section), TextTrimming = TextTrimming.CharacterEllipsis };
+        t.SetResourceReference(TextBlock.FontSizeProperty, "NavigationFontSize");
         t.SetResourceReference(TextBlock.ForegroundProperty, selected ? "FgBrush" : "FgDimBrush");
         if (selected) t.FontWeight = FontWeights.SemiBold;
-        var b = new Border { Child = t, Padding = new Thickness(8, 5, 8, 5), CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 0, 0, 2), Cursor = Cursors.Hand };
-        if (selected) b.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+        var b = new Button { Content = t, Tag = section, Padding = new Thickness(8, 5, 4, 5), MinHeight = 0, Margin = new Thickness(0, 0, 0, 2), HorizontalContentAlignment = HorizontalAlignment.Left };
+        b.SetResourceReference(StyleProperty, "GhostButton");
+        if (selected) b.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "SurfaceBrush");
         else b.Background = Brushes.Transparent;
-        b.MouseLeftButtonUp += (_, e) => { e.Handled = true; ShowSection(section); };
+        b.Click += (_, _) => { ShowSection(section); FocusSection(); };
         System.Windows.Automation.AutomationProperties.SetName(b, t.Text);
         return b;
     }
@@ -350,6 +395,7 @@ public sealed class SettingsView : Grid, ITabView
         var l = Text(Strings.T(labelKey), dim: false);
         l.FontSize = 12.5;
         label.Children.Add(l);
+        AssociateLabel(control, l);
         if (hintKey is not null)
         {
             var h = Text(Strings.T(hintKey), dim: true);
@@ -371,6 +417,18 @@ public sealed class SettingsView : Grid, ITabView
         row.Children.Add(control);
         row.Children.Add(label);
         _page.Children.Add(row);
+    }
+
+    static void AssociateLabel(DependencyObject control, TextBlock label)
+    {
+        if (control is System.Windows.Controls.Control input)
+        {
+            System.Windows.Automation.AutomationProperties.SetLabeledBy(input, label);
+            if (input is RadioButton { Content: string value })
+                System.Windows.Automation.AutomationProperties.SetName(input, label.Text + ": " + value);
+        }
+        foreach (var child in LogicalTreeHelper.GetChildren(control).OfType<DependencyObject>())
+            AssociateLabel(child, label);
     }
 
     static TextBlock Text(string text, bool dim)
@@ -403,8 +461,12 @@ public sealed class SettingsView : Grid, ITabView
             var r = new RadioButton { Content = text, IsChecked = string.Equals(v, current, StringComparison.OrdinalIgnoreCase), GroupName = group, Margin = new Thickness(4, 0, 0, 0) };
             r.SetResourceReference(StyleProperty, "ChipRadio");
             r.Padding = new Thickness(9, 3, 9, 3);
-            var value = v;
-            r.Click += (_, _) => { if (!string.Equals(value, current, StringComparison.OrdinalIgnoreCase)) picked(value); };
+            r.Click += (_, _) =>
+            {
+                if (string.Equals(v, current, StringComparison.OrdinalIgnoreCase)) return;
+                current = v;
+                picked(v);
+            };
             panel.Children.Add(r);
         }
         return panel;
@@ -415,6 +477,7 @@ public sealed class SettingsView : Grid, ITabView
         var pct = new TextBlock { Width = 40, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
         pct.SetResourceReference(StyleProperty, "TextDim");
         var slider = new Slider { Minimum = 0.8, Maximum = 2.0, TickFrequency = 0.05, IsSnapToTickEnabled = true, Value = S.Scale, Width = 150, VerticalAlignment = VerticalAlignment.Center };
+        slider.SetResourceReference(MinHeightProperty, "CompactTargetMin");
         pct.Text = $"{Math.Round(S.Scale * 100)} %";
         slider.ValueChanged += (_, e) =>
         {
@@ -513,6 +576,7 @@ public sealed class SettingsView : Grid, ITabView
         box.LostKeyboardFocus += (_, _) => { box.Text = shown; _a.SuspendHotkeys(false); };
         box.PreviewKeyDown += (_, e) =>
         {
+            if (e.Key == Key.Tab) return;
             e.Handled = true;
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
             if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)

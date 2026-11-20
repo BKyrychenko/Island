@@ -1,7 +1,12 @@
 using System.Text.Json.Nodes;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
+using Isle.Core;
 using Isle.Modules.Lyrics;
 using Isle.Modules.Media;
+using Isle.Views.Music;
 
 namespace Isle.Tests;
 
@@ -159,7 +164,7 @@ public class ArtColorTests
 
 public class LyricsServiceTests
 {
-    sealed class FakeHttp : ILyricsHttp
+    internal sealed class FakeHttp : ILyricsHttp
     {
         public readonly List<string> Urls = [];
         public Func<string, (int, string)> Respond = _ => (404, "");
@@ -231,6 +236,24 @@ public class LyricsServiceTests
     }
 
     [Fact]
+    public async Task InMemoryNotFoundExpiresAtSevenDays()
+    {
+        using var dir = new TempDir();
+        var now = T0;
+        var http = new FakeHttp();
+        using var service = new LyricsService(http, dir.Path, () => now);
+        Assert.Equal(LyricsStatus.NotFound, (await service.GetAsync(Q)).Status);
+        var calls = http.Urls.Count;
+        now = T0.AddDays(7).AddTicks(-1);
+        await service.GetAsync(Q);
+        Assert.Equal(calls, http.Urls.Count);
+        now = T0.AddDays(7);
+        http.Respond = _ => (200, Record);
+        Assert.Equal(LyricsStatus.Synced, (await service.GetAsync(Q)).Status);
+        Assert.True(http.Urls.Count > calls);
+    }
+
+    [Fact]
     public void Instrumental_and_plain_records()
     {
         Assert.Equal(LyricsStatus.Instrumental, LyricsService.FromRecord(JsonNode.Parse("""{"instrumental":true}"""), T0)!.Status);
@@ -254,5 +277,93 @@ public class LyricsServiceTests
     {
         Assert.Equal("Adele", LyricsService.CleanArtist("AdeleVEVO"));
         Assert.Equal("Adele", LyricsService.CleanArtist("Adele - Topic"));
+    }
+}
+
+
+public class MusicViewTests
+{
+    [Fact]
+    public void FailedLyricsCanBeRetriedForTheSameTrackFromTheMusicView()
+    {
+        FakeSink.Run(sink =>
+        {
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(sink.Ui));
+            var app = Application.Current ?? new Application();
+            app.Resources["Icon.Music"] = Geometry.Empty;
+            app.Resources["UiFont"] = new FontFamily("Segoe UI");
+            using var dir = new TempDir();
+            var http = new LyricsServiceTests.FakeHttp { Respond = _ => (503, "") };
+            using var service = new LyricsService(http, dir.Path);
+            var track = FakeMediaSource.Demo(DateTimeOffset.Now, withArt: false, playing: false);
+            var media = new FakeMediaSource { Current = track };
+            var tracker = new LyricsTracker(media, () => service);
+            MusicView.LyricsOpen = true;
+            try
+            {
+                using var view = new MusicView(media, tracker);
+                view.OnShown();
+                Assert.True(sink.PumpUntil(() => tracker.ForCurrent?.Status == LyricsStatus.Error));
+                var retry = Descendants(view).OfType<Button>().Single(b => Equals(b.Content, Strings.T("music.lyricsRetry")));
+                Assert.Equal(Visibility.Visible, retry.Visibility);
+
+                media.Current = track with { Position = TimeSpan.FromSeconds(22) };
+                Assert.Equal(LyricsStatus.Error, tracker.ForCurrent?.Status);
+                Assert.Single(http.Urls);
+
+                http.Respond = _ => (200, """{"plainLyrics":"Recovered line"}""");
+                retry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.True(sink.PumpUntil(() => tracker.ForCurrent?.Plain == "Recovered line"));
+                Assert.Equal(Visibility.Collapsed, retry.Visibility);
+                media.Current = track;
+                Assert.Equal(2, http.Urls.Count);
+
+                media.Current = track with { Title = "Next song" };
+                Assert.True(sink.PumpUntil(() => tracker.ForCurrent?.Status == LyricsStatus.Plain));
+                Assert.Equal(3, http.Urls.Count);
+                media.Current = track;
+                Assert.Equal("Recovered line", tracker.ForCurrent?.Plain);
+                Assert.Equal(3, http.Urls.Count);
+            }
+            finally { MusicView.LyricsOpen = false; }
+        });
+    }
+
+    [Fact]
+    public void ProgressCommandsAndAutomationSeekButRefreshDoesNot()
+    {
+        FakeSink.Run(_ =>
+        {
+            var app = System.Windows.Application.Current ?? new System.Windows.Application();
+            app.Resources["Icon.Music"] = System.Windows.Media.Geometry.Empty;
+            app.Resources["UiFont"] = new System.Windows.Media.FontFamily("Segoe UI");
+            var now = DateTimeOffset.Now;
+            var media = new FakeMediaSource { Current = FakeMediaSource.Demo(now, withArt: false, playing: false) };
+            using var view = new Isle.Views.Music.MusicView(media, new LyricsTracker(media, () => null), () => now);
+            Assert.Null(media.LastSeek);
+            var slider = Descendants(view).OfType<System.Windows.Controls.Slider>().Single();
+            System.Windows.Controls.Slider.IncreaseSmall.Execute(null, slider);
+            Assert.Equal(media.Current.Duration * slider.Value, media.LastSeek);
+            var peer = new System.Windows.Automation.Peers.SliderAutomationPeer(slider);
+            var range = (System.Windows.Automation.Provider.IRangeValueProvider)peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.RangeValue)!;
+            range.SetValue(0.75);
+            Assert.Equal(media.Current.Duration * 0.75, media.LastSeek);
+            media.LastSeek = null;
+            media.Current = media.Current with { Position = TimeSpan.FromSeconds(20) };
+            Assert.Null(media.LastSeek);
+            Assert.Equal(20 / media.Current.Duration.TotalSeconds, slider.Value, 6);
+            media.Current = media.Current with { CanSeek = false };
+            slider.Value = 0.5;
+            Assert.Null(media.LastSeek);
+        });
+    }
+
+    static IEnumerable<System.Windows.DependencyObject> Descendants(System.Windows.DependencyObject root)
+    {
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(root).OfType<System.Windows.DependencyObject>())
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
     }
 }

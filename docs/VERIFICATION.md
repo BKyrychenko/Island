@@ -1,6 +1,6 @@
 # VERIFICATION
 
-## WPF audit repairs
+## Initial WPF audit repairs
 
 | Check | Result |
 |---|---|
@@ -15,6 +15,19 @@
 | Clipboard | In-memory tests covered exact HTML/RTF/custom formats and the three exclusions. No real Excel or elevated target was tested. Windows offers no reliable confirmation that an external app has finished reading after Ctrl+V. The sequence guard protects newer copies, but a target reading later than the 1.5-second restore window can get the restored content. External apps can also send their own Ctrl+C results to Windows history before Isle receives them. |
 | Media and monitors | Automated suite passed. Restarting a real media player under the same AUMID and mixed-DPI docking were not exercised. |
 | Anthropic | Fake HTTP/SSE covered attachments, errors, refusal and stream completion. No provider request using real credentials was sent. |
+
+## Compact WPF controls at 80%
+
+Measured the arranged WPF controls at 80% in isolated English and Ukrainian snapshot profiles, in both themes. The original 28-DIP tab target measured 22.4 effective DIPs and its 12-DIP label measured 9.6. The expanded capsule remained 416 × 176 effective DIPs.
+
+| Control | Result at 80% |
+|---|---|
+| Navigation | Icon-only tabs measured 27.2 × 24 DIPs. More and Settings measured 24 × 24. The selected tab, overflow list and Settings navigation used 12-DIP text. The active Ukrainian Hotkeys label fit in full. |
+| Common actions | The gallery and Settings close buttons, Notes formatting and pin actions, and all six Tools fixture swatches measured 24 × 24 DIPs. The swatches expose localized copy actions to the keyboard and UI Automation. |
+| Settings | Each hotkey recorder measured 104 × 24 DIPs. The module picker measured 130.4 × 24 in English and 166.4 × 24 in Ukrainian. |
+| Sliders | The Settings scale and Music seek controls have 24-DIP hit areas at 80%. The visible thumb and rail retain their original sizes. Routed drag and keyboard checks passed. |
+| Notes | All eleven toolbar actions fit in one row at 80% and 100%. At 80%, they retain 24 × 24 DIP hit areas and pass corner hit tests. The sidebar is 8 base DIPs narrower to recover the editor's height. |
+| Display scale | At simulated 125% and 150% display DPI, the smallest button in the overflow, Notes, Tools and Hotkeys fixtures measured 24.3 and 24.0 effective DIPs respectively. Physical monitor switching remains a manual check. |
 
 Every feature → how it was verified and the result.
 Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real app and observed/measured),

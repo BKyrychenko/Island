@@ -134,6 +134,30 @@ public class ClipStoreTests : IDisposable
     }
 
     [Fact]
+    public void Image_identity_includes_dimensions_and_keeps_legacy_hashes_after_reload()
+    {
+        var s = NewStore();
+        var old = s.AddImage([1, 2, 3, 4], "LEGACY-PIXEL-HASH", 2, 6);
+        s.Save();
+        var loaded = NewStore();
+        loaded.Load();
+        Assert.Equal(old.Id, loaded.AddImage([1, 2, 3, 4], "LEGACY-PIXEL-HASH", 2, 6).Id);
+        Assert.NotEqual(old.Id, loaded.AddImage([1, 2, 3, 4], "LEGACY-PIXEL-HASH", 3, 4).Id);
+        Assert.Equal(2, loaded.Entries.Count);
+    }
+
+    [Fact]
+    public void Image_search_matches_label_and_dimensions()
+    {
+        var s = NewStore();
+        var image = s.AddImage([1], "H", 320, 180);
+        s.AddText("320 notes");
+        Assert.Same(image, Assert.Single(s.Search("image 320")));
+        Assert.Same(image, Assert.Single(s.Search("зображення 180", "Зображення")));
+        Assert.Same(image, Assert.Single(s.Search("320x180")));
+    }
+
+    [Fact]
     public void Missing_image_files_are_dropped_on_load()
     {
         var s = NewStore();
@@ -210,6 +234,67 @@ public class ClipboardBorrowTests
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         Assert.True(thread.Join(TimeSpan.FromSeconds(5)));
+        if (error is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+    }
+}
+
+public class ClipboardCaptureTests
+{
+    [Fact]
+    public void Only_own_writes_and_the_requested_selection_are_ignored()
+    {
+        var guard = new Isle.Core.ClipboardOps.CaptureGuard();
+        guard.OwnWrite(10);
+        Assert.True(guard.Ignore(10, 1));
+        Assert.False(guard.Ignore(11, 1));
+        guard.BeginSelection(11, 42);
+        Assert.False(guard.Ignore(12, 99)); // unrelated external copy during Ctrl+C
+        Assert.True(guard.Ignore(13, 42));
+        Assert.Equal(13u, guard.SelectionSequence);
+        Assert.True(guard.Ignore(13, 42)); // duplicate notification / retry
+        Assert.False(guard.Ignore(14, 42)); // next copy, even from the same app, is captured
+        guard.Writing = true;
+        Assert.True(guard.Ignore(15, 1)); // a reentrant notification inside our write
+        guard.Writing = false;
+        Assert.True(guard.Ignore(15, 1));
+        Assert.False(guard.Ignore(16, 99));
+        guard.BeginSelection(16, 42);
+        guard.EndSelection(); // failed or timed out Ctrl+C
+        Assert.False(guard.Ignore(17, 42));
+    }
+
+    [Fact]
+    public void Full_history_is_reachable_and_row_paste_is_explained()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "isle-clip-view-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var now = DateTimeOffset.Now;
+                var store = new ClipStore(Path.Combine(dir, "c.json"), Path.Combine(dir, "images"), () => now);
+                var oldest = store.AddText("oldest history item")!;
+                for (var i = 0; i < 125; i++) { now = now.AddSeconds(1); store.AddText($"entry {i}"); }
+                ClipEntry? pasted = null;
+                var view = new Isle.Views.Clipboard.ClipboardView(store, e => pasted = e, _ => { });
+                Assert.Contains(view.Children.OfType<System.Windows.Controls.TextBlock>(), b => b.Text == Isle.Core.Strings.T("clip.clickToPaste"));
+                var scroll = view.Children.OfType<System.Windows.Controls.ScrollViewer>().Single();
+                var rows = (System.Windows.Controls.StackPanel)scroll.Content;
+                Assert.Equal(61, rows.Children.Count);
+                ((System.Windows.Controls.Button)rows.Children[^1]).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Assert.Equal(121, rows.Children.Count);
+                ((System.Windows.Controls.Button)rows.Children[^1]).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Assert.Equal(126, rows.Children.Count);
+                ((System.Windows.Controls.Button)rows.Children[^1]).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Assert.Same(oldest, pasted);
+            }
+            catch (Exception ex) { error = ex; }
+            finally { try { Directory.Delete(dir, true); } catch { } }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)));
         if (error is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
     }
 }

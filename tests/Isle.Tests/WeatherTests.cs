@@ -217,6 +217,122 @@ public class WeatherTests
     }
 
     [Fact]
+    public void IpChipReportsBothOffAndOn()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var values = new List<bool>();
+                var view = new Isle.Views.Weather.WeatherView(new(
+                    (_, _) => Task.FromResult(new List<Place>()), _ => { }, values.Add,
+                    () => { }, _ => { }, _ => { }, _ => { }));
+                view.ShowSetup(true);
+                var body = (System.Windows.Controls.ContentControl)view.Children[0];
+                var grid = (System.Windows.Controls.Grid)body.Content;
+                var chips = (System.Windows.Controls.WrapPanel)grid.Children[1];
+                var ip = (System.Windows.Controls.Primitives.ToggleButton)chips.Children[0];
+                foreach (var on in new[] { false, true })
+                {
+                    ip.IsChecked = on;
+                    ip.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                }
+                Assert.Equal(new[] { false, true }, values);
+            }
+            catch (Exception ex) { error = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (error is not null) throw new Exception("STA test failed", error);
+    }
+
+    [Fact]
+    public void ErrorAllowsRetryAndChangeAndForecastExposesScrollbar()
+    {
+        FakeSink.Run(_ =>
+        {
+            var retries = 0;
+            var view = new Isle.Views.Weather.WeatherView(new(
+                (_, _) => Task.FromResult(new List<Place>()), _ => { }, _ => { },
+                () => retries++, _ => { }, _ => { }, _ => { }));
+            var body = (System.Windows.Controls.ContentControl)view.Children[0];
+            view.ShowError();
+            var actions = ((System.Windows.Controls.StackPanel)body.Content).Children.OfType<System.Windows.Controls.Button>().ToList();
+            Assert.Equal(2, actions.Count);
+            actions[0].RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Assert.Equal(1, retries);
+            actions[1].RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Assert.IsType<System.Windows.Controls.Grid>(body.Content);
+            view.ShowReport(new WeatherReport(), false, false);
+            var report = (System.Windows.Controls.Grid)body.Content;
+            var scroll = Assert.IsType<System.Windows.Controls.ScrollViewer>(report.Children[1]);
+            Assert.Equal(System.Windows.Controls.ScrollBarVisibility.Auto, scroll.HorizontalScrollBarVisibility);
+        });
+    }
+
+    [Fact]
+    public void IpOffPersistsAndRemovesLegacyIpCoordinates()
+    {
+        using var dir = new TempDir();
+        var settings = new Settings();
+        settings.SetOpt("weather.ip", true);
+        settings.SetOpt("weather.city", "IP city");
+        settings.SetOpt("weather.lat", "50");
+        settings.SetOpt("weather.lon", "30");
+        WeatherModule.ChangeIpOption(settings, false);
+        var file = Path.Combine(dir.Path, "settings.json");
+        JsonStore.Save(file, settings);
+        var loaded = Settings.Load(file);
+        Assert.False(loaded.OptBool("weather.ip"));
+        Assert.Equal("", loaded.Opt("weather.lat"));
+        Assert.Equal("", loaded.Opt("weather.lon"));
+        Assert.Equal("", loaded.Opt("weather.city"));
+    }
+
+    [Fact]
+    public void IpTogglePreservesNamedCity()
+    {
+        var settings = new Settings();
+        settings.SetOpt("weather.city", "Kyiv");
+        settings.SetOpt("weather.lat", "50.45");
+        settings.SetOpt("weather.lon", "30.52");
+        WeatherModule.ChangeIpOption(settings, true);
+        Assert.True(settings.OptBool("weather.ip"));
+        WeatherModule.ChangeIpOption(settings, false);
+        Assert.False(settings.OptBool("weather.ip"));
+        Assert.Equal("Kyiv", settings.Opt("weather.city"));
+        Assert.Equal("50.45", settings.Opt("weather.lat"));
+        Assert.Equal("30.52", settings.Opt("weather.lon"));
+    }
+
+    sealed class DelayedSource : IWeatherSource
+    {
+        public TaskCompletionSource<WeatherReport?> Result = new();
+        public Task<WeatherReport?> ForecastAsync(Place place, CancellationToken ct) => Result.Task;
+        public Task<List<Place>> SearchAsync(string name, string language, CancellationToken ct) => Task.FromResult(new List<Place>());
+        public Task<Place?> LocateByIpAsync(CancellationToken ct) => Task.FromResult<Place?>(null);
+    }
+
+    [Fact]
+    public async Task CancelledForecastCannotRestoreClearedLocation()
+    {
+        using var dir = new TempDir();
+        using var cts = new CancellationTokenSource();
+        var source = new DelayedSource();
+        var file = Path.Combine(dir.Path, "weather.json");
+        var service = new WeatherService(source, file);
+        var pending = service.RefreshAsync(new Place("old", "", 1, 2), cts.Token);
+        cts.Cancel();
+        service.Clear();
+        source.Result.SetResult(new WeatherReport { Place = "old" });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.Null(service.Report);
+        Assert.False(File.Exists(file));
+    }
+
+    [Fact]
     public void CorruptCacheIsIgnored()
     {
         var file = TempFile();

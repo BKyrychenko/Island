@@ -56,50 +56,28 @@ public sealed class Conversation
     }
 }
 
-public enum AiProviderKind { Anthropic, OpenAi }
+public enum AiProviderKind { Codex, ClaudeCode }
 
-/// <summary>Provider settings as entered by the user. The key is plain text only in memory; stored DPAPI-protected.</summary>
-public sealed record AiConfig(AiProviderKind Provider, string Model, string BaseUrl, string Key)
+static class AiProviders
 {
-    public const string DefaultAnthropicModel = "claude-opus-5-5";
-    public const string DefaultOpenAiBase = "https://api.openai.com/v1";
+    public static AiProviderKind FromSettings(Settings settings) =>
+        settings.Opt("ai.provider") is "claude" or "anthropic" ? AiProviderKind.ClaudeCode : AiProviderKind.Codex;
 
-    public static AiConfig FromSettings(Settings s)
-    {
-        var kind = s.Opt("ai.provider") == "openai" ? AiProviderKind.OpenAi : AiProviderKind.Anthropic;
-        var model = s.Opt(kind == AiProviderKind.OpenAi ? "ai.openai.model" : "ai.anthropic.model");
-        if (model.Length == 0 && kind == AiProviderKind.Anthropic) model = DefaultAnthropicModel;
-        var baseUrl = s.Opt("ai.openai.base");
-        if (baseUrl.Length == 0) baseUrl = DefaultOpenAiBase;
-        var key = Secret.Unprotect(s.Opt(kind == AiProviderKind.OpenAi ? "ai.openai.key" : "ai.anthropic.key"));
-        return new AiConfig(kind, model, baseUrl, key);
-    }
+    public static string TitleKey(AiProviderKind provider) => provider == AiProviderKind.ClaudeCode ? "ai.claudeCode" : "ai.codex";
 
-    public bool IsReady => Key.Length > 0 && Model.Length > 0 && (Provider == AiProviderKind.Anthropic || BaseUrl.Length > 0);
+    public static string MissingKey(AiProviderKind provider) =>
+        provider == AiProviderKind.ClaudeCode ? "ai.err.claudeMissing" : "ai.err.codexMissing";
 }
 
-/// <summary>A readable failure (already localized key + optional detail). Never contains keys or message bodies.</summary>
+/// <summary>A readable failure with a localization key and optional detail.</summary>
 public sealed class AiException(string key, string detail = "") : Exception(key)
 {
     public string Key { get; } = key;
     public string Detail { get; } = detail;
-
-    /// <summary>HTTP status → Strings key.</summary>
-    public static string KeyForStatus(int status) => status switch
-    {
-        400 => "ai.err.request",
-        401 or 403 => "ai.err.auth",
-        404 => "ai.err.model",
-        413 => "ai.err.tooLarge",
-        429 => "ai.err.rate",
-        529 or 503 => "ai.err.overloaded",
-        >= 500 => "ai.err.server",
-        _ => "ai.err.network",
-    };
 }
 
 public interface IChatProvider
 {
-    /// <summary>Streams the assistant's text. Throws <see cref="AiException"/> with a readable key on failure.</summary>
+    /// <summary>Yields the answer so far, including any final correction. Throws <see cref="AiException"/> on failure.</summary>
     IAsyncEnumerable<string> StreamAsync(Conversation chat, CancellationToken ct);
 }

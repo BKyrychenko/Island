@@ -78,6 +78,7 @@ public sealed class WeatherService(IWeatherSource source, string cacheFile)
         try { fresh = await source.ForecastAsync(place, ct); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { Logger.Warn($"weather fetch failed: {ex.GetType().Name}"); }
+        ct.ThrowIfCancellationRequested();
         LastFailed = fresh is null;
         if (fresh is null) return Report;
         _loaded = true;

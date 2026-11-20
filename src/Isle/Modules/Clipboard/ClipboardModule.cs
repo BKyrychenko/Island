@@ -8,23 +8,19 @@ namespace Isle.Modules.Clipboard;
 public sealed class ClipboardModule(IslandWindow island) : IModule, IDisposable
 {
     public const string TabId = "clipboard";
-    ClipStore? _store;
     ClipboardService? _service;
-    DispatcherTimer? _save;
+    ClipboardAutosave? _save;
 
     public string Id => "clipboard";
 
     public void Start()
     {
-        _store = ClipStore.OpenDefault();
-        _store.Limit = Math.Clamp(Settings.Current.OptInt("clip.limit", 200), 10, 5000);
-        _store.Load();
-        _save = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => { _save!.Stop(); _store?.Save(); }, island.Dispatcher);
-        _save.Stop();
-        _store.Changed += () => { _save.Stop(); _save.Start(); };
-        _service = new ClipboardService(_store, () => island.PasteTarget, island.Dispatcher);
+        var store = ClipStore.OpenDefault();
+        store.Limit = Math.Clamp(Settings.Current.OptInt("clip.limit", 200), 10, 5000);
+        store.Load();
+        _save = new ClipboardAutosave(store, island.Dispatcher);
+        _service = new ClipboardService(store, () => island.PasteTarget, island.Dispatcher);
         _service.Start();
-        var store = _store;
         island.AddTab(new TabInfo(TabId, "tab.clipboard", "Icon.Clipboard", () => new ClipboardView(store, Paste, e => _service?.Copy(e), island), 40));
     }
 
@@ -39,10 +35,49 @@ public sealed class ClipboardModule(IslandWindow island) : IModule, IDisposable
         island.RemoveTab(TabId);
         _service?.Dispose();
         _service = null;
-        if (_save?.IsEnabled == true) _store?.Save();
-        _save?.Stop();
-        _store = null;
+        if (_save?.Stop() == false) island.ShowToast(Strings.T("clip.captureSaveStopped"));
+        _save = null;
     }
 
     public void Dispose() => Stop();
+}
+
+/// <summary>Coalesces clipboard captures, retries pending writes and flushes once more on shutdown.</summary>
+internal sealed class ClipboardAutosave
+{
+    readonly ClipStore _store;
+    readonly DispatcherTimer _timer;
+
+    public ClipboardAutosave(ClipStore store, Dispatcher dispatcher)
+    {
+        _store = store;
+        _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher);
+        _timer.Tick += Flush;
+        _store.Changed += Schedule;
+    }
+
+    void Schedule()
+    {
+        _timer.Stop();
+        if (!_store.HasPendingChanges) return;
+        _timer.Interval = TimeSpan.FromSeconds(1);
+        _timer.Start();
+    }
+
+    void Flush(object? sender, EventArgs e)
+    {
+        _timer.Stop();
+        if (_store.HasPendingChanges && !_store.Save())
+        {
+            _timer.Interval = TimeSpan.FromSeconds(10);
+            _timer.Start();
+        }
+    }
+
+    public bool Stop()
+    {
+        _store.Changed -= Schedule;
+        _timer.Stop();
+        return !_store.HasPendingChanges || _store.Save();
+    }
 }

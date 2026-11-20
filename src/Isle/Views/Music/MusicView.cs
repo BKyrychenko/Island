@@ -34,11 +34,12 @@ public sealed class MusicView : Grid, ITabView, IDisposable
     readonly Grid _lyricsPanel = new() { Visibility = Visibility.Collapsed, ClipToBounds = true };
     readonly StackPanel _lyricLines = new() { VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock _lyricsMessage = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    readonly Button _retryLyrics = new() { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
     readonly ScrollViewer _plain = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Visibility = Visibility.Collapsed };
     readonly TextBlock _plainText = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12.5, LineHeight = 19 };
 
     DispatcherTimer? _timer;
-    bool _shown, _dragging;
+    bool _shown, _dragging, _updatingProgress;
     int _lyricIndex = -2;
     static bool _lyricsOpen; // remembered while the app runs
 
@@ -86,7 +87,8 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         _player.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
         _player.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _player.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        _player.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // The compact seek target uses the spare space above the normal 18-DIP slider.
+        _player.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MinHeight = 28 });
         _player.Margin = new Thickness(4, 4, 4, 0);
 
         _player.Children.Add(_art);
@@ -127,27 +129,34 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         _lyricsToggle.Click += (_, _) => { _lyricsOpen = _lyricsToggle.IsChecked == true; ApplyLyricsMode(); };
 
         _info.Children.Add(texts);
-        _info.Children.Add(transport);
+        _info.Margin = new Thickness(0, 0, 0, 40);
 
         // lyrics panel (same area as the info column)
         _lyricsMessage.SetResourceReference(StyleProperty, "TextDim");
         _lyricsMessage.TextTrimming = TextTrimming.None;
+        _retryLyrics.SetBinding(ContentControl.ContentProperty, Loc("music.lyricsRetry"));
+        _retryLyrics.Click += (_, _) => _lyrics.Retry();
+        var lyricsStatus = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        lyricsStatus.Children.Add(_lyricsMessage);
+        lyricsStatus.Children.Add(_retryLyrics);
         _lyricsPanel.Children.Add(_lyricLines);
-        _lyricsPanel.Children.Add(_lyricsMessage);
+        _lyricsPanel.Children.Add(lyricsStatus);
         _plain.Content = _plainText;
         _plainText.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
         _lyricsPanel.Children.Add(_plain);
-        _lyricsPanel.Margin = new Thickness(0, 0, 0, 36);
+        _lyricsPanel.Margin = new Thickness(0, 0, 0, 40);
 
         var right = new Grid();
         right.Children.Add(_info);
         right.Children.Add(_lyricsPanel);
+        right.Children.Add(transport);
         right.Children.Add(_lyricsToggle);
         SetColumn(right, 2);
         _player.Children.Add(right);
 
         // progress row
-        var progress = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        var progress = new Grid { VerticalAlignment = VerticalAlignment.Bottom };
+        _progress.SetResourceReference(MinHeightProperty, "CompactTargetMin");
         progress.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
         progress.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         progress.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
@@ -173,7 +182,13 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         _progress.PreviewMouseLeftButtonDown += (_, _) => _dragging = true;
         _progress.PreviewMouseLeftButtonUp += (_, _) => Dispatcher.BeginInvoke(CommitSeek, DispatcherPriority.Input);
         _progress.LostMouseCapture += (_, _) => { if (_dragging) Dispatcher.BeginInvoke(CommitSeek, DispatcherPriority.Input); };
-        _progress.ValueChanged += (_, _) => { if (_dragging && _media.Current is { } c) _elapsed.Text = PlaybackMath.Format(c.Duration * _progress.Value); };
+        _progress.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, Loc("music.progress"));
+        _progress.ValueChanged += (_, _) =>
+        {
+            if (_updatingProgress) return;
+            if (_dragging && _media.Current is { } c) _elapsed.Text = PlaybackMath.Format(c.Duration * _progress.Value);
+            else Seek();
+        };
     }
 
     Button TransportButton(string iconKey, double size, double iconSize, string tipKey)
@@ -193,8 +208,13 @@ public sealed class MusicView : Grid, ITabView, IDisposable
     {
         if (!_dragging) return;
         _dragging = false;
-        if (_media.Current is { CanSeek: true } c) _media.Seek(c.Duration * _progress.Value);
+        Seek();
         Tick();
+    }
+
+    void Seek()
+    {
+        if (_media.Current is { CanSeek: true } c) _media.Seek(c.Duration * _progress.Value);
     }
 
     // ---- state ----
@@ -254,6 +274,7 @@ public sealed class MusicView : Grid, ITabView, IDisposable
 
         _lyricsMessage.Text = message ?? "";
         _lyricsMessage.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
+        _retryLyrics.Visibility = !lyricsModuleOff && r?.Status == LyricsStatus.Error ? Visibility.Visible : Visibility.Collapsed;
         var plain = message is null && r!.Status == LyricsStatus.Plain;
         _plain.Visibility = plain ? Visibility.Visible : Visibility.Collapsed;
         if (plain) _plainText.Text = r!.Plain;
@@ -268,7 +289,9 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         if (!_dragging)
         {
             _elapsed.Text = s.Duration > TimeSpan.Zero ? PlaybackMath.Format(pos) : "";
-            _progress.Value = s.Duration > TimeSpan.Zero ? pos / s.Duration : 0;
+            _updatingProgress = true;
+            try { _progress.Value = s.Duration > TimeSpan.Zero ? pos / s.Duration : 0; }
+            finally { _updatingProgress = false; }
         }
         if (_lyricsOpen && _lyrics.ForCurrent is { Status: LyricsStatus.Synced } r) ShowLyricAt(r.Lines, pos);
     }

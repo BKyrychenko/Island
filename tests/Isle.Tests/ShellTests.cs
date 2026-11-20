@@ -1,9 +1,55 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
 using Isle;
 using Isle.Core;
 using Isle.Modules.Hotkeys;
+using Isle.Views;
 
 namespace Isle.Tests;
+
+[Collection(nameof(GlobalSettingsTests))]
+public class OverflowTabTests
+{
+    [Fact]
+    public void Unshown_tab_bar_does_not_handle_a_later_dispatchers_language_change()
+    {
+        FakeSink.Run(_ => new TabBar());
+        FakeSink.Run(_ =>
+        {
+            var previous = Strings.Language;
+            try { Strings.Language = previous == "en" ? "uk" : "en"; }
+            finally { Strings.Language = previous; }
+        });
+    }
+
+    [Fact]
+    public void Hidden_selection_updates_the_visible_and_accessible_more_label()
+    {
+        FakeSink.Run(_ =>
+        {
+            var bar = new TabBar { AvailableWidth = 140 };
+            var tabs = new[] { "music", "timers", "agents", "notes" }
+                .Select((id, order) => new TabInfo(id, "tab." + id, "Icon.More", () => new Grid(), order));
+            bar.SetTabs(tabs, "music");
+            var more = bar.MoreButton;
+            var label = Assert.Single(((StackPanel)more.Content).Children.OfType<TextBlock>());
+            var peer = UIElementAutomationPeer.CreatePeerForElement(more);
+            foreach (var tab in bar.Hidden)
+            {
+                bar.Select(tab.Id);
+                Assert.Equal(Visibility.Visible, label.Visibility);
+                Assert.Equal(Strings.T(tab.TitleKey), label.Text);
+                Assert.Contains(label.Text, peer.GetName());
+                Assert.Contains(Strings.T("tabs.more"), peer.GetName());
+            }
+            Assert.NotEmpty(bar.Hidden);
+            bar.Select("music");
+            Assert.Equal(Visibility.Collapsed, label.Visibility);
+            Assert.Equal(Strings.T("tabs.more"), peer.GetName());
+        });
+    }
+}
 
 public class SpringTests
 {
@@ -44,6 +90,18 @@ public class SpringTests
         var s = new Spring(0) { Target = 100 };
         for (var i = 0; i < 40; i++) s.Step(0.5, 290, 30.6); // stalled frames
         Assert.Equal(100, s.Value);
+    }
+}
+
+public class CapsuleOverlapTests
+{
+    [Fact]
+    public void ExcludedWindowMustCoverTheCapsuleOnItsMonitor()
+    {
+        var screen = new ScreenInfo(IntPtr.Zero, -1920, -100, 1920, 1080, false, 1.25, "");
+        Assert.True(IslandWindow.BoundsOverlapCapsule(new Native.RECT { Left = -1100, Top = -95, Right = -850, Bottom = 300 }, screen, 150, 40, 8));
+        Assert.False(IslandWindow.BoundsOverlapCapsule(new Native.RECT { Left = -1100, Top = -52, Right = -850, Bottom = 300 }, screen, 150, 40, 8));
+        Assert.False(IslandWindow.BoundsOverlapCapsule(new Native.RECT { Left = 0, Top = -95, Right = 500, Bottom = 300 }, screen, 150, 40, 8));
     }
 }
 

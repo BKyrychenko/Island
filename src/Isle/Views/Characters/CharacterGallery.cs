@@ -21,6 +21,7 @@ public sealed class CharacterGallery : Grid
     readonly CreatureBrain? _brain;
     readonly StackPanel _cards = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
     readonly WrapPanel _options = new() { Margin = new Thickness(0, 10, 0, 0) };
+    Button? _selectedCard;
 
     public CharacterGallery(GalleryActions actions, CreatureBrain? brain)
     {
@@ -36,10 +37,11 @@ public sealed class CharacterGallery : Grid
     /// <summary>Rebuilds the content for the current choice (cheap: three cards and a few chips).</summary>
     public void Show(string selected, bool inPill, int sleepMinutes)
     {
+        var focus = IsKeyboardFocusWithin ? (Keyboard.FocusedElement as FrameworkElement)?.Tag : null;
         _root.Children.Clear();
 
         var head = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 8) };
-        var close = new Button { ToolTip = Strings.T("chars.close"), Width = 28, Height = 28 };
+        var close = new Button { ToolTip = Strings.T("chars.close"), Width = 28, Height = 28, Tag = "close" };
         close.SetResourceReference(StyleProperty, "IconButton");
         var x = new Icon { Width = 14, Height = 14 };
         x.SetResourceReference(Icon.DataProperty, "Icon.Close");
@@ -54,11 +56,18 @@ public sealed class CharacterGallery : Grid
         _root.Children.Add(head);
 
         _cards.Children.Clear();
-        foreach (var d in CreatureDesign.All) _cards.Children.Add(Card(d, d.Id == selected));
+        _selectedCard = null;
+        foreach (var d in CreatureDesign.All)
+        {
+            var card = Card(d, d.Id == selected);
+            _cards.Children.Add(card);
+            if (d.Id == selected) _selectedCard = card;
+        }
         _root.Children.Add(_cards);
 
         _options.Children.Clear();
         var pill = Chip(Strings.T("chars.inPill"), inPill);
+        pill.Tag = "pill";
         pill.Click += (_, _) => _actions.InPill(pill.IsChecked == true);
         pill.Margin = new Thickness(0, 0, 16, 4);
         _options.Children.Add(pill);
@@ -68,15 +77,21 @@ public sealed class CharacterGallery : Grid
         foreach (var m in SleepChoices)
         {
             var chip = Chip(m == 0 ? Strings.T("chars.never") : Strings.T("chars.min", m), m == sleepMinutes);
+            chip.Tag = m;
             var minutes = m;
             chip.Click += (_, _) => _actions.SleepMinutes(minutes);
             chip.Margin = new Thickness(0, 0, 4, 4);
             _options.Children.Add(chip);
         }
         _root.Children.Add(_options);
+        if (focus is not null)
+            _cards.Children.OfType<ButtonBase>().Concat(_options.Children.OfType<ButtonBase>()).Append(close)
+                .FirstOrDefault(e => Equals(e.Tag, focus))?.Focus();
     }
 
-    FrameworkElement Card(CreatureDesign d, bool selected)
+    internal void FocusSelected() => (_selectedCard ?? _cards.Children.OfType<Button>().FirstOrDefault())?.Focus();
+
+    Button Card(CreatureDesign d, bool selected)
     {
         var creature = new CreatureView(d, _brain) { Width = 56, Height = 56, HorizontalAlignment = HorizontalAlignment.Center };
         if (_brain is null) creature.Still(Mood.Awake);
@@ -94,14 +109,16 @@ public sealed class CharacterGallery : Grid
         stack.Children.Add(creature);
         stack.Children.Add(name);
         stack.Children.Add(trait);
-        var card = new Border { Child = stack, Width = 140, Margin = new Thickness(4, 0, 4, 0), Padding = new Thickness(8, 8, 8, 8), BorderThickness = new Thickness(2), Cursor = Cursors.Hand };
+        var card = new Border { Child = stack, Width = 140, Padding = new Thickness(8), BorderThickness = new Thickness(2), IsHitTestVisible = false };
         card.SetResourceReference(StyleProperty, "Card");
         card.Padding = new Thickness(8);
         if (selected) card.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
         else card.BorderBrush = System.Windows.Media.Brushes.Transparent;
-        card.MouseLeftButtonUp += (_, e) => { e.Handled = true; _actions.Pick(d.Id); };
-        AutomationName(card, Strings.T(d.NameKey));
-        return card;
+        var button = new Button { Content = card, Padding = new Thickness(0), Margin = new Thickness(4, 0, 4, 0), Tag = d.Id };
+        button.SetResourceReference(StyleProperty, "GhostButton");
+        button.Click += (_, _) => _actions.Pick(d.Id);
+        AutomationName(button, Strings.T(d.NameKey));
+        return button;
     }
 
     static ToggleButton Chip(string text, bool on)

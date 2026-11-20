@@ -23,6 +23,12 @@ public static class TextActions
     /// <summary>Whether the result is meant to replace the selection (offer "Replace" first).</summary>
     public static bool Replaces(TextAction a) => a is TextAction.TranslateEn or TextAction.TranslateUk or TextAction.TranslateNl or TextAction.Fix;
 
+    internal static bool IsClipped(string selection) => selection.Length > MaxChars;
+
+    internal static bool CanReplace(string selection, ChatMessage? answer, bool streaming) =>
+        !streaming && selection.Length > 0 && !IsClipped(selection) &&
+        answer is { Error: false, Stopped: false, Note.Length: 0 } && !string.IsNullOrWhiteSpace(answer.Text);
+
     /// <summary>System prompt for the action; <paramref name="uiLanguage"/> ("en"/"uk") is the language for
     /// explanations and summaries.</summary>
     public static string SystemPrompt(TextAction a, string uiLanguage)
@@ -44,7 +50,7 @@ public static class TextActions
     /// <summary>One-off conversation for the action (not stored).</summary>
     public static Conversation Build(TextAction a, string selection, string uiLanguage)
     {
-        var text = selection.Length > MaxChars ? selection[..MaxChars] : selection;
+        var text = IsClipped(selection) ? selection[..MaxChars] : selection;
         var c = new Conversation { SystemPrompt = SystemPrompt(a, uiLanguage) };
         c.Messages.Add(new ChatMessage { Role = "user", Text = text });
         return c;

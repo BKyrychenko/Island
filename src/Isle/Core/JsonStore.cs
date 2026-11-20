@@ -20,22 +20,38 @@ public static class JsonStore
 
     public static T Load<T>(string path) where T : class, new()
     {
+        TryLoad(path, out T value);
+        return value;
+    }
+
+    /// <summary>False when the source could not be read or safely backed up. Set requireExisting to
+    /// retry an unavailable source without treating a missing or corrupt file as a fresh document.</summary>
+    public static bool TryLoad<T>(string path, out T value, bool requireExisting = false) where T : class, new()
+    {
         try
         {
-            if (!File.Exists(path)) return new T();
             var text = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<T>(text, Options) ?? throw new JsonException("null document");
+            try
+            {
+                value = JsonSerializer.Deserialize<T>(text, Options) ?? throw new JsonException("null document");
+                return true;
+            }
+            catch (Exception ex) when (!requireExisting && ex is JsonException or NotSupportedException)
+            {
+                value = Recover<T>(path) ?? new T();
+                return BackupCorrupt(path) is not null;
+            }
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        catch (Exception ex) when (!requireExisting && ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            var recovered = Recover<T>(path);
-            BackupCorrupt(path);
-            return recovered ?? new T();
+            value = new T();
+            return true;
         }
         catch (Exception ex)
         {
             Logger.Error($"load {Path.GetFileName(path)}", ex);
-            return new T();
+            value = new T();
+            return false;
         }
     }
 
@@ -71,7 +87,11 @@ public static class JsonStore
             for (var attempt = 0; ; attempt++)
             {
                 try { File.Move(tmp, path, overwrite: true); break; }
-                catch (IOException) when (attempt < 3) { Thread.Sleep(30 * (attempt + 1)); }
+                // On Windows an overlapping replacement can also surface as access denied.
+                catch (Exception ex) when (attempt < 3 && ex is IOException or UnauthorizedAccessException)
+                {
+                    Thread.Sleep(30 * (attempt + 1));
+                }
             }
         }
         finally { if (File.Exists(tmp)) File.Delete(tmp); }

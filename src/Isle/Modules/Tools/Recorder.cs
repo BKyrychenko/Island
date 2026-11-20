@@ -35,7 +35,7 @@ public sealed class Recorder : IDisposable
     const int SampleRate = 48000, Channels = 2;
 
     readonly RecordOptions _o;
-    readonly string _path;
+    readonly string _folder;
     ID3D11Device? _d3d;
     ID3D11DeviceContext? _ctx;
     IDirect3DDevice? _device;
@@ -45,6 +45,7 @@ public sealed class Recorder : IDisposable
     MediaStreamSource? _mss;
     IRandomAccessStream? _stream;
     Task? _transcode;
+    readonly CancellationTokenSource _cancelTranscode = new();
     readonly Stopwatch _clock = new();
     readonly AutoResetEvent _frameArrived = new(false);
     readonly ManualResetEvent _stopSignal = new(false);
@@ -60,13 +61,13 @@ public sealed class Recorder : IDisposable
     MixingSampleProvider? _mixer;
     long _audioFrames;
 
-    public string FilePath => _path;
+    public string FilePath { get; private set; } = "";
     public TimeSpan Elapsed => _clock.Elapsed;
 
     public Recorder(RecordOptions options, string folder)
     {
         _o = options;
-        _path = System.IO.Path.Combine(folder, $"Isle {DateTime.Now:yyyy-MM-dd HH.mm.ss}.mp4");
+        _folder = folder;
     }
 
     public async Task StartAsync()
@@ -106,7 +107,10 @@ public sealed class Recorder : IDisposable
         if (withAudio) profile.Audio = AudioEncodingProperties.CreateAac(SampleRate, Channels, 192_000);
         else profile.Audio = null;
 
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
+        Directory.CreateDirectory(_folder);
+        var folder = await StorageFolder.GetFolderFromPathAsync(_folder);
+        var file = await folder.CreateFileAsync($"Isle {DateTime.Now:yyyy-MM-dd HH.mm.ss}.mp4", CreationCollisionOption.GenerateUniqueName);
+        FilePath = file.Path;
         // hardware-accelerated processing first; some drivers reject GPU surfaces from another D3D device ("Unknown"),
         // then the transcoder's software path is used (found on this PC; the H.264 encoder MFT is still chosen by MF)
         PrepareTranscodeResult? prepared = null;
@@ -117,7 +121,8 @@ public sealed class Recorder : IDisposable
             _mss.BufferTime = TimeSpan.Zero;
             _mss.CanSeek = false;
             _mss.SampleRequested += OnSampleRequested;
-            _stream = await FileRandomAccessStream.OpenAsync(_path, FileAccessMode.ReadWrite, StorageOpenOptions.None, FileOpenDisposition.CreateAlways);
+            _stream = await file.OpenAsync(FileAccessMode.ReadWrite);
+            _stream.Size = 0;
             var transcoder = new MediaTranscoder { HardwareAccelerationEnabled = hw };
             prepared = await transcoder.PrepareMediaStreamSourceTranscodeAsync(_mss, _stream, profile);
             if (prepared.CanTranscode) { Logger.Info($"recording transcoder: {(hw ? "hardware" : "software")} processing"); break; }
@@ -130,7 +135,7 @@ public sealed class Recorder : IDisposable
 
         _session.StartCapture();
         _clock.Start();
-        _transcode = prepared.TranscodeAsync().AsTask();
+        _transcode = prepared.TranscodeAsync().AsTask(_cancelTranscode.Token);
     }
 
     /// <summary>Ends the stream and waits for the file to be finalised.</summary>
@@ -140,12 +145,17 @@ public sealed class Recorder : IDisposable
         _stopping = true;
         _frameArrived.Set();
         _stopSignal.Set();
-        if (_transcode is not null)
-        {
-            try { await _transcode.WaitAsync(TimeSpan.FromSeconds(20)); }
-            catch (Exception ex) { Logger.Error("recording finalise", ex); }
-        }
-        Dispose();
+        // Cancel the encoder itself on timeout. It still owns the output stream until it finishes.
+        _cancelTranscode.CancelAfter(TimeSpan.FromSeconds(20));
+        await FinishFileAsync(_transcode, FilePath, Dispose);
+        if (!_haveLast) throw new IOException("Recording contains no video frames.");
+    }
+
+    internal static async Task FinishFileAsync(Task? transcode, string path, Action close)
+    {
+        try { await (transcode ?? throw new InvalidOperationException("No recording to finalise.")); }
+        finally { close(); }
+        if (new FileInfo(path).Length == 0) throw new IOException("Recording file is empty.");
     }
 
     // ---- video ----
@@ -390,6 +400,7 @@ public sealed class Recorder : IDisposable
         _d3d?.Dispose();
         _ctx = null;
         _d3d = null;
+        _cancelTranscode.Dispose();
         _clock.Stop();
     }
 }

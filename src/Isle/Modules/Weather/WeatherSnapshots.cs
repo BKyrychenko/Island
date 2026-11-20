@@ -7,7 +7,7 @@ namespace Isle.Modules.Weather;
 /// <summary>--snapshot states for weather (demo report anchored to the current hour, no network).</summary>
 static class WeatherSnapshots
 {
-    static readonly WeatherActions NoOp = new(_ => Task.FromResult(new List<Place>()), _ => { }, () => { }, () => { }, _ => { }, _ => { }, _ => { });
+    static readonly WeatherActions NoOp = new((_, _) => Task.FromResult(new List<Place>()), _ => { }, _ => { }, () => { }, _ => { }, _ => { }, _ => { });
 
     public static void Register(Dictionary<string, Action<IslandWindow>> states)
     {

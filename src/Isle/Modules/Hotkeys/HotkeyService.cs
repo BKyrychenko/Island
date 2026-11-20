@@ -101,6 +101,7 @@ public sealed class HotkeyService
     int _nextId = 0x4000;
     DispatcherTimer? _holdTimer;
     Entry? _held;
+    bool _suspended;
 
     public event Action? Changed;
     public event Action<string>? RegistrationFailed;
@@ -116,7 +117,8 @@ public sealed class HotkeyService
     /// <summary>Temporarily releases every hotkey (while the settings panel records a new combination) and takes them back.</summary>
     public void Suspend(bool suspended)
     {
-        if (_hwnd == IntPtr.Zero) return;
+        if (_hwnd == IntPtr.Zero || _suspended == suspended) return;
+        _suspended = suspended;
         foreach (var e in _entries.Values)
         {
             if (suspended) Unbind(e);
@@ -126,8 +128,9 @@ public sealed class HotkeyService
 
     public void Detach()
     {
-        foreach (var e in _entries.Values) Unbind(e);
+        foreach (var e in _entries.Values) Unbind(e, releaseHold: false);
         _hwnd = IntPtr.Zero;
+        _suspended = false;
     }
 
     /// <param name="released">Optional: called when the key is let go (hold-to-talk).</param>
@@ -145,7 +148,8 @@ public sealed class HotkeyService
     {
         if (!_entries.Remove(id, out var e)) return;
         _order.Remove(id);
-        Unbind(e);
+        // The module owns capture cleanup during teardown. Releasing here could start transcription.
+        Unbind(e, releaseHold: false);
         Changed?.Invoke();
     }
 
@@ -154,13 +158,25 @@ public sealed class HotkeyService
     {
         if (!_entries.TryGetValue(id, out var e)) return false;
         var s = Settings.Current;
+        var candidate = gesture ?? e.Default;
+        if (candidate.Length > 0 && (!Gesture.TryParse(candidate, out var parsed) ||
+            _entries.Values.Any(other => other != e && Gesture.TryParse(GestureText(other), out var existing) && existing == parsed)))
+            return false;
+        var hadOverride = s.Hotkeys.TryGetValue(id, out var previous);
         if (gesture is null) s.Hotkeys.Remove(id);
         else s.Hotkeys[id] = gesture;
-        s.Save("Hotkeys");
-        Unbind(e);
         Bind(e);
+        if (!e.Registered && candidate.Length > 0)
+        {
+            if (hadOverride) s.Hotkeys[id] = previous!;
+            else s.Hotkeys.Remove(id);
+            Bind(e);
+            Changed?.Invoke();
+            return false;
+        }
+        s.Save("Hotkeys");
         Changed?.Invoke();
-        return e.Registered || gesture == "";
+        return true;
     }
 
     public IReadOnlyList<HotkeyInfo> List() =>
@@ -186,16 +202,17 @@ public sealed class HotkeyService
         }
     }
 
-    void Unbind(Entry e)
+    void Unbind(Entry e, bool releaseHold = true)
     {
         if (e.Registered && _hwnd != IntPtr.Zero) Native.UnregisterHotKey(_hwnd, e.NativeId);
         e.Registered = false;
-        if (ReferenceEquals(_held, e)) StopHold(fire: false);
+        if (ReferenceEquals(_held, e)) StopHold(fire: releaseHold);
     }
 
-    /// <summary>Feed WM_HOTKEY here. Returns true when the id belonged to this service.</summary>
+    /// <summary>Feed WM_HOTKEY here. Returns true when a shortcut is handled.</summary>
     public bool HandleHotkey(int nativeId)
     {
+        if (_suspended) return false; // A WM_HOTKEY queued before the recorder gained focus.
         foreach (var e in _entries.Values)
         {
             if (e.NativeId != nativeId) continue;

@@ -8,6 +8,31 @@ namespace Isle.Tests;
 
 public class VoiceTests
 {
+    [Fact]
+    public void Whisper_disposal_waits_for_worker_gate_and_rejects_queued_work()
+    {
+        FakeSink.Run(sink =>
+        {
+            var engine = new WhisperEngine();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var gate = (SemaphoreSlim)typeof(WhisperEngine).GetField("_gate", flags)!.GetValue(engine)!;
+            var path = typeof(WhisperEngine).GetField("_loadedPath", flags)!;
+            path.SetValue(engine, "synthetic-loaded-model");
+            gate.Wait(); // stand in for a worker still inside the native model
+            var queued = engine.TranscribeAsync([], "must-not-load", "auto", CancellationToken.None);
+            engine.Dispose();
+            var disposal = engine.DisposeAsync().AsTask();
+            Assert.False(disposal.IsCompleted);
+            Assert.Equal("synthetic-loaded-model", path.GetValue(engine));
+            gate.Release();
+            Assert.True(sink.PumpUntil(() => disposal.IsCompleted && queued.IsCompleted));
+            disposal.GetAwaiter().GetResult();
+            Assert.Null(path.GetValue(engine));
+            Assert.Throws<ObjectDisposedException>(() => queued.GetAwaiter().GetResult());
+            Assert.Throws<ObjectDisposedException>(() => engine.TranscribeAsync([], "must-not-load", "auto", CancellationToken.None).GetAwaiter().GetResult());
+        });
+    }
+
     [Theory]
     [InlineData("en", 0.9f, null, "en")]
     [InlineData("uk", 0.3f, null, "uk")]

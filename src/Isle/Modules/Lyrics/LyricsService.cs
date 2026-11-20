@@ -62,9 +62,9 @@ public sealed partial class LyricsService : IDisposable
     {
         if (string.IsNullOrWhiteSpace(q.Title)) return LyricsResult.NotFound(_now());
         var key = q.CacheKey;
-        if (_memory.TryGetValue(key, out var mem)) return mem;
+        if (_memory.TryGetValue(key, out var mem) && !Expired(mem)) return mem;
         var disk = await Task.Run(() => ReadDisk(key), ct).ConfigureAwait(false);
-        if (disk is not null && !(disk.Status == LyricsStatus.NotFound && _now() - disk.Fetched > NotFoundRetry))
+        if (disk is not null && !Expired(disk))
         {
             Remember(key, disk);
             return disk;
@@ -78,6 +78,8 @@ public sealed partial class LyricsService : IDisposable
         }
         return result;
     }
+
+    bool Expired(LyricsResult result) => result.Status == LyricsStatus.NotFound && _now() - result.Fetched >= NotFoundRetry;
 
     async Task<LyricsResult> FetchAsync(TrackQuery q, CancellationToken ct)
     {

@@ -68,13 +68,26 @@ public sealed class AgentsModule(IslandWindow island) : IModule, IDisposable
     internal AgentsActions Actions() => new(
         Allow: r => Answer(r, HookProtocol.Reply("allow")),
         Deny: r => Answer(r, HookProtocol.Reply("deny", Strings.T("agents.deniedMessage"))),
-        Terminal: r => { if (_book?.Cancel(r) == true) Changed(); },
+        Terminal: r => { if (_book?.Cancel(r) == true) { Changed(); _ = OpenTerminal(r.Session); } },
+        OpenTerminal: s => _ = OpenTerminal(s),
         Answer: (r, picks) => Answer(r, AgentText.AnswerReply(r.Questions, picks)),
         Dismiss: s => { _book?.Remove(s.Key); Changed(); },
         Targets: () => [HookTarget.Claude(), HookTarget.Codex()],
         Install: Install,
         Remove: Remove,
         TimeoutSeconds: () => TimeoutSeconds);
+
+    async Task OpenTerminal(AgentSession session)
+    {
+        if (session.Terminal is not { } target)
+        {
+            island.ShowToast(Strings.T("agents.terminalUnavailable"));
+            return;
+        }
+        var window = await AgentTerminal.FindAsync(target);
+        if (!AgentTerminal.Activate(window)) island.ShowToast(Strings.T("agents.terminalUnavailable"));
+        else island.Collapse();
+    }
 
     void OnSettingsChanged(string name)
     {

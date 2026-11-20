@@ -152,6 +152,95 @@ public class RepeatRuleTests
 
 public class ReminderBookTests
 {
+    public static TheoryData<RepeatRule, string> SnoozedRepeats => new()
+    {
+        { RepeatRule.Daily(), "2026-03-12T09:00" },
+        { RepeatRule.Daily(3), "2026-03-14T09:00" },
+        { RepeatRule.Weekly(), "2026-03-18T09:00" },
+        { RepeatRule.Weekly(DayOfWeek.Friday), "2026-03-13T09:00" },
+        { new RepeatRule { Kind = RepeatKind.Monthly }, "2026-04-11T09:00" },
+        { new RepeatRule { Kind = RepeatKind.EveryNHours, Interval = 2 }, "2026-03-11T11:00" },
+        { new RepeatRule { Kind = RepeatKind.EveryNMinutes, Interval = 45 }, "2026-03-11T10:30" },
+    };
+
+    [Theory]
+    [MemberData(nameof(SnoozedRepeats))]
+    public void Snooze_preserves_repeat_schedule_after_restart(RepeatRule repeat, string expected)
+    {
+        var now = new DateTimeOffset(2026, 3, 11, 9, 0, 0, TimeSpan.Zero);
+        // A legacy document has no anchor yet.
+        var reminder = new Reminder { Due = now, Repeat = repeat };
+        var book = new ReminderBook(new ReminderDoc { Reminders = [reminder] }, () => now, TimeZoneInfo.Utc);
+        Assert.Single(book.CollectDue());
+        book.Snooze(reminder.Id, TimeSpan.FromMinutes(30));
+        now = now.AddMinutes(30);
+        Assert.Single(book.CollectDue());
+        book.Snooze(reminder.Id, TimeSpan.FromMinutes(30));
+        Assert.Equal(now.AddMinutes(30), book.NextDue);
+
+        using var dir = new TempDir();
+        var path = dir.File("reminders.json");
+        Assert.True(Isle.Core.JsonStore.Save(path, book.Doc));
+        now = now.AddMinutes(30);
+        var again = new ReminderBook(Isle.Core.JsonStore.Load<ReminderDoc>(path), () => now, TimeZoneInfo.Utc);
+        var fired = Assert.Single(again.CollectDue());
+        again.Done(fired.Id);
+        Assert.Null(fired.FiredAt);
+        Assert.Equal(DateTimeOffset.Parse(expected + "Z", System.Globalization.CultureInfo.InvariantCulture), fired.Due);
+    }
+
+    [Fact]
+    public void Tomorrow_snooze_uses_original_time_and_done_skips_missed_occurrences()
+    {
+        var now = new DateTimeOffset(2026, 3, 11, 9, 0, 0, TimeSpan.Zero);
+        var book = new ReminderBook(new ReminderDoc(), () => now, TimeZoneInfo.Utc);
+        var reminder = book.Add(new ParsedReminder("daily", now, RepeatRule.Daily()), "daily 9:00");
+        book.Snooze(reminder.Id, TimeSpan.FromHours(1));
+        now = now.AddHours(1);
+        book.SnoozeTomorrow(reminder.Id);
+        Assert.Equal(new DateTimeOffset(2026, 3, 12, 9, 0, 0, TimeSpan.Zero), reminder.Due);
+        now = now.AddDays(4);
+        Assert.Single(book.CollectDue());
+        book.Done(reminder.Id);
+        Assert.Equal(new DateTimeOffset(2026, 3, 16, 9, 0, 0, TimeSpan.Zero), reminder.Due);
+    }
+
+    [Fact]
+    public void Monthly_schedule_keeps_original_day_after_short_month()
+    {
+        var now = new DateTimeOffset(2026, 1, 31, 9, 0, 0, TimeSpan.Zero);
+        var book = new ReminderBook(new ReminderDoc(), () => now, TimeZoneInfo.Utc);
+        var reminder = book.Add(new ParsedReminder("monthly", now, new RepeatRule { Kind = RepeatKind.Monthly }), "monthly");
+        book.Done(reminder.Id);
+        Assert.Equal(new DateTimeOffset(2026, 2, 28, 9, 0, 0, TimeSpan.Zero), reminder.Due);
+        now = reminder.Due;
+        book.SnoozeTomorrow(reminder.Id);
+        now = reminder.Due;
+        book.Done(reminder.Id);
+        Assert.Equal(new DateTimeOffset(2026, 3, 31, 9, 0, 0, TimeSpan.Zero), reminder.Due);
+    }
+
+    [Fact]
+    public void Editing_snoozed_reminder_resets_schedule_and_can_make_it_one_off()
+    {
+        var now = new DateTimeOffset(2026, 3, 11, 9, 0, 0, TimeSpan.Zero);
+        var book = new ReminderBook(new ReminderDoc(), () => now, TimeZoneInfo.Utc);
+        var reminder = book.Add(new ParsedReminder("daily", now, RepeatRule.Daily()), "daily 9:00");
+        book.Snooze(reminder.Id, TimeSpan.FromHours(1));
+        now = now.AddHours(3);
+        Assert.True(book.Replace(reminder.Id, new ParsedReminder("edited", now, RepeatRule.Daily()), "daily 12:00"));
+        book.SnoozeTomorrow(reminder.Id);
+        Assert.Equal(now.AddDays(1), reminder.Due);
+        now = reminder.Due;
+        book.Done(reminder.Id);
+        Assert.Equal(now.AddDays(1), reminder.Due);
+
+        Assert.True(book.Replace(reminder.Id, new ParsedReminder("once", now, null), "once"));
+        Assert.Null(reminder.RepeatAnchor);
+        book.Done(reminder.Id);
+        Assert.Null(book.Find(reminder.Id));
+    }
+
     [Fact]
     public void Due_done_snooze_and_missed()
     {

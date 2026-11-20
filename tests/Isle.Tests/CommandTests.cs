@@ -22,11 +22,18 @@ public class CalculatorTests
     [InlineData("15 % of 80", 12)]
     [InlineData("100 + 15% of 80", 112)]
     [InlineData("20% від 50", 10)]
+    [InlineData("(1 250 + 15% of 80) / 3", 420.6666666666667)]
+    [InlineData("(1 250 + 15% від 80) / 3", 420.6666666666667)]
+    [InlineData("(15% of 80) * 2", 24)]
+    [InlineData("15% of (80 + 20)", 15)]
     [InlineData("sqrt(16)", 4)]
     [InlineData("sqrt 16 + 0", double.NaN)]
     [InlineData("abs(-3)", 3)]
     [InlineData("round(2.5)", 3)]
     [InlineData("round(3.14159, 2)", 3.14)]
+    [InlineData("round(1.2345,2)", 1.23)]
+    [InlineData("round((1,2345),2)", 1.23)]
+    [InlineData("abs(-3,5)", 3.5)]
     [InlineData("log(1000)", 3)]
     [InlineData("ln(e)", 1)]
     [InlineData("sin(0) + cos(0)", 1)]
@@ -40,6 +47,10 @@ public class CalculatorTests
     [InlineData("=2*21", 42)]
     [InlineData("(1+2", 3)]
     [InlineData("max(3, 9, 4)", 9)]
+    [InlineData("max(2,3)", 3)]
+    [InlineData("max(2,300)", 300)]
+    [InlineData("min(3,2)", 2)]
+    [InlineData("log(8,2)", 3)]
     public void Evaluates(string input, double expected)
     {
         var ok = Calculator.TryEvaluate(input, out var r);
@@ -251,6 +262,13 @@ public class CurrencyTests
 
 public class CommandBarTests
 {
+    static void ClickRow(Isle.Views.Commands.CommandBarView view, int index)
+    {
+        var rows = (System.Windows.Controls.StackPanel)((System.Windows.Controls.ScrollViewer)view.Children[1]).Content;
+        rows.Children[index].RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0,
+            System.Windows.Input.MouseButton.Left) { RoutedEvent = System.Windows.UIElement.MouseLeftButtonUpEvent });
+    }
+
     sealed class Delayed(int delayMs, params CommandItem[] items) : ICommandProvider
     {
         public async Task<IEnumerable<CommandItem>> QueryAsync(string text, CancellationToken ct)
@@ -258,6 +276,59 @@ public class CommandBarTests
             await Task.Delay(delayMs, ct);
             return items;
         }
+    }
+
+    sealed class Pending : ICommandProvider
+    {
+        public readonly TaskCompletionSource<IEnumerable<CommandItem>> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<IEnumerable<CommandItem>> QueryAsync(string text, CancellationToken ct) => Completion.Task.WaitAsync(ct);
+    }
+
+    [Fact]
+    public void Clicking_an_early_row_runs_that_item_even_when_a_better_result_arrives_later()
+    {
+        FakeSink.Run(sink =>
+        {
+            var runs = 0;
+            var early = new CommandItem { Title = "early", Score = 5, Run = () => runs++ };
+            var late = new CommandItem { Title = "late", Score = 1000, Run = () => runs += 100 };
+            var pending = new Pending();
+            var view = new Isle.Views.Commands.CommandBarView([new Delayed(0, early), pending], i => i.Run!(), null);
+            view.Text = "query";
+            view.Query();
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 1));
+            ClickRow(view, 0);
+            Assert.Equal(1, runs);
+            pending.Completion.SetResult([late]);
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 2));
+            Assert.Equal(1, runs);
+            Assert.Same(early, view.Results[view.SelectedIndex]);
+        });
+    }
+
+    [Fact]
+    public void Clicking_an_early_system_row_still_requires_confirmation_and_late_results_disarm_it()
+    {
+        FakeSink.Run(sink =>
+        {
+            var runs = 0;
+            var system = new CommandItem { Title = "system", Score = 5, Confirm = true, Run = () => runs++ };
+            var late = new CommandItem { Title = "late", Score = 1000, Run = () => runs += 100 };
+            var pending = new Pending();
+            var view = new Isle.Views.Commands.CommandBarView([new Delayed(0, system), pending], i => i.Run!(), null);
+            view.Text = "query";
+            view.Query();
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 1));
+            ClickRow(view, 0);
+            ClickRow(view, 0);
+            Assert.Equal(0, runs);
+            pending.Completion.SetResult([late]);
+            Assert.True(sink.PumpUntil(() => view.Results.Count == 2));
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            Assert.True(sink.PumpUntil(() => wait.ElapsedMilliseconds >= 450));
+            ClickRow(view, view.SelectedIndex);
+            Assert.Equal(0, runs);
+        });
     }
 
     [Fact]

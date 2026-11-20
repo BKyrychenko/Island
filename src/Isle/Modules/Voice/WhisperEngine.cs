@@ -19,13 +19,15 @@ public sealed record Transcript(string Text, string Language);
 /// Whisper.net (whisper.cpp) loaded on demand; the model is unloaded <see cref="IdleUnload"/> after the last use.
 /// One transcription at a time. Must be created on the UI thread (the unload timer lives there).
 /// </summary>
-public sealed partial class WhisperEngine : ITranscriber
+public sealed partial class WhisperEngine : ITranscriber, IAsyncDisposable
 {
     public static readonly TimeSpan IdleUnload = TimeSpan.FromMinutes(2);
     readonly DispatcherTimer _idle;
     readonly SemaphoreSlim _gate = new(1, 1);
     WhisperFactory? _factory;
     string? _loadedPath;
+    volatile bool _disposed;
+    Task? _disposal;
 
     public WhisperEngine()
     {
@@ -37,10 +39,12 @@ public sealed partial class WhisperEngine : ITranscriber
 
     public async Task<Transcript> TranscribeAsync(float[] samples, string modelPath, string language, CancellationToken ct)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _idle.Stop();
         await _gate.WaitAsync(ct);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return await Task.Run(async () =>
             {
                 if (_factory is null || _loadedPath != modelPath)
@@ -70,12 +74,13 @@ public sealed partial class WhisperEngine : ITranscriber
         finally
         {
             _gate.Release();
-            _idle.Start();
+            if (!_disposed) _idle.Start();
         }
     }
 
     async Task UnloadAsync()
     {
+        if (_disposed) return;
         if (!await _gate.WaitAsync(0)) { _idle.Start(); return; } // busy: try again later
         try
         {
@@ -90,11 +95,25 @@ public sealed partial class WhisperEngine : ITranscriber
         Memory.TrimSoon(1);
     }
 
-    public void Dispose()
+    public void Dispose() => _ = DisposeAsync();
+
+    public ValueTask DisposeAsync()
     {
+        _disposed = true;
         _idle.Stop();
-        _factory?.Dispose();
-        _factory = null;
+        return new ValueTask(_disposal ??= DisposeWhenIdleAsync());
+    }
+
+    async Task DisposeWhenIdleAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            _factory?.Dispose();
+            _factory = null;
+            _loadedPath = null;
+        }
+        finally { _gate.Release(); }
     }
 }
 

@@ -22,6 +22,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
     readonly TextBlock _placeholder = new() { IsHitTestVisible = false, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly TextBlock _hint = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(2, 4, 0, 0), FontSize = 11 };
     readonly StackPanel _list = new();
+    readonly List<(Button Button, int Minutes)> _presets = [];
     readonly StackPanel _empty = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     readonly List<Action> _tickers = [];
     DispatcherTimer? _timer;
@@ -44,15 +45,22 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         sw.Click += (_, _) => { if (!_ctl.Timers.Stopwatch.Active) _ctl.StopwatchToggle(); };
         DockPanel.SetDock(sw, Dock.Right);
         top.Children.Add(sw);
-        foreach (var m in Presets.Reverse())
+        var submit = new Button { MinHeight = 30, Margin = new Thickness(4, 0, 0, 0), Padding = new Thickness(8, 0, 8, 0) };
+        submit.SetResourceReference(StyleProperty, "FlatButton");
+        submit.SetBinding(ContentControl.ContentProperty, Loc("timers.submit"));
+        submit.Click += (_, _) => Submit();
+        DockPanel.SetDock(submit, Dock.Right);
+        top.Children.Add(submit);
+        var presets = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+        foreach (var m in Presets)
         {
-            var b = new Button { Content = m.ToString(), Margin = new Thickness(4, 0, 0, 0), Padding = new Thickness(0), Width = 32, MinHeight = 30 };
+            var b = new Button { Content = $"{m} {Strings.T("unit.min")}", Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(8, 0, 8, 0), MinHeight = 30 };
             b.SetResourceReference(StyleProperty, "FlatButton");
             b.ToolTip = $"{m} {Strings.T("unit.min")}";
             var minutes = m;
-            b.Click += (_, _) => _ctl.AddTimer(TimeSpan.FromMinutes(minutes));
-            DockPanel.SetDock(b, Dock.Right);
-            top.Children.Add(b);
+            b.Click += (_, _) => { if (!_ctl.AddTimer(TimeSpan.FromMinutes(minutes))) ShowHint(Strings.T(_ctl.LastSaveFailed ? "timers.saveFailed" : "timers.full")); };
+            _presets.Add((b, minutes));
+            presets.Children.Add(b);
         }
         var inputHost = new Grid();
         _input.SetResourceReference(StyleProperty, "FlatTextBox");
@@ -68,8 +76,11 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         Children.Add(top);
 
         _hint.SetResourceReference(TextBlock.ForegroundProperty, "WarnBrush");
-        SetRow(_hint, 1);
-        Children.Add(_hint);
+        var feedback = new StackPanel();
+        feedback.Children.Add(presets);
+        feedback.Children.Add(_hint);
+        SetRow(feedback, 1);
+        Children.Add(feedback);
 
         // list
         var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 6, 0, 0), Content = _list };
@@ -112,11 +123,19 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         }
         if (e.Key != Key.Enter) return;
         e.Handled = true;
+        Submit();
+    }
+
+    void Submit()
+    {
         var result = _ctl.Submit(_input.Text, _editing);
         switch (result)
         {
             case TimersController.SubmitResult.Invalid:
                 ShowHint(Strings.T("timers.invalid"));
+                return;
+            case TimersController.SubmitResult.SaveFailed:
+                ShowHint(Strings.T("timers.saveFailed"));
                 return;
             case TimersController.SubmitResult.Full:
                 ShowHint(Strings.T("timers.full"));
@@ -152,6 +171,9 @@ public sealed class TimersView : Grid, ITabView, IDisposable
 
     void Rebuild()
     {
+        foreach (var (button, minutes) in _presets)
+            button.Content = button.ToolTip = $"{minutes} {Strings.T("unit.min")}";
+        if (_ctl.LastSaveFailed) ShowHint(Strings.T("timers.saveFailed"));
         _list.Children.Clear();
         _tickers.Clear();
         var now = _ctl.Clock();

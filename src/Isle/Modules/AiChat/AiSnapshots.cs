@@ -24,7 +24,7 @@ static class AiSnapshots
         {
             var c = m.Store.New();
             c.Messages.Add(new ChatMessage { Role = "user", Text = "Hello!" });
-            c.Messages.Add(new ChatMessage { Role = "assistant", Text = Strings.T("ai.err.auth"), Error = true });
+            c.Messages.Add(new ChatMessage { Role = "assistant", Text = Strings.T("ai.err.codexLogin"), Error = true });
             v.ShowChat(c);
         });
         states["ai-attach"] = w => Tab(w, ready: true, (m, v) =>
@@ -43,27 +43,37 @@ static class AiSnapshots
             v.ShowChatList();
         });
         states["ai-system"] = w => Tab(w, ready: true, (m, v) => { var c = m.Store.New(); c.SystemPrompt = "Answer briefly. Use metric units."; v.ShowChat(c); v.ShowSystemPrompt(); });
-        states["ai-actions"] = w => Popup(w, true, v => v.ShowSelection(Sample, IntPtr.Zero));
-        states["ai-action-result"] = w => Popup(w, true, v =>
+        states["ai-actions"] = w => Popup(w, v => v.ShowSelection(Sample, IntPtr.Zero));
+        states["ai-action-result"] = w => Popup(w, v =>
         {
             v.ShowSelection(Sample, IntPtr.Zero);
             v.ShowDemoResult(TextAction.TranslateUk, "Привіт, команда! Реліз перенесено на четвер, бо останні тести знайшли помилку в експорті. Будь ласка, оновіть свої плани й скажіть, якщо четвер вам не підходить.", false);
         });
-        states["ai-action-streaming"] = w => Popup(w, true, v =>
+        states["ai-action-streaming"] = w => Popup(w, v =>
         {
             v.ShowSelection(Sample, IntPtr.Zero);
             v.ShowDemoResult(TextAction.Summarise, "- Release moved to **Thursday**\n- Reason: a bug in the export", true);
         });
-        states["ai-question"] = w => Popup(w, true, v =>
+        states["ai-question"] = w => Popup(w, v =>
         {
-            v.ShowQuestion(Strings.Language == "uk" ? "скільки кілометрів у милі?" : "how many km in a mile?");
+            v.ShowQuestion(Strings.Language == "uk" ? "скільки кілометрів у милі?" : "how many km in a mile?", startRequest: false);
             v.ShowDemoResult(null, Strings.Language == "uk" ? "Одна миля — це приблизно **1,609 км**." : "One mile is about **1.609 km** (exactly 1.609344 km).", false);
         });
-        states["ai-question-nokey"] = w => Popup(w, false, v => v.ShowQuestion("how many km in a mile?"));
-        states["ai-settings"] = w => Tab(w, ready: true, (m, v) => { v.ShowChat(null); v.ShowSettings(); });
-        states["ai-settings-openai"] = w => Tab(w, ready: false, (m, v) =>
+        states["ai-question-setup"] = w => Popup(w, v =>
         {
-            Settings.Current.SetOpt("ai.provider", "openai");
+            v.ShowQuestion("how many km in a mile?", startRequest: false);
+            v.ShowDemoResult(null, Strings.T("ai.err.codexLogin"), false, error: true);
+        });
+        states["ai-settings"] = w => Tab(w, ready: true, (m, v) => { v.ShowChat(null); v.ShowSettings(); });
+        states["ai-settings-codex"] = w => Tab(w, ready: true, (m, v) =>
+        {
+            Settings.Current.SetOpt("ai.provider", "codex");
+            v.ShowChat(null);
+            v.ShowSettings();
+        });
+        states["ai-settings-claude"] = w => Tab(w, ready: true, (m, v) =>
+        {
+            Settings.Current.SetOpt("ai.provider", "claude");
             v.ShowChat(null);
             v.ShowSettings();
         });
@@ -71,11 +81,8 @@ static class AiSnapshots
 
     const string Sample = "Hi team, the release is moved to Thursday because the last tests found a bug in the export. Please update your plans and tell me if Thursday does not work for you.";
 
-    static void Popup(IslandWindow w, bool ready, Action<AiPopupView> setup)
+    static void Popup(IslandWindow w, Action<AiPopupView> setup)
     {
-        var s = Settings.Current;
-        s.Options.Remove("ai.provider");
-        if (ready) s.SetOpt("ai.anthropic.key", "demo-key"); else s.Options.Remove("ai.anthropic.key");
         var module = new AiModule(w, store: new ChatStore(Path.Combine(Path.GetTempPath(), "isle-snapshot-chats.json")));
         var view = new AiPopupView(module);
         w.ShowOverlay(view);
@@ -84,11 +91,9 @@ static class AiSnapshots
 
     static void Tab(IslandWindow w, bool ready, Action<AiModule, AiChatView> setup)
     {
-        var s = Settings.Current;
-        s.Options.Remove("ai.provider");
-        if (ready) s.SetOpt("ai.anthropic.key", "demo-key"); else s.Options.Remove("ai.anthropic.key");
+        Settings.Current.SetOpt("ai.provider", "codex");
         var module = new AiModule(w, store: new ChatStore(Path.Combine(Path.GetTempPath(), "isle-snapshot-chats.json")));
-        var view = new AiChatView(module);
+        var view = new AiChatView(module, ready);
         setup(module, view);
         w.AddTab(new TabInfo(AiModule.TabId, "tab.ai", "Icon.Ai", () => view, 90));
         w.Expand(AiModule.TabId);

@@ -62,7 +62,7 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
     {
         var sel = await Select(SelectMode.Region);
         if (sel is null) return;
-        MarkupWindow.Open(sel, Copy);
+        MarkupWindow.Open(sel, System.Windows.Clipboard.SetText);
     }
 
     /// <summary>Region → QR first (when asked), then OCR; the result goes to the clipboard and the Tools tab.</summary>
@@ -113,68 +113,128 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
     static List<string> Colors() => [.. Settings.Current.Opt("tools.colors").Split(',', StringSplitOptions.RemoveEmptyEntries)];
 
     Recorder? _recorder;
+    Task? _startingRecording;
+    Task<bool>? _savingRecording;
+    int _recordingRequest;
+    bool _exiting;
     System.Windows.Threading.DispatcherTimer? _recTick;
     Views.Live.IndicatorPill? _recPill;
     const string RecPillId = "rec";
 
     async void ToggleRecording()
     {
+        if (_exiting || _savingRecording is { IsCompleted: false }) return;
         if (_recorder is not null) { await StopRecording(); return; }
         if (_busy) return;
+        var request = _recordingRequest;
         _busy = true;
         try
         {
             island.Collapse();
             var sel = await Select(SelectMode.Region);
-            if (sel is null) return;
-            var region = new PxRect(sel.Rect.X - sel.Monitor.Left, sel.Rect.Y - sel.Monitor.Top, sel.Rect.Width, sel.Rect.Height);
-            var opts = new RecordOptions(sel.Monitor, region, Settings.Current.OptBool("rec.systemAudio", true), Settings.Current.OptBool("rec.mic"));
-            var rec = new Recorder(opts, ScreenGrab.SaveFolder("Videos"));
-            island.ExcludeFromCapture(true); // the REC pill must not end up in the video
-            try { await rec.StartAsync(); }
-            catch
-            {
-                rec.Dispose();
-                island.ExcludeFromCapture(false);
-                try { File.Delete(rec.FilePath); } catch { }
-                throw;
-            }
-            _recorder = rec;
-            Logger.Info($"recording started {region.Width}x{region.Height}");
-            ShowRecPill();
-            _view?.SetRecording(true);
+            if (sel is null || request != _recordingRequest) return;
+            await (_startingRecording = StartRecording(sel));
         }
         catch (Exception ex)
         {
             Logger.Error("recording start", ex);
-            island.Expand(TabId, sticky: true);
-            island.ShowToast(Strings.T("tools.recordFailed"));
+            if (request == _recordingRequest || _exiting)
+            {
+                island.SetHidden("user", false);
+                island.Expand(TabId, sticky: true);
+                island.ShowToast(Strings.T("tools.recordFailed"));
+            }
         }
-        finally { _busy = false; }
+        finally { _startingRecording = null; _busy = false; }
     }
 
-    async Task StopRecording()
+    async Task StartRecording(Selection sel)
     {
-        var rec = _recorder;
-        if (rec is null) return;
+        var region = new PxRect(sel.Rect.X - sel.Monitor.Left, sel.Rect.Y - sel.Monitor.Top, sel.Rect.Width, sel.Rect.Height);
+        var opts = new RecordOptions(sel.Monitor, region, Settings.Current.OptBool("rec.systemAudio", true), Settings.Current.OptBool("rec.mic"));
+        var rec = new Recorder(opts, ScreenGrab.SaveFolder("Videos"));
+        island.ExcludeFromCapture(true); // the REC pill must not end up in the video
+        try { await rec.StartAsync(); }
+        catch
+        {
+            rec.Dispose();
+            island.ExcludeFromCapture(false);
+            if (rec.FilePath.Length > 0) { try { File.Delete(rec.FilePath); } catch { } }
+            throw;
+        }
+        _recorder = rec;
+        Logger.Info($"recording started {region.Width}x{region.Height}");
+        ShowRecPill();
+        _view?.SetRecording(true);
+    }
+
+    internal async Task<bool> FinishRecordingAsync(bool exiting = false)
+    {
+        _exiting |= exiting;
+        ++_recordingRequest; // A pending selection must not start a new recording.
+        var saved = false;
+        try { return saved = await StopRecording(); }
+        finally { if (exiting && !saved) _exiting = false; }
+    }
+
+    Task<bool> StopRecording()
+    {
+        if (_savingRecording is { IsCompleted: false } saving) return saving;
+        if (_recorder is null && _startingRecording is null) return Task.FromResult(true);
+        return _savingRecording = SaveRecording(_startingRecording);
+    }
+
+    async Task<bool> SaveRecording(Task? starting)
+    {
+        // The island may be inside its Closing event. Return the shared save before updating its UI.
+        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Normal);
+        if (starting is not null)
+        {
+            try { await starting; }
+            catch (Exception) { return false; } // ToggleRecording reports the start failure.
+        }
+        if (_recorder is not { } rec) return true;
         _recorder = null;
         _recTick?.Stop();
         island.Pill.Remove(RecPillId);
         _view?.SetRecording(false);
-        await rec.StopAsync();
-        island.ExcludeFromCapture(false);
-        Logger.Info("recording saved");
+        var saved = false;
+        try
+        {
+            await rec.StopAsync();
+            saved = true;
+        }
+        catch (Exception ex) { Logger.Error("recording finalise", ex); }
+        finally { island.ExcludeFromCapture(false); }
+        if (saved) Logger.Info("recording saved");
+        if (!saved || !_exiting) ShowRecordingResult(rec.FilePath, saved);
         GC.Collect();
         Memory.TrimSoon(2);
-        var path = rec.FilePath;
+        return saved;
+    }
+
+    void ShowRecordingResult(string path, bool saved)
+    {
+        const string id = "rec.result";
+        var label = Strings.T(saved ? "tools.recordSaved" : "tools.recordSaveFailed");
+        var file = saved ? Path.GetFileName(path) : "";
+        if (!saved)
+        {
+            island.SetHidden("user", false);
+            if (island.IsExpanded) island.ShowToast(label);
+        }
         island.Pill.Set(new PillItem
         {
-            Id = "rec.saved", Priority = PillPriority.Transient, Width = Views.Live.IndicatorPill.MessageWidth(Strings.T("tools.recordSaved"), Path.GetFileName(path)), Peek = true,
-            View = () => new Views.Live.IndicatorPill("Icon.Check", Strings.T("tools.recordSaved"), Path.GetFileName(path)),
-            Click = () => { try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")); } catch { } island.Pill.Remove("rec.saved"); },
+            Id = id, Priority = PillPriority.Transient, Width = Views.Live.IndicatorPill.MessageWidth(label, file), Peek = true,
+            View = () => new Views.Live.IndicatorPill(saved ? "Icon.Check" : "Icon.Record", label, file, saved ? "AccentBrush" : "DangerBrush"),
+            Click = () =>
+            {
+                if (saved) { try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")); } catch { } }
+                island.Pill.Remove(id);
+            },
         });
         var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        t.Tick += (_, _) => { t.Stop(); island.Pill.Remove("rec.saved"); };
+        t.Tick += (_, _) => { t.Stop(); island.Pill.Remove(id); };
         t.Start();
     }
 
@@ -219,7 +279,7 @@ public sealed class ToolsModule(IslandWindow island) : IModule, IDisposable
 
     public void Stop()
     {
-        if (_recorder is not null) { _ = StopRecording(); }
+        _ = FinishRecordingAsync();
         foreach (var id in new[] { "screenshot", "capture", "colorPicker", "record" }) island.Hotkeys.Unregister(id);
         island.RemoveTab(TabId);
         _view = null;

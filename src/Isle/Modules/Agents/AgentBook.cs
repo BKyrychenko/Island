@@ -7,7 +7,8 @@ namespace Isle.Modules.Agents;
 public enum AgentState { Idle, Done, Working, Waiting }
 
 /// <summary>One hook call as received from Isle.Hook.exe.</summary>
-public sealed record HookMessage(string Agent, bool Wait, int TimeoutSeconds, JsonObject Input)
+public sealed record HookMessage(string Agent, bool Wait, int TimeoutSeconds, JsonObject Input,
+    HookProtocol.ConsoleTarget? Terminal = null, long SentTicks = 0)
 {
     public string Event => HookProtocol.Str(Input, "hook_event_name");
 
@@ -21,13 +22,18 @@ public sealed record HookMessage(string Agent, bool Wait, int TimeoutSeconds, Js
             var agent = HookProtocol.Str(o, "agent") is { Length: > 0 } a ? a : "claude";
             var wait = o["wait"] is JsonValue w && w.TryGetValue<bool>(out var b) && b;
             var timeout = o["timeout"] is JsonValue t && t.TryGetValue<int>(out var n) ? Math.Clamp(n, 5, 3600) : HookProtocol.DefaultTimeoutSeconds;
-            return new HookMessage(agent, wait, timeout, input);
+            var sent = o["sent"] is JsonValue stamp && stamp.TryGetValue<long>(out var ticks) && ticks > 0 ? ticks : 0;
+            var terminal = o["terminal"] is JsonObject target && target["pid"] is JsonValue process &&
+                process.TryGetValue<int>(out var pid) && pid > 0 && target["started"] is JsonValue started &&
+                started.TryGetValue<long>(out var created) && created > 0 ? new HookProtocol.ConsoleTarget(pid, created) : null;
+            return new HookMessage(agent, wait, timeout, input, terminal, sent);
         }
         catch (JsonException) { return null; }
     }
 }
 
 public sealed record AgentQuestion(string Text, string Header, IReadOnlyList<(string Label, string Description)> Options, bool Multi);
+public sealed record AgentWorker(string Id, string Name, bool Done, string Activity, long ObservedAt);
 
 /// <summary>A hook call blocked until the user answers in the island (or the hook gives up).</summary>
 public sealed class AgentRequest
@@ -53,6 +59,13 @@ public sealed class AgentSession
     public AgentState Reported { get; set; } = AgentState.Idle;
     public string LastAction { get; set; } = "";
     public DateTimeOffset Updated { get; set; }
+    public HookProtocol.ConsoleTarget? Terminal { get; internal set; }
+    public AgentChange? LatestChange { get; internal set; }
+    internal long ChangeAt { get; set; }
+    internal long StateAt { get; set; }
+    internal long TerminalAt { get; set; }
+    internal Dictionary<string, AgentWorker> WorkersById { get; } = [];
+    public IReadOnlyCollection<AgentWorker> Workers => WorkersById.Values;
     public List<AgentRequest> Pending { get; } = [];
 
     /// <summary>A pending request always wins over the last reported state.</summary>
@@ -69,6 +82,7 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
 {
     public static readonly TimeSpan Stale = TimeSpan.FromHours(3);
     readonly Dictionary<string, AgentSession> _sessions = [];
+    const int MaxWorkersPerSession = 64;
 
     /// <summary>Raised for a Stop event (the pill shows a short "done" check).</summary>
     public event Action<AgentSession>? Finished;
@@ -92,6 +106,9 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
         var input = m.Input;
         var sessionId = HookProtocol.Str(input, "session_id");
         var cwd = HookProtocol.Str(input, "cwd");
+        var workerId = HookProtocol.Str(input, "agent_id");
+        var isWorker = workerId is { Length: > 0 and <= 256 } && workerId != sessionId;
+        var stamp = m.SentTicks > 0 ? Math.Min(m.SentTicks, t.UtcTicks) : t.UtcTicks;
         var key = m.Agent + ":" + (sessionId.Length > 0 ? sessionId : cwd);
 
         if (m.Event == "SessionEnd")
@@ -105,24 +122,44 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
             s = new AgentSession { Key = key, Agent = m.Agent };
             _sessions[key] = s;
         }
-        if (cwd.Length > 0) { s.Cwd = cwd; s.Project = ProjectName(cwd); }
+        if (cwd.Length > 0 && (!isWorker || s.Cwd.Length == 0)) { s.Cwd = cwd; s.Project = ProjectName(cwd); }
+        if (m.Terminal is not null && stamp >= s.TerminalAt && (!isWorker || s.Terminal is null))
+        {
+            s.Terminal = m.Terminal;
+            s.TerminalAt = stamp;
+        }
         s.Updated = t;
 
         var tool = HookProtocol.Str(input, "tool_name");
+        var updatesState = stamp >= s.StateAt && !isWorker;
+        if (updatesState) s.StateAt = stamp;
         switch (m.Event)
         {
             case "SessionStart":
-                if (s.Reported != AgentState.Working) s.Reported = AgentState.Idle;
+                if (updatesState && s.Reported != AgentState.Working) s.Reported = AgentState.Idle;
                 break;
-            case "UserPromptSubmit":
+            case "UserPromptSubmit" when updatesState:
                 s.Reported = AgentState.Working;
                 s.LastAction = AgentText.OneLine(HookProtocol.Str(input, "prompt"));
                 break;
             case "PreToolUse" or "PostToolUse":
-                s.Reported = AgentState.Working;
-                if (tool != HookProtocol.AskUserQuestion) s.LastAction = AgentText.Describe(tool, input["tool_input"] as JsonObject);
+                if (stamp >= s.StateAt && (isWorker ? s.Reported != AgentState.Done : m.Event == "PreToolUse" || s.Reported != AgentState.Done))
+                    s.Reported = AgentState.Working;
+                var action = tool == HookProtocol.AskUserQuestion ? "" : AgentText.Describe(tool, input["tool_input"] as JsonObject);
+                if (isWorker) UpdateWorker(s, workerId, input, stamp, action);
+                else if (updatesState && action.Length > 0 && s.Reported != AgentState.Done) s.LastAction = action;
+                if (m.Event == "PostToolUse" && stamp >= s.ChangeAt && AgentChange.Read(m.Agent, tool, input) is { } change)
+                {
+                    s.LatestChange = change;
+                    s.ChangeAt = stamp;
+                }
                 break;
-            case "Notification":
+            case "SubagentStart" or "SubagentStop" when isWorker:
+                var done = m.Event == "SubagentStop";
+                if (!done && stamp >= s.StateAt && s.Reported != AgentState.Done) s.Reported = AgentState.Working;
+                UpdateWorker(s, workerId, input, stamp, done ? AgentText.OneLine(HookProtocol.Str(input, "last_assistant_message")) : "", done);
+                break;
+            case "Notification" when updatesState:
                 var type = HookProtocol.Str(input, "notification_type");
                 var msg = AgentText.OneLine(HookProtocol.Str(input, "message"));
                 if (type is "permission_prompt" or "elicitation_dialog" or "agent_needs_input")
@@ -132,7 +169,7 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
                 }
                 else if (type == "agent_completed") s.Reported = AgentState.Done;
                 break;
-            case "Stop":
+            case "Stop" when updatesState:
                 s.Reported = AgentState.Done;
                 var last = AgentText.OneLine(HookProtocol.Str(input, "last_assistant_message"));
                 if (last.Length > 0) s.LastAction = last;
@@ -155,6 +192,21 @@ public sealed class AgentBook(Func<DateTimeOffset> now)
         if (r is null) return null;
         s.Pending.Add(r);
         return r;
+    }
+
+    static void UpdateWorker(AgentSession session, string id, JsonObject input, long stamp, string activity, bool? done = null)
+    {
+        var workers = session.WorkersById;
+        if (workers.TryGetValue(id, out var previous) && previous.ObservedAt > stamp) return;
+        if (previous is null && workers.Count >= MaxWorkersPerSession)
+        {
+            var oldest = workers.Values.Where(worker => worker.Done).MinBy(worker => worker.ObservedAt);
+            if (oldest is null) return;
+            workers.Remove(oldest.Id);
+        }
+        var name = AgentText.OneLine(HookProtocol.Str(input, "agent_type"), 48);
+        workers[id] = new(id, name.Length > 0 ? name : previous?.Name ?? "",
+            done ?? previous?.Done ?? false, activity.Length > 0 ? activity : previous?.Activity ?? "", stamp);
     }
 
     /// <summary>Answers a pending request (the reply line goes to the hook) and removes it.</summary>

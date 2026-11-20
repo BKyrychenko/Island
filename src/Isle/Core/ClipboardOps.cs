@@ -6,17 +6,68 @@ namespace Isle.Core;
 
 /// <summary>
 /// Clipboard + synthetic-keystroke helpers shared by "paste into the previous window" (clipboard history, voice, AI
-/// text actions): snapshot/restore the user's clipboard, send Ctrl+C / Ctrl+V, and a short "quiet" window during which
-/// the clipboard history ignores changes (our own copies of the user's selection must not land in the history).
+/// text actions): snapshot/restore the user's clipboard and send Ctrl+C / Ctrl+V.
+/// History ignores only our writes and the selection copy requested from the target process.
 /// </summary>
 public static class ClipboardOps
 {
-    static long _quietUntil;
+    internal sealed class CaptureGuard
+    {
+        readonly Queue<uint> _ownSequences = new();
+        uint _baseline, _targetProcess;
+        public uint SelectionSequence { get; private set; }
+        public bool Writing { get; set; }
 
-    /// <summary>The clipboard history skips changes until this moment (Environment.TickCount64).</summary>
-    public static bool IsQuiet => Environment.TickCount64 < Interlocked.Read(ref _quietUntil);
+        public void BeginSelection(uint baseline, uint targetProcess)
+        {
+            _baseline = baseline;
+            _targetProcess = targetProcess;
+            SelectionSequence = 0;
+        }
 
-    public static void Quiet(TimeSpan span) => Interlocked.Exchange(ref _quietUntil, Environment.TickCount64 + (long)span.TotalMilliseconds);
+        public void EndSelection() => _targetProcess = 0;
+
+        public void OwnWrite(uint sequence)
+        {
+            if (sequence == 0 || _ownSequences.Contains(sequence)) return;
+            _ownSequences.Enqueue(sequence);
+            // ponytail: retain 32 recent sequence IDs; increase only if clipboard notifications lag that far.
+            if (_ownSequences.Count > 32) _ownSequences.Dequeue();
+        }
+
+        public bool Ignore(uint sequence, uint ownerProcess)
+        {
+            if (sequence == 0) return false;
+            if (Writing) { OwnWrite(sequence); return true; }
+            if (_ownSequences.Contains(sequence)) return true;
+            if (_targetProcess == 0 || sequence == _baseline || ownerProcess != _targetProcess) return false;
+            SelectionSequence = sequence;
+            EndSelection();
+            OwnWrite(sequence);
+            return true;
+        }
+    }
+
+    static readonly CaptureGuard Guard = new();
+
+    internal static bool IgnoreCapture(uint sequence)
+    {
+        Native.GetWindowThreadProcessId(Native.GetClipboardOwner(), out var ownerProcess);
+        return Guard.Ignore(sequence, ownerProcess);
+    }
+
+    internal static void Write(Action write)
+    {
+        var before = Native.GetClipboardSequenceNumber();
+        Guard.Writing = true;
+        try { write(); }
+        finally
+        {
+            var after = Native.GetClipboardSequenceNumber();
+            if (after != before) Guard.OwnWrite(after);
+            Guard.Writing = false;
+        }
+    }
 
     static readonly SemaphoreSlim Borrow = new(1, 1);
 
@@ -69,7 +120,7 @@ public static class ClipboardOps
     static bool Restore(DataObject previous, uint sequence)
     {
         if (Native.GetClipboardSequenceNumber() != sequence) return true;
-        try { Clipboard.SetDataObject(previous, true); return true; }
+        try { Write(() => Clipboard.SetDataObject(previous, true)); return true; }
         catch (Exception ex) { Logger.Warn($"clipboard restore: {ex.GetType().Name}"); return false; }
     }
 
@@ -128,7 +179,7 @@ public static class ClipboardOps
     /// <summary>
     /// Copies the current selection of the foreground app: waits for the hotkey's modifiers to be released, sends
     /// Ctrl+C, waits for the clipboard to change, reads the text and puts the user's clipboard back. "" if nothing
-    /// was selected. The clipboard history is kept quiet meanwhile.
+    /// was selected. Only the requested selection copy is excluded from history.
     /// </summary>
     public static async Task<string> CopySelectionAsync()
     {
@@ -140,10 +191,15 @@ public static class ClipboardOps
                 !Native.IsWindow(target) || Native.GetForegroundWindow() != target) return "";
             var previous = Snapshot();
             var seq = Native.GetClipboardSequenceNumber();
-            Quiet(TimeSpan.FromSeconds(3));
+            Native.GetWindowThreadProcessId(target, out var targetProcess);
+            Guard.BeginSelection(seq, targetProcess);
             if (!SendCtrl(Native.VK_C)) return "";
-            if (!await WaitFor(() => Native.GetClipboardSequenceNumber() != seq, TimeSpan.FromMilliseconds(700))) return "";
-            var copiedSequence = Native.GetClipboardSequenceNumber();
+            if (!await WaitFor(() =>
+            {
+                IgnoreCapture(Native.GetClipboardSequenceNumber());
+                return Guard.SelectionSequence != 0;
+            }, TimeSpan.FromMilliseconds(700))) return "";
+            var copiedSequence = Guard.SelectionSequence;
             var text = "";
             try
             {
@@ -161,7 +217,7 @@ public static class ClipboardOps
             }
             return text;
         }
-        finally { Borrow.Release(); }
+        finally { Guard.EndSelection(); Borrow.Release(); }
     }
 
     public enum PasteResult { Pasted, Manual, Changed, RestoreFailed }
@@ -191,9 +247,8 @@ public static class ClipboardOps
         try
         {
             var previous = Snapshot();
-            Quiet(TimeSpan.FromSeconds(4));
             ExcludeFromHistory(payload);
-            Clipboard.SetDataObject(payload, true);
+            Write(() => Clipboard.SetDataObject(payload, true));
             var sequence = Native.GetClipboardSequenceNumber();
             if (!Native.IsWindow(target)) return ManualResult(sequence);
             if (Native.GetForegroundWindow() != target) Native.SetForegroundWindow(target);
@@ -202,7 +257,6 @@ public static class ClipboardOps
             if (!Native.IsWindow(target) || Native.GetForegroundWindow() != target ||
                 Native.GetClipboardSequenceNumber() != sequence || !SendCtrl(Native.VK_V)) return ManualResult(sequence);
             await WaitFor(() => Native.GetClipboardSequenceNumber() != sequence, TimeSpan.FromMilliseconds(1500));
-            Quiet(TimeSpan.FromSeconds(1));
             return await WaitFor(() => Restore(previous, sequence), TimeSpan.FromMilliseconds(400), 80)
                 ? PasteResult.Pasted : PasteResult.RestoreFailed;
         }

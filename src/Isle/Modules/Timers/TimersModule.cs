@@ -28,6 +28,7 @@ public sealed class TimersModule(IslandWindow island) : IModule, IDisposable
     {
         _ctl = new TimersController();
         _ctl.Changed += OnChanged;
+        _ctl.SaveFailed += OnSaveFailed;
         _wake = new DispatcherTimer(DispatcherPriority.Normal, island.Dispatcher);
         _wake.Tick += (_, _) => Check();
         _tick = new DispatcherTimer(DispatcherPriority.Background, island.Dispatcher) { Interval = TimeSpan.FromSeconds(1) };
@@ -48,6 +49,8 @@ public sealed class TimersModule(IslandWindow island) : IModule, IDisposable
     }
 
     void OnTimeChanged(object? sender, EventArgs e) => island.Dispatcher.BeginInvoke(Check);
+
+    void OnSaveFailed() => island.ShowToast(Strings.T("timers.saveFailed"));
 
     void OnChanged()
     {
@@ -84,6 +87,7 @@ public sealed class TimersModule(IslandWindow island) : IModule, IDisposable
         _wake.Stop();
         if (_ctl.NextWake is not { } next) return;
         var delay = next - _ctl.Clock();
+        if (_ctl.LastSaveFailed && delay < TimeSpan.FromSeconds(30)) delay = TimeSpan.FromSeconds(30);
         if (delay < TimeSpan.FromMilliseconds(20)) delay = TimeSpan.FromMilliseconds(20);
         if (delay > MaxSleep) delay = MaxSleep;
         _wake.Interval = delay + TimeSpan.FromMilliseconds(15);
@@ -179,7 +183,7 @@ public sealed class TimersModule(IslandWindow island) : IModule, IDisposable
         foreach (var id in _banners.ToList()) RemoveBanner(id);
         island.Pill.Remove(PillId);
         island.RemoveTab(TabId);
-        if (_ctl is not null) _ctl.Changed -= OnChanged;
+        if (_ctl is not null) { _ctl.Changed -= OnChanged; _ctl.SaveFailed -= OnSaveFailed; }
         _ctl = null;
         _pill = null;
     }

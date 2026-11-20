@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Isle.Core;
@@ -63,6 +64,31 @@ public sealed class ForegroundWatcher : IDisposable
     {
         var sb = new StringBuilder(128);
         return Native.GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
+
+    internal static bool TryGetExternalWindowBounds(IntPtr hwnd, out Native.RECT bounds)
+    {
+        bounds = default;
+        if (!Native.IsWindowVisible(hwnd) || Native.IsIconic(hwnd) || IsOwn(hwnd)) return false;
+        if (Native.DwmGetWindowAttributeInt(hwnd, Native.DWMWA_CLOAKED, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
+        return Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out bounds, Marshal.SizeOf<Native.RECT>()) == 0
+            || Native.GetWindowRect(hwnd, out bounds);
+    }
+
+    internal static IReadOnlyList<string> OpenAppNames()
+    {
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        Native.EnumWindows((hwnd, _) =>
+        {
+            if (TryGetExternalWindowBounds(hwnd, out var bounds) && bounds.Width >= 40 && bounds.Height >= 30 &&
+                ClassName(hwnd) is not ("Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd"))
+            {
+                var name = ProcessName(hwnd);
+                if (name.Length > 0) names.Add(name);
+            }
+            return true;
+        }, IntPtr.Zero);
+        return [.. names];
     }
 
     /// <summary>True when <paramref name="hwnd"/> is a real fullscreen window (game, video, F11 browser) on the given monitor.</summary>

@@ -24,6 +24,8 @@ public static class HookProtocol
     public const int DefaultTimeoutSeconds = 60;
     public const int MaxLineBytes = 1 << 20;
 
+    public sealed record ConsoleTarget(int ProcessId, long StartedUtcTicks);
+
     public record Endpoint(string PipeName, int ProcessId)
     {
         const string Prefix = "Isle.Agents.v2.";
@@ -34,14 +36,20 @@ public static class HookProtocol
         {
             var path = Path.Combine(root, "agents-endpoint.json");
             if (!File.Exists(path) || new FileInfo(path).Length > 1024) return null;
-            var endpoint = JsonSerializer.Deserialize<Endpoint>(File.ReadAllText(path));
-            if (endpoint?.PipeName is not { } name || endpoint.ProcessId <= 0 ||
+            if (JsonNode.Parse(File.ReadAllText(path)) is not JsonObject json || json[nameof(ProcessId)] is not JsonValue value ||
+                !value.TryGetValue<int>(out var pid) || pid <= 0) return null;
+            var name = Str(json, nameof(PipeName));
+            if (name.Length == 0 ||
                 !name.StartsWith(Prefix, StringComparison.Ordinal) || !Guid.TryParseExact(name[Prefix.Length..], "N", out _))
                 return null;
-            return endpoint;
+            return new Endpoint(name, pid);
         }
 
-        public void Publish(string root) => WritePrivate(Path.Combine(root, "agents-endpoint.json"), JsonSerializer.Serialize(this));
+        public void Publish(string root) => WritePrivate(Path.Combine(root, "agents-endpoint.json"), new JsonObject
+        {
+            [nameof(PipeName)] = PipeName,
+            [nameof(ProcessId)] = ProcessId,
+        }.ToJsonString());
     }
 
     public static string TrustedPathFile(string root) => Path.Combine(root, "bin", "Isle.Hook.server");
@@ -87,15 +95,21 @@ public static class HookProtocol
     public static bool SkipInAsync(JsonObject input) =>
         Str(input, "hook_event_name") == "PreToolUse" && Str(input, "tool_name") == AskUserQuestion;
 
-    public static string Request(string agent, bool wait, int timeoutSeconds, JsonObject input) =>
-        new JsonObject
+    public static string Request(string agent, bool wait, int timeoutSeconds, JsonObject input, ConsoleTarget? terminal = null)
+    {
+        var request = new JsonObject
         {
             ["v"] = Version,
             ["agent"] = agent,
             ["wait"] = wait,
             ["timeout"] = timeoutSeconds,
+            ["sent"] = DateTime.UtcNow.Ticks,
             ["input"] = input.DeepClone(),
-        }.ToJsonString();
+        };
+        if (terminal is not null)
+            request["terminal"] = new JsonObject { ["pid"] = terminal.ProcessId, ["started"] = terminal.StartedUtcTicks };
+        return request.ToJsonString();
+    }
 
     public static string Reply(string decision, string? message = null, IReadOnlyDictionary<string, string>? answers = null)
     {
@@ -169,7 +183,7 @@ public static class HookProtocol
     /// The whole hook run: parse args + stdin, talk to the island, return the text for stdout (null = print nothing).
     /// Never throws; every failure means "no decision" (fail open).
     /// </summary>
-    public static async Task<string?> RunClientAsync(string[] args, string stdin, Endpoint endpoint, string trustedPath, int connectMs = 400)
+    public static async Task<string?> RunClientAsync(string[] args, string stdin, Endpoint endpoint, string trustedPath, int connectMs = 400, ConsoleTarget? terminal = null)
     {
         try
         {
@@ -195,7 +209,7 @@ public static class HookProtocol
             using var server = Process.GetProcessById(endpoint.ProcessId);
             if (!string.Equals(server.MainModule?.FileName, trustedPath, StringComparison.OrdinalIgnoreCase)) return null;
 
-            await WriteLineAsync(pipe, Request(agent, wait, timeout, input), cts.Token).ConfigureAwait(false);
+            await WriteLineAsync(pipe, Request(agent, wait, timeout, input, terminal), cts.Token).ConfigureAwait(false);
             if (!wait) return null;
             var reply = await ReadLineAsync(pipe, cts.Token).ConfigureAwait(false);
             return BuildOutput(input, reply);

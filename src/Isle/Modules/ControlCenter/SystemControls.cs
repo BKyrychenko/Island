@@ -11,7 +11,9 @@ namespace Isle.Modules.ControlCenter;
 public sealed class Radios(Dispatcher ui) : IDisposable
 {
     Radio? _wifi, _bt;
-    bool _initialised;
+    bool _initialising, _disposed;
+    internal Func<Task<RadioAccessStatus>> RequestAccess { get; init; } = async () => await Radio.RequestAccessAsync();
+    internal Func<Task<IReadOnlyList<Radio>>> Discover { get; init; } = async () => await Radio.GetRadiosAsync();
 
     public bool Denied { get; private set; }
     public bool? WifiOn => _wifi is null ? null : _wifi.State == RadioState.On;
@@ -22,13 +24,18 @@ public sealed class Radios(Dispatcher ui) : IDisposable
 
     public async Task InitAsync()
     {
-        if (_initialised) return;
-        _initialised = true;
+        if (_initialising || _disposed) return;
+        _initialising = true;
         try
         {
-            var access = await Radio.RequestAccessAsync();
+            var access = await RequestAccess();
+            if (_disposed) return;
+            ClearRadios();
+            Denied = false;
             if (access != RadioAccessStatus.Allowed) { Denied = true; Logger.Warn($"radio access: {access}"); return; }
-            foreach (var r in await Radio.GetRadiosAsync())
+            var radios = await Discover();
+            if (_disposed) return;
+            foreach (var r in radios)
             {
                 if (r.Kind == RadioKind.WiFi && _wifi is null) _wifi = r;
                 else if (r.Kind == RadioKind.Bluetooth && _bt is null) _bt = r;
@@ -37,7 +44,7 @@ public sealed class Radios(Dispatcher ui) : IDisposable
             }
         }
         catch (Exception ex) { Logger.Error("radios", ex); Denied = true; }
-        Raise();
+        finally { _initialising = false; if (!_disposed) Raise(); }
     }
 
     void OnStateChanged(Radio sender, object args) => ui.BeginInvoke(Raise);
@@ -62,6 +69,12 @@ public sealed class Radios(Dispatcher ui) : IDisposable
     }
 
     public void Dispose()
+    {
+        _disposed = true;
+        ClearRadios();
+    }
+
+    void ClearRadios()
     {
         if (_wifi is not null) _wifi.StateChanged -= OnStateChanged;
         if (_bt is not null) _bt.StateChanged -= OnStateChanged;

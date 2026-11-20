@@ -1,5 +1,8 @@
 using System.Net.NetworkInformation;
+using System.Diagnostics;
+using System.Windows.Threading;
 using Isle.Modules.ControlCenter;
+using Windows.Devices.Radios;
 
 namespace Isle.Tests;
 
@@ -62,6 +65,43 @@ public class VpnDetectorTests
         Assert.DoesNotContain("mullvad", list.Keys);
     }
 
+    [Theory]
+    [InlineData(NetworkInterfaceType.Ethernet, true)]
+    [InlineData(NetworkInterfaceType.Wireless80211, true)]
+    [InlineData(NetworkInterfaceType.Ppp, false)]
+    public void Same_name_requires_an_up_ppp_adapter(NetworkInterfaceType type, bool up)
+    {
+        var env = new FakeEnv { Books = ["[Office VPN]"], Nics = [("Office VPN", "Unrelated", type, up)] };
+        Assert.False(Assert.Single(VpnDetector.Detect(env)).Connected);
+    }
+
+    [Fact]
+    public async Task Timeout_terminates_the_started_command()
+    {
+        var pidFile = Path.Combine(Path.GetTempPath(), $"isle-vpn-test-{Guid.NewGuid():N}.pid");
+        var exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+        try
+        {
+            var result = await VpnDetector.RunAsync(exe,
+                ["-NoProfile", "-NonInteractive", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile.Replace("'", "''")}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(3));
+            Assert.False(result.Ok);
+            Assert.Equal("timeout", result.Output);
+            Assert.True(File.Exists(pidFile), "The harmless stub must start before the timeout.");
+            var pid = int.Parse(File.ReadAllText(pidFile).Trim());
+            Assert.DoesNotContain(Process.GetProcesses(), p => { using (p) return p.Id == pid; });
+        }
+        finally
+        {
+            if (File.Exists(pidFile))
+            {
+                var pid = int.Parse(File.ReadAllText(pidFile).Trim());
+                try { using var process = Process.GetProcessById(pid); process.Kill(entireProcessTree: true); }
+                catch (ArgumentException) { }
+                File.Delete(pidFile);
+            }
+        }
+    }
+
     [Fact]
     public void Phonebook_parsing_ignores_other_lines()
     {
@@ -77,5 +117,34 @@ public class VpnDetectorTests
         Assert.False(result.Ok);
         Assert.False(result.NeedsAdmin);
         Assert.Empty(result.Output);
+    }
+}
+
+public class RadioDiscoveryTests
+{
+    [Fact]
+    public async Task Reopen_retries_denial_absence_and_discovery_failure()
+    {
+        int accessCalls = 0, discoveries = 0, changes = 0;
+        using var radios = new Radios(Dispatcher.CurrentDispatcher)
+        {
+            RequestAccess = () => Task.FromResult(++accessCalls == 1 ? RadioAccessStatus.DeniedByUser : RadioAccessStatus.Allowed),
+            Discover = () => ++discoveries == 2
+                ? Task.FromException<IReadOnlyList<Radio>>(new InvalidOperationException("test discovery failure"))
+                : Task.FromResult<IReadOnlyList<Radio>>([]),
+        };
+        radios.Changed += () => changes++;
+        await radios.InitAsync();
+        Assert.True(radios.Denied);
+        await radios.InitAsync();
+        Assert.False(radios.Denied);
+        Assert.Null(radios.WifiOn);
+        await radios.InitAsync();
+        Assert.True(radios.Denied);
+        await radios.InitAsync();
+        Assert.False(radios.Denied);
+        Assert.Equal(4, accessCalls);
+        Assert.Equal(3, discoveries);
+        Assert.Equal(4, changes);
     }
 }

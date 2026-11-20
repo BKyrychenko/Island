@@ -24,7 +24,7 @@ public sealed class CharactersModule(IslandWindow island) : IModule, IDisposable
     readonly List<IDisposable> _subs = [];
     CreatureBrain? _brain;
     CreatureView? _panelView, _pillView;
-    Border? _panelHost;
+    Button? _panelHost;
     CharacterGallery? _gallery;
 
     public string Id => "characters";
@@ -43,14 +43,14 @@ public sealed class CharactersModule(IslandWindow island) : IModule, IDisposable
         _subs.Add(EventBus.Subscribe<MusicPlaying>(m => _ui.BeginInvoke(() => _brain?.SetMusic(m.Playing))));
         _subs.Add(EventBus.Subscribe<TimerFinished>(_ => _ui.BeginInvoke(() => _brain?.Cheer())));
 
-        _panelView = new CreatureView(Selected, _brain) { Width = PanelSize, Height = PanelSize };
-        _panelHost = new Border
+        _panelView = new CreatureView(Selected, _brain) { Width = PanelSize, Height = PanelSize, IsHitTestVisible = false };
+        _panelHost = new Button
         {
-            Child = _panelView, Width = PanelSize, Height = PanelSize, Background = Brushes.Transparent, Cursor = Cursors.Hand,
+            Content = _panelView, Width = PanelSize, Height = PanelSize,
             ToolTip = Strings.T("chars.title"),
         };
-        System.Windows.Automation.AutomationProperties.SetName(_panelHost, Strings.T("chars.title"));
-        _panelHost.MouseLeftButtonUp += (_, e) => { e.Handled = true; OpenGallery(); };
+        _panelHost.SetResourceReference(FrameworkElement.StyleProperty, "IconButton");
+        _panelHost.Click += (_, _) => OpenGallery();
         island.Tabs.Mascot = _panelHost;
         ApplyPill();
         Settings.Changed += OnSettingsChanged;
@@ -81,6 +81,7 @@ public sealed class CharactersModule(IslandWindow island) : IModule, IDisposable
 
     public void OpenGallery()
     {
+        var keyboardInIsland = island.IsKeyboardFocusWithin;
         _gallery ??= new CharacterGallery(new GalleryActions(
             Pick: id => { S.SetOpt("chars.kind", id); Save(); },
             InPill: on => { S.SetOpt("chars.inPill", on); Save(); },
@@ -88,6 +89,11 @@ public sealed class CharactersModule(IslandWindow island) : IModule, IDisposable
             Close: () => island.HideOverlay()), _brain);
         RefreshGallery();
         island.ShowOverlay(_gallery);
+        if (keyboardInIsland)
+            island.Dispatcher.InvokeAsync(() =>
+            {
+                if (_gallery is { IsVisible: true } gallery && island.IsOverlayShown(gallery)) gallery.FocusSelected();
+            }, DispatcherPriority.Loaded);
     }
 
     void RefreshGallery() => _gallery?.Show(Selected.Id, InPill, SleepMinutes);

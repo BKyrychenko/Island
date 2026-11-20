@@ -113,8 +113,13 @@ public sealed class CommandBarView : Grid, ITabView
     public void Reset()
     {
         _input.Text = "";
+        ClearResults();
+    }
+
+    void ClearResults()
+    {
         _results.Clear();
-        Render();
+        _rows.Children.Clear();
     }
 
     void OnTextChanged()
@@ -127,8 +132,8 @@ public sealed class CommandBarView : Grid, ITabView
         _hint.Visibility = _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         _armed = null;
         _debounce.Stop();
-        if (_input.Text.Trim().Length == 0) { _cts?.Cancel(); _results.Clear(); Render(); return; }
-        _debounce.Start();
+        ClearResults();
+        if (_input.Text.Trim().Length > 0) _debounce.Start();
     }
 
     /// <summary>Runs every provider in the background; results merge in as each one finishes.</summary>
@@ -142,7 +147,7 @@ public sealed class CommandBarView : Grid, ITabView
         var cts = _cts = new CancellationTokenSource();
         var id = ++_queryId;
         var text = _input.Text;
-        _results.Clear();
+        ClearResults();
         _selected = 0;
         _userMoved = false;
         var pending = _providers.Count;
@@ -249,8 +254,14 @@ public sealed class CommandBarView : Grid, ITabView
         }
         row.Children.Add(texts);
         var b = new Border { Child = row, Padding = new Thickness(8, 5, 8, 5), CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 0, 0, 1), Background = Brushes.Transparent, Cursor = Cursors.Hand };
+        b.SetResourceReference(MinHeightProperty, "CompactTargetMin");
         if (selected) b.SetResourceReference(Border.BackgroundProperty, "SurfaceHoverBrush");
-        b.MouseLeftButtonUp += (_, e) => { e.Handled = true; _selected = index; Execute(); };
+        var queryId = _queryId;
+        b.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (queryId == _queryId) Execute(item);
+        };
         return b;
     }
 
@@ -278,10 +289,18 @@ public sealed class CommandBarView : Grid, ITabView
         }
     }
 
-    internal void Execute()
+    internal void Execute(CommandItem? clickedItem = null)
     {
-        if (_debounce.IsEnabled) { Query(); _executeWhenReady = true; return; }
-        if (_querying) { _executeWhenReady = true; return; }
+        if (clickedItem is not null)
+        {
+            var index = _results.IndexOf(clickedItem);
+            if (index < 0) return;
+            _selected = index;
+            _userMoved = true;
+            _executeWhenReady = false;
+        }
+        else if (_debounce.IsEnabled) { Query(); _executeWhenReady = _querying; return; }
+        else if (_querying) { _executeWhenReady = true; return; }
         if (_selected >= _results.Count) return;
         var item = _results[_selected];
         if (item.Run is null) return;

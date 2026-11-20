@@ -91,6 +91,8 @@ public sealed class Reminder
     public string Source { get; set; } = "";
     public DateTimeOffset Due { get; set; }
     public RepeatRule? Repeat { get; set; }
+    /// <summary>Original repeat schedule, kept separate from the snoozed due time. Older documents fall back to Due.</summary>
+    public DateTimeOffset? RepeatAnchor { get; set; }
     /// <summary>Set while the reminder is showing (fired, waiting for Done/Snooze).</summary>
     public DateTimeOffset? FiredAt { get; set; }
 }
@@ -119,7 +121,7 @@ public sealed class ReminderBook(ReminderDoc doc, Func<DateTimeOffset> now, Time
     public bool Replace(string id, ParsedReminder p, string source)
     {
         if (Find(id) is not { } r) return false;
-        r.Text = p.Text; r.Source = source.Trim(); r.Due = p.Due; r.Repeat = p.Repeat; r.FiredAt = null;
+        r.Text = p.Text; r.Source = source.Trim(); r.Due = p.Due; r.Repeat = p.Repeat; r.RepeatAnchor = null; r.FiredAt = null;
         return true;
     }
 
@@ -148,7 +150,8 @@ public sealed class ReminderBook(ReminderDoc doc, Func<DateTimeOffset> now, Time
     {
         if (Find(id) is not { } r) return;
         if (r.Repeat is null) { Delete(id); return; }
-        r.Due = r.Repeat.Next(r.Due, now(), _tz);
+        r.RepeatAnchor ??= r.Due;
+        r.Due = r.Repeat.Next(r.RepeatAnchor.Value, now(), _tz);
         r.FiredAt = null;
     }
 
@@ -156,6 +159,7 @@ public sealed class ReminderBook(ReminderDoc doc, Func<DateTimeOffset> now, Time
     public void Snooze(string id, TimeSpan delay)
     {
         if (Find(id) is not { } r) return;
+        if (r.Repeat is not null) r.RepeatAnchor ??= r.Due;
         r.Due = now() + delay;
         r.FiredAt = null;
     }
@@ -164,8 +168,9 @@ public sealed class ReminderBook(ReminderDoc doc, Func<DateTimeOffset> now, Time
     public void SnoozeTomorrow(string id)
     {
         if (Find(id) is not { } r) return;
+        if (r.Repeat is not null) r.RepeatAnchor ??= r.Due;
         var local = TimeZoneInfo.ConvertTime(now(), _tz).DateTime;
-        var original = TimeZoneInfo.ConvertTime(r.Due, _tz).DateTime.TimeOfDay;
+        var original = TimeZoneInfo.ConvertTime(r.RepeatAnchor ?? r.Due, _tz).DateTime.TimeOfDay;
         r.Due = RepeatRule.ToOffset(local.Date.AddDays(1) + original, _tz);
         r.FiredAt = null;
     }

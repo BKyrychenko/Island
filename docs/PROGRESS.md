@@ -2,8 +2,16 @@
 
 ## WPF audit repairs
 
-- Latest: Tier 1–3 repairs integrated. Release tests passed (556). Windows checks verified keyboard ownership, drag hover, fullscreen timer banners, and a 60-second idle sample.
-- Next: Finish live validation on a restarted media player, very slow clipboard targets, mixed-DPI docking, and live Anthropic API when those environments are available.
+- 2026-11-20: Follow-up repairs cover Notes recovery and editor selection, export and storage failures, hold-to-talk release, command and geocoder ordering, reminders, lyrics retry and chat drafts. The interface retains keyboard focus in More and Settings, keeps approval actions visible, enlarges the scale and seek targets, restores one-row Notes formatting, and reflects when Send is available.
+- 2026-11-20: Codex streams through the local signed-in CLI. A live request produced 225 text updates, with its first fragment arriving 3.1 seconds before completion. The 80% layout passed 635 Release tests and 436 snapshot renders across English, Ukrainian, Dark and Light.
+- 2026-11-20: The remaining audit pass covered drafts and chat history, hook ownership and approval review, clipboard capture and paging, timer persistence and file index updates, Settings controls and focus, Bluetooth and VPN, screen selection, voice cleanup, player seek, Steam activity, and weather error recovery. The built-in Codex flow shows a waiting message while the CLI handles a request. All 628 Release tests passed. The self-contained package was installed at the existing `dist/Isle` path and opened its window with all 16 modules registered. The signed-in Claude check was skipped by request.
+- 2026-11-20: Follow-up fixes preserve the clicked command while results arrive and correct calculator argument and percentage parsing. Snooze preserves recurring schedules, keyboard users can navigate Settings and the Shelf, transport stays visible with lyrics open, and disabling IP location cancels stale weather requests. All 587 Release tests passed.
+- 2026-11-20: The first priority audit batch routes Alt+F4 and tray Quit through recording finalization, reports save failures, gates AI Replace on a complete response for the full selection, and bundles a standalone agent hook in the self-contained package.
+- 2026-11-20: WPF AI now uses the installed Codex or Claude Code CLI with the user's local sign-in. Removed direct API providers and key entry. All 558 Release tests passed. Codex answered a live test using chat context. Verified the signed Claude CLI's signed-out path and the full chat flow with a test executable.
+- 2026-11-19: AI chat can use the local Codex CLI's ChatGPT sign-in. Office attachment parsing has size and worksheet bounds, and custom AI endpoints require HTTPS outside loopback. The excluded-app setting can pick an open app and optionally check whether it overlaps the capsule.
+- 2026-11-19: Agent cards can focus the session's console or Windows Terminal tab, show reported subagent completion and activity, and preview the latest reported file edit. Verified selection between identically titled tabs, packaged hook delivery, and the live WPF release with the updated Codex hooks.
+- Tier 1–3 repairs passed 556 Release tests. Windows checks verified keyboard ownership, drag hover, fullscreen timer banners, and a 60-second idle sample.
+- Outstanding live checks include media-player restart, very slow clipboard targets, physical mixed-DPI docking, and a signed-in Claude Code session.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (built, checked, committed)
 

@@ -93,13 +93,15 @@ public class AgentTests
     [Fact]
     public void RequestLineRoundTrip()
     {
-        var line = HookProtocol.Request("codex", true, 45, Input("PermissionRequest", "shell"));
+        var terminal = new HookProtocol.ConsoleTarget(1234, 9123456789);
+        var line = HookProtocol.Request("codex", true, 45, Input("PermissionRequest", "shell"), terminal);
         Assert.DoesNotContain('\n', line);
         var m = HookMessage.Parse(line)!;
         Assert.Equal("codex", m.Agent);
         Assert.True(m.Wait);
         Assert.Equal(45, m.TimeoutSeconds);
         Assert.Equal("PermissionRequest", m.Event);
+        Assert.Equal(terminal, m.Terminal);
         Assert.Null(HookMessage.Parse("{\"agent\":\"x\"}"));
         Assert.Null(HookMessage.Parse("not json"));
     }
@@ -113,6 +115,74 @@ public class AgentTests
     }
 
     static HookMessage Msg(JsonObject input, string agent = "claude", bool wait = false) => new(agent, wait, 60, input);
+
+    [Fact]
+    public void SubagentUpdatesStayWithTheirParentAndDoNotReopenCompletedWork()
+    {
+        var (b, clock, _) = NewBook();
+        var stamp = clock().UtcTicks;
+        var parent = new HookProtocol.ConsoleTarget(1212, 9123456789);
+        b.Apply(new HookMessage("codex", false, 60, Input("SessionStart"), parent, stamp - 10));
+        b.Apply(Msg(Input("SessionStart", session: "other"), "codex"));
+        var done = Input("SubagentStop", cwd: @"C:\Code\worker");
+        done["agent_id"] = "w1";
+        done["agent_type"] = "explorer";
+        done["last_assistant_message"] = "Read the files.";
+        b.Apply(new HookMessage("codex", false, 60, done, new(3434, 9234567890), stamp));
+        var start = Input("SubagentStart");
+        start["agent_id"] = "w1";
+        b.Apply(new HookMessage("codex", false, 60, start, SentTicks: stamp - 1));
+        start["agent_id"] = "w2";
+        b.Apply(Msg(start, "codex"));
+
+        var session = b.Sessions.Single(s => s.Key == "codex:s1");
+        Assert.Equal(parent, session.Terminal);
+        Assert.Equal("island", session.Project);
+        Assert.Equal(2, session.Workers.Count);
+        Assert.Equal("Read the files.", Assert.Single(session.Workers, w => w.Done).Activity);
+        Assert.Empty(b.Sessions.Single(s => s.Key == "codex:other").Workers);
+    }
+
+    [Fact]
+    public void CodexShowsLastSuccessfulFileWithFullCountsAndBoundedPreview()
+    {
+        var (b, _, _) = NewBook();
+        var patch = "*** Begin Patch\n*** Add File: a.txt\n+first\n*** Update File: b.txt\n@@\n-old\n" +
+            string.Concat(Enumerable.Repeat("+new\n", 200)) + "*** End Patch";
+        var input = Input("PostToolUse", "apply_patch", new JsonObject { ["command"] = patch });
+        input["tool_response"] = "Exit code: 0\nSuccess. Updated the following files:\nA a.txt\nM b.txt";
+        b.Apply(Msg(input, "codex"));
+        var session = Assert.Single(b.Sessions);
+        var change = Assert.IsType<AgentChange>(session.LatestChange);
+        Assert.Equal("b.txt", change.Path);
+        Assert.Equal(200, change.Added);
+        Assert.Equal(1, change.Removed);
+        Assert.True(change.Limited);
+        Assert.Contains("-old\n+new", change.Preview);
+
+        input["tool_response"] = "Exit code: 1\nPatch failed.";
+        b.Apply(Msg(input, "codex"));
+        Assert.Same(change, session.LatestChange);
+    }
+
+    [Fact]
+    public void ClaudePrefersTheStructuredPatchFromTheToolResult()
+    {
+        var input = Input("PostToolUse", "Edit", new JsonObject { ["file_path"] = @"C:\Code\island\main.cs", ["old_string"] = "ignored", ["new_string"] = "preview" });
+        input["tool_response"] = new JsonObject
+        {
+            ["structuredPatch"] = new JsonArray(new JsonObject
+            {
+                ["oldStart"] = 5, ["oldLines"] = 2, ["newStart"] = 5, ["newLines"] = 2,
+                ["lines"] = new JsonArray(" stable", "-old", "+new"),
+            }),
+        };
+        var change = Assert.IsType<AgentChange>(AgentChange.Read("claude", "Edit", input));
+        Assert.Equal("main.cs", change.FileName);
+        Assert.Equal(1, change.Added);
+        Assert.Equal(1, change.Removed);
+        Assert.Equal("@@ -5,2 +5,2 @@\n stable\n-old\n+new\n", change.Preview);
+    }
 
     [Fact]
     public void LifecycleStates()
@@ -306,17 +376,19 @@ public class AgentTests
     public void MergeKeepsOtherHooksAndIsIdempotent()
     {
         var root = (JsonObject)JsonNode.Parse(ExistingClaude)!;
-        HookInstaller.Merge(root, "claude", @"C:\Isle\bin\Isle.Hook.exe", 60);
-        HookInstaller.Merge(root, "claude", @"C:\Isle\bin\Isle.Hook.exe", 90); // update, no duplicates
+        HookInstaller.Merge(root, "claude", HookInstaller.InstalledExe, 60);
+        HookInstaller.Merge(root, "claude", HookInstaller.InstalledExe, 90); // update, no duplicates
         Assert.True(HookInstaller.HasIsle(root));
         Assert.Equal("claude-opus-5", (string?)root["model"]);
         var hooks = root["hooks"]!.AsObject();
         Assert.Equal(2, hooks["SessionStart"]!.AsArray().Count); // theirs + ours
         Assert.Equal("other-tool hook", (string?)hooks["SessionStart"]![0]!["hooks"]![0]!["command"]);
-        Assert.Single(hooks["PostToolUse"]!.AsArray());
+        Assert.Equal(2, hooks["PostToolUse"]!.AsArray().Count); // theirs + Isle's file tools
+        Assert.Single(hooks["SubagentStart"]!.AsArray());
+        Assert.Single(hooks["SubagentStop"]!.AsArray());
         Assert.Equal(2, hooks["PreToolUse"]!.AsArray().Count); // async status + AskUserQuestion
         var perm = hooks["PermissionRequest"]![0]!["hooks"]![0]!;
-        Assert.Equal(@"C:\Isle\bin\Isle.Hook.exe", (string?)perm["command"]);
+        Assert.Equal(HookInstaller.InstalledExe, (string?)perm["command"]);
         Assert.Equal(["claude", "--timeout", "90"], perm["args"]!.AsArray().Select(x => (string?)x));
         Assert.Equal(120, (int)perm["timeout"]!);
         Assert.Null(perm["async"]);
@@ -332,16 +404,159 @@ public class AgentTests
     {
         var root = (JsonObject)JsonNode.Parse(ExistingClaude)!;
         var before = root.ToJsonString();
-        HookInstaller.Merge(root, "claude", @"C:\Isle\bin\Isle.Hook.exe", 60);
+        HookInstaller.Merge(root, "claude", HookInstaller.InstalledExe, 60);
         Assert.True(HookInstaller.Strip(root));
         Assert.False(HookInstaller.HasIsle(root));
         Assert.Equal(before, root.ToJsonString());
         Assert.False(HookInstaller.Strip(root));
 
         var empty = new JsonObject();
-        HookInstaller.Merge(empty, "codex", @"C:\Isle\bin\Isle.Hook.exe", 60);
+        HookInstaller.Merge(empty, "codex", HookInstaller.InstalledExe, 60);
         HookInstaller.Strip(empty);
         Assert.Equal("{}", empty.ToJsonString());
+    }
+
+    [Fact]
+    public void OwnershipRequiresTrustedExecutableAndOnlyHookArguments()
+    {
+        var root = new JsonObject();
+        var exe = HookInstaller.InstalledExe;
+        var handlers = new JsonArray();
+        root["hooks"] = new JsonObject { ["Stop"] = new JsonArray(new JsonObject { ["hooks"] = handlers }) };
+        JsonObject Handler(string command, JsonArray? args = null)
+        {
+            var handler = new JsonObject { ["type"] = "command", ["command"] = command };
+            if (args is not null) handler["args"] = args;
+            return handler;
+        }
+        handlers.Add(Handler("echo " + exe));
+        handlers.Add(Handler("Isle.Hook.exe codex --timeout 60"));
+        handlers.Add(Handler(@"C:\unrelated\Isle.Hook.exe codex --timeout 60"));
+        handlers.Add(Handler($"\"{exe}\" codex --timeout 60 && echo unrelated"));
+        handlers.Add(Handler(exe, new JsonArray("claude", "--async", "extra")));
+        handlers.Add(Handler($"\"{exe}\"junk codex --timeout 60"));
+        handlers.Add(Handler(exe, new JsonArray(12)));
+        var preserved = root.ToJsonString();
+        Assert.False(HookInstaller.HasIsle(root));
+        Assert.False(HookInstaller.Strip(root));
+        Assert.Equal(preserved, root.ToJsonString());
+
+        handlers.Add(Handler(exe, new JsonArray("claude", "--async")));
+        handlers.Add(Handler($"\"{exe}\" codex --timeout 60"));
+        var legacy = Path.Combine(AppContext.BaseDirectory, HookInstaller.ExeName);
+        handlers.Add(Handler($"\"{legacy}\" claude --timeout 60 --async"));
+        Assert.True(HookInstaller.HasIsle(root));
+        Assert.True(HookInstaller.Strip(root));
+        Assert.Equal(preserved, root.ToJsonString());
+    }
+
+    [Fact]
+    public void DelayedWorkerAndParentEventsDoNotReopenCompletedWork()
+    {
+        var (book, clock, _) = NewBook();
+        var stamp = clock().UtcTicks;
+        book.Apply(new HookMessage("codex", false, 60, Input("Stop"), SentTicks: stamp));
+        var worker = Input("PreToolUse", "shell", new JsonObject { ["command"] = "old work" });
+        worker["agent_id"] = "w1";
+        book.Apply(new HookMessage("codex", false, 60, worker, SentTicks: stamp - 1));
+        Assert.Equal(AgentState.Done, Assert.Single(book.Sessions).State);
+        book.Apply(new HookMessage("codex", false, 60, Input("PreToolUse", "shell"), SentTicks: stamp - 1));
+        Assert.Equal(AgentState.Done, Assert.Single(book.Sessions).State);
+        worker["hook_event_name"] = "SubagentStop";
+        book.Apply(new HookMessage("codex", false, 60, worker, SentTicks: stamp));
+        worker["hook_event_name"] = "PreToolUse";
+        book.Apply(new HookMessage("codex", false, 60, worker, SentTicks: stamp - 2));
+        Assert.True(Assert.Single(Assert.Single(book.Sessions).Workers).Done);
+        Assert.Equal(AgentState.Done, Assert.Single(book.Sessions).State);
+        book.Apply(new HookMessage("codex", false, 60, Input("UserPromptSubmit"), SentTicks: stamp));
+        Assert.Equal(AgentState.Working, Assert.Single(book.Sessions).State);
+    }
+
+    [Fact]
+    public void StatusRefreshKeepsApprovalScrollFocusAndCompletedReview()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var (book, _, _) = NewBook();
+                book.Apply(Msg(Input("PermissionRequest", "shell", new JsonObject { ["command"] = string.Join("\n", Enumerable.Range(0, 80).Select(i => "line " + i)) }), wait: true));
+                var view = new Isle.Views.Agents.AgentsView(new(
+                    _ => { }, _ => { }, _ => { }, _ => { }, (_, _) => { }, _ => { },
+                    () => [], _ => "", _ => "", () => 60));
+                System.Windows.Input.FocusManager.SetIsFocusScope(view, true);
+                void Layout()
+                {
+                    view.Measure(new System.Windows.Size(460, 148));
+                    view.Arrange(new System.Windows.Rect(0, 0, 460, 148));
+                    view.UpdateLayout();
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                }
+                IEnumerable<System.Windows.DependencyObject> Descendants(System.Windows.DependencyObject root)
+                {
+                    for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+                    {
+                        var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                        yield return child;
+                        foreach (var nested in Descendants(child)) yield return nested;
+                    }
+                }
+                view.Show(book.Sessions, true);
+                Layout();
+                var review = Assert.Single(Descendants(view).OfType<System.Windows.Controls.ScrollViewer>(),
+                    scroll => System.Windows.Automation.AutomationProperties.GetName(scroll) == Isle.Core.Strings.T("agents.reviewInput"));
+                var allow = Assert.Single(Descendants(view).OfType<System.Windows.Controls.Button>(), button => Equals(button.Content, Isle.Core.Strings.T("agents.allow")));
+                var outer = (System.Windows.Controls.ScrollViewer)view.Children[1];
+                foreach (var key in new[] { "agents.allow", "agents.deny", "agents.terminal" })
+                {
+                    var button = Assert.Single(Descendants(view).OfType<System.Windows.Controls.Button>(), b => Equals(b.Content, Isle.Core.Strings.T(key)));
+                    var bounds = button.TransformToAncestor(outer).TransformBounds(new System.Windows.Rect(button.RenderSize));
+                    Assert.True(bounds.Top >= 0 && bounds.Bottom <= outer.ViewportHeight, $"{key} is outside the initial viewport: {bounds}");
+                }
+                Assert.False(allow.IsEnabled);
+                Assert.True(review.ScrollableHeight > 100);
+                var wheel = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, -120)
+                    { RoutedEvent = System.Windows.UIElement.MouseWheelEvent };
+                ((System.Windows.UIElement)review.Content).RaiseEvent(wheel);
+                Layout();
+                Assert.True(wheel.Handled && review.VerticalOffset > 0);
+                Assert.Equal(0, outer.VerticalOffset);
+                System.Windows.Input.FocusManager.SetFocusedElement(view, review);
+                var offset = review.VerticalOffset;
+                book.Apply(Msg(Input("PreToolUse", "Read", session: "other")));
+                view.Show(book.Sessions, true);
+                Layout();
+                Assert.Contains(review, Descendants(view));
+                Assert.Equal(offset, review.VerticalOffset);
+                Assert.Same(review, System.Windows.Input.FocusManager.GetFocusedElement(view));
+                Assert.False(allow.IsEnabled);
+                review.ScrollToEnd();
+                Layout();
+                Assert.True(allow.IsEnabled);
+                view.Show(book.Sessions, true);
+                Layout();
+                Assert.Contains(allow, Descendants(view));
+                Assert.True(allow.IsEnabled);
+            }
+            catch (Exception ex) { error = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(20)));
+        if (error is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+    }
+
+    [Fact]
+    public void ApprovalReviewShowsActualStringsAndEveryInputLeaf()
+    {
+        var input = new JsonObject { ["command"] = "line one\nline two", ["nested"] = new JsonArray(@"C:\src\a.txt", true, null, new JsonObject()) };
+        var review = AgentText.ReviewInput(AgentText.ApprovalInput(input)!);
+        Assert.Contains("line one\nline two", review);
+        Assert.Contains(@"C:\src\a.txt", review);
+        Assert.Contains("$[\"nested\"][1]:\ntrue", review);
+        Assert.Contains("$[\"nested\"][2]:\nnull", review);
+        Assert.Contains("$[\"nested\"][3]:\n{}", review);
     }
 
     [Fact]
@@ -356,6 +571,9 @@ public class AgentTests
         Assert.Null(perm["args"]);
         Assert.Null(perm["async"]);
         Assert.Null(hooks["PreToolUse"]![0]!["matcher"]);
+        Assert.Equal("apply_patch", (string?)hooks["PostToolUse"]![0]!["matcher"]);
+        Assert.Single(hooks["SubagentStart"]!.AsArray());
+        Assert.Single(hooks["SubagentStop"]!.AsArray());
     }
 
     [Fact]
@@ -388,6 +606,30 @@ public class AgentTests
         Assert.Equal("keep me", (string?)after["description"]);
         Assert.Equal(2, after["hooks"]!.AsObject().Count);
         Assert.Null(HookInstaller.Remove(t, now.AddMinutes(2))); // nothing left to remove
+    }
+
+    [Fact]
+    public void SingleFileUpgradePreservesOldSidecarsWhileHelperIsLocked()
+    {
+        using var dir = new TempDir();
+        var src = Directory.CreateDirectory(Path.Combine(dir.Path, "app")).FullName;
+        File.WriteAllText(Path.Combine(src, HookInstaller.ExeName), "new helper");
+        var exe = HookInstaller.InstalledExe;
+        var bin = Directory.CreateDirectory(Path.GetDirectoryName(exe)!).FullName;
+        File.WriteAllText(exe, "old helper");
+        string[] sidecars = ["Isle.Hook.dll", "Isle.Hook.runtimeconfig.json", "Isle.Hook.deps.json"];
+        foreach (var name in sidecars) File.WriteAllText(Path.Combine(bin, name), "old");
+        var target = new HookTarget("claude", Path.Combine(dir.Path, "settings.json"));
+
+        using (File.OpenRead(exe))
+            Assert.Throws<IOException>(() => HookInstaller.Install(target, 60, src, DateTime.Now));
+        Assert.Equal("old helper", File.ReadAllText(exe));
+        Assert.All(sidecars, name => Assert.True(File.Exists(Path.Combine(bin, name))));
+        Assert.False(File.Exists(target.ConfigPath));
+
+        HookInstaller.Install(target, 60, src, DateTime.Now);
+        Assert.Equal("new helper", File.ReadAllText(exe));
+        Assert.All(sidecars, name => Assert.False(File.Exists(Path.Combine(bin, name))));
     }
 
     [Fact]

@@ -19,6 +19,7 @@ public sealed class ClipboardView : Grid, ITabView
     readonly TextBlock _searchHint = new() { IsHitTestVisible = false, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly StackPanel _list = new();
     readonly ScrollViewer _scroll;
+    int _shown = 60;
     bool _visible, _stale = true;
 
     public ClipboardView(ClipStore store, Action<ClipEntry> paste, Action<ClipEntry> copy, IslandWindow? island = null)
@@ -26,6 +27,7 @@ public sealed class ClipboardView : Grid, ITabView
         _store = store;
         _paste = paste;
         _copy = copy;
+        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
@@ -37,7 +39,7 @@ public sealed class ClipboardView : Grid, ITabView
         var searchHost = new Grid();
         _search.SetResourceReference(StyleProperty, "FlatTextBox");
         _search.MinHeight = 28;
-        _search.TextChanged += (_, _) => { _searchHint.Visibility = _search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Rebuild(); };
+        _search.TextChanged += (_, _) => { _shown = 60; _searchHint.Visibility = _search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Rebuild(); };
         _searchHint.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
         _searchHint.SetBinding(TextBlock.TextProperty, Loc("clip.search"));
         searchHost.Children.Add(_search);
@@ -46,8 +48,29 @@ public sealed class ClipboardView : Grid, ITabView
         Children.Add(top);
 
         _scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _list };
-        SetRow(_scroll, 1);
+        var pasteHint = new TextBlock { FontSize = 11, Margin = new Thickness(4, 0, 4, 6), TextWrapping = TextWrapping.Wrap };
+        pasteHint.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
+        pasteHint.SetBinding(TextBlock.TextProperty, Loc("clip.clickToPaste"));
+        SetRow(pasteHint, 1);
+        Children.Add(pasteHint);
+        SetRow(_scroll, 2);
         Children.Add(_scroll);
+        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 2, 4, 2) };
+        error.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        SetRow(error, 3);
+        Children.Add(error);
+        void UpdateError()
+        {
+            if (_store.SaveErrorKey is { } key)
+            {
+                error.SetBinding(TextBlock.TextProperty, Loc(key));
+                error.Visibility = Visibility.Visible;
+            }
+            else error.Visibility = Visibility.Collapsed;
+        }
+        _store.SaveStatusChanged += UpdateError;
+        UpdateError();
         _store.Changed += OnStoreChanged;
         Rebuild();
     }
@@ -75,10 +98,24 @@ public sealed class ClipboardView : Grid, ITabView
         _stale = false;
         _list.Children.Clear();
         var count = 0;
-        foreach (var e in _store.Search(_search.Text))
+        foreach (var e in _store.Search(_search.Text, Strings.T("clip.image")))
         {
+            if (count++ == _shown)
+            {
+                var more = new Button { Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Stretch };
+                more.SetResourceReference(StyleProperty, "GhostButton");
+                more.SetBinding(ContentControl.ContentProperty, Loc("clip.showMore"));
+                more.Click += (_, _) =>
+                {
+                    var next = _shown;
+                    _shown += 60;
+                    Rebuild();
+                    if (_list.Children.Count > next) ((FrameworkElement)_list.Children[next]).Focus();
+                };
+                _list.Children.Add(more);
+                break;
+            }
             _list.Children.Add(Row(e));
-            if (++count >= 60) break; // keep the visual tree small; search finds older ones
         }
         if (count == 0)
         {

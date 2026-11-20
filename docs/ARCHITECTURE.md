@@ -118,15 +118,16 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   `WeatherCodes` (WMO → text/icon), `WeatherFormat`, `RainAlerts`. View `Views/Weather/WeatherView` (report with 24 h /
   7 days, setup with search + option chips). Options: `weather.city/lat/lon/ip/units/inPill/rainAlerts/lastAlert`.
 
-- **AI chat** (`ai`, `Modules/AiChat`) — `AiModule` (tab, current conversation, one streaming request at a time:
-  `Send`, `StreamInto(chat, answer, delta)` (never throws; errors become message text), `Cancel`, `TestConnection`,
-  static `SaveConfig`/`ForgetKey`; lazy HttpClient disposed 2 min after use), `ChatStore` (`chats.json`, newest first,
-  max 100), providers behind `IChatProvider` (`AnthropicProvider` and `OpenAiProvider` use HTTP/SSE), `AiConfig`
-  (options `ai.provider`, `ai.anthropic.model/key`, `ai.openai.base/model/key`, keys DPAPI), `Attachments` (file →
+- **AI chat** (`ai`, `Modules/AiChat`) — `AiModule` owns chats, cancellation and one active request at a time.
+  `ChatStore` stores up to 100 chats in `chats.json`. `CodexChatProvider` and `ClaudeCodeProvider` use `ChatCli`
+  to run the installed CLIs in background processes with redirected input and output. Codex uses its stdio app-server
+  for streaming, with a one-shot CLI fallback before sending when the installed configuration is incompatible. `ai.provider` selects
+  `codex` or `claude`. `Attachments` handles file input (file →
   image/PDF/text attachment, docx/xlsx via Open XML zip, PDF text via PdfPig), `Markdown` (block + inline parser).
   Views `Views/AiChat/AiChatView` (header, bubbles, chips, input, overlays) and `MarkdownView` (renderer).
   Text actions: hotkey `textActions` (Win+Alt+A) → `ClipboardOps.CopySelectionAsync` → `AiPopupView` (island overlay)
-  with `TextActions` prompts; Copy / Replace (`ClipboardOps.PasteTextAsync` into the previous window). Command bar
+  with `TextActions` prompts. Copy is available for usable results. Replace uses `ClipboardOps.PasteTextAsync`
+  after a complete response for the full selection. Command bar
   `? question` → `AskAi` on the EventBus → `AiModule.Ask` → the same popup; "Open in chat" stores it as a chat.
 
 - **Voice to text** (`voice`, `Modules/Voice`) — `VoiceModule` (hold hotkey `voice` = Win+Alt+V: press → `MicCapture`

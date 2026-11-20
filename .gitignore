@@ -1,4 +1,5 @@
 bin/
+target/
 obj/
 dist/
 logs/

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -33,6 +34,8 @@ public partial class IslandWindow
             if (a is not null) Safe(a, "toast action");
         };
         Pill.Changed += OnPillChanged;
+        if (!_snapshotMode)
+            ExpandedChanged += expanded => { if (expanded) _idleView?.DismissHint(); };
         UpdateIdlePill();
         RefreshTabs();
     }
@@ -204,27 +207,43 @@ public partial class IslandWindow
     void ShowMoreOverlay(IReadOnlyList<TabInfo> hidden)
     {
         if (MoreOverlay.IsVisible) { HideMoreOverlay(); return; }
+        if (hidden.Count == 0) return;
         MoreList.Children.Clear();
+        Button? focusRow = null;
         foreach (var tab in hidden)
         {
             var icon = new Views.Icon { Width = 15, Height = 15, Margin = new Thickness(0, 0, 8, 0) };
             icon.SetResourceReference(Views.Icon.DataProperty, tab.IconKey);
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             row.Children.Add(icon);
-            row.Children.Add(new TextBlock { Text = Strings.T(tab.TitleKey), VerticalAlignment = VerticalAlignment.Center });
+            var title = Strings.T(tab.TitleKey);
+            row.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center });
             var b = new Button { Content = row, Padding = new Thickness(8, 4, 12, 4) };
+            AutomationProperties.SetName(b, title);
             b.SetResourceReference(StyleProperty, "GhostButton");
+            b.SetResourceReference(FontSizeProperty, "NavigationFontSize");
             b.HorizontalContentAlignment = HorizontalAlignment.Left;
             var id = tab.Id;
+            if (id == Tabs.SelectedId)
+            {
+                focusRow = b;
+                b.SetResourceReference(Button.BackgroundProperty, "SurfaceBrush");
+            }
+            focusRow ??= b;
             b.Click += (_, _) => SelectTab(id, animate: true);
             MoreList.Children.Add(b);
         }
         MoreOverlay.Visibility = Visibility.Visible;
+        AcquireFocus();
+        MoreOverlay.UpdateLayout();
+        focusRow?.Focus();
     }
 
     void HideMoreOverlay()
     {
-        if (MoreOverlay.Visibility == Visibility.Visible) MoreOverlay.Visibility = Visibility.Collapsed;
+        if (MoreOverlay.Visibility != Visibility.Visible) return;
+        if (MoreOverlay.IsKeyboardFocusWithin) Tabs.MoreButton.Focus();
+        MoreOverlay.Visibility = Visibility.Collapsed;
     }
 
     // ---- toast (inside the expanded panel) ----

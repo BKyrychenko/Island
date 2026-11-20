@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Isle.Core;
@@ -13,6 +14,7 @@ public sealed record AgentsActions(
     Action<AgentRequest> Allow,
     Action<AgentRequest> Deny,
     Action<AgentRequest> Terminal,
+    Action<AgentSession> OpenTerminal,
     Action<AgentRequest, IReadOnlyList<IReadOnlyCollection<string>>> Answer,
     Action<AgentSession> Dismiss,
     Func<IReadOnlyList<HookTarget>> Targets,
@@ -33,6 +35,9 @@ public sealed class AgentsView : Grid
     readonly Border _overlay = new() { Visibility = Visibility.Collapsed };
     /// <summary>Progress through multi-question requests (survives re-renders): request id → (question index, picks).</summary>
     readonly Dictionary<long, (int Index, List<HashSet<string>> Picks)> _progress = [];
+    readonly Dictionary<long, Border> _requestCards = [];
+    string? _workerKey;
+    StackPanel? _workerPanel;
     IReadOnlyList<AgentSession> _sessions = [];
     bool _anyHooks = true;
 
@@ -67,11 +72,21 @@ public sealed class AgentsView : Grid
     {
         _sessions = sessions;
         _anyHooks = anyHooks;
+        if (_workerPanel is { } panel && _workerKey is { } key)
+        {
+            if (sessions.FirstOrDefault(s => s.Key == key) is { } session) RenderWorkers(panel, session);
+            else HideOverlay();
+        }
         var live = sessions.SelectMany(s => s.Pending).Select(r => r.Id).ToHashSet();
         foreach (var id in _progress.Keys.Where(k => !live.Contains(k)).ToList()) _progress.Remove(id);
 
         _count.Text = sessions.Count > 0 ? sessions.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
-        _list.Children.Clear();
+        foreach (var id in _requestCards.Keys.Where(id => !live.Contains(id)).ToList()) _requestCards.Remove(id);
+        var retained = sessions.Select(s => s.Pending.FirstOrDefault()?.Id).Where(id => id.HasValue)
+            .Select(id => _requestCards.GetValueOrDefault(id!.Value)).OfType<Border>().ToHashSet();
+        // Keep live request controls attached: status events must not reset focus, scroll, or the review gate.
+        foreach (UIElement child in _list.Children.Cast<UIElement>().ToList())
+            if (child is not Border card || !retained.Contains(card)) _list.Children.Remove(child);
         if (sessions.Count == 0)
         {
             _list.Children.Add(Wrap(Strings.T(anyHooks ? "agents.empty" : "agents.emptySetup")));
@@ -84,16 +99,26 @@ public sealed class AgentsView : Grid
             }
             return;
         }
-        foreach (var s in sessions) _list.Children.Add(Card(s));
+        foreach (var s in sessions)
+        {
+            var request = s.Pending.FirstOrDefault();
+            var card = Card(s, request is not null ? _requestCards.GetValueOrDefault(request.Id) : null);
+            if (request is not null) _requestCards[request.Id] = card;
+            if (!_list.Children.Contains(card)) _list.Children.Add(card);
+        }
     }
 
     void Refresh() => Show(_sessions, _anyHooks);
 
     // ---- cards ----
 
-    FrameworkElement Card(AgentSession s)
+    Border Card(AgentSession s, Border? existing = null)
     {
-        var stack = new StackPanel();
+        var request = s.Pending.FirstOrDefault();
+        var stack = existing?.Child as StackPanel ?? new StackPanel();
+        var body = stack.Children.OfType<FrameworkElement>().FirstOrDefault(child => Equals(child.Tag, request?.Id));
+        foreach (UIElement child in stack.Children.Cast<UIElement>().ToList())
+            if (child != body) stack.Children.Remove(child);
 
         var top = new DockPanel();
         var dot = new Ellipse { Width = 8, Height = 8, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -117,11 +142,10 @@ public sealed class AgentsView : Grid
         var agent = new System.Windows.Documents.Run("  " + AgentText.AgentName(s.Agent)) { FontWeight = FontWeights.Normal, FontSize = 11 };
         agent.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "FgDimBrush");
         name.Inlines.Add(agent);
+        if (s.Cwd.Length > 0) name.ToolTip = s.Cwd;
         name.SetResourceReference(TextBlock.ForegroundProperty, "FgBrush");
         top.Children.Add(name);
-        stack.Children.Add(top);
-
-        var request = s.Pending.FirstOrDefault();
+        stack.Children.Insert(0, top);
         if (request is null)
         {
             if (s.LastAction.Length > 0)
@@ -131,8 +155,12 @@ public sealed class AgentsView : Grid
                 stack.Children.Add(last);
             }
         }
-        else if (request.IsQuestion) stack.Children.Add(QuestionBody(request));
-        else stack.Children.Add(PermissionBody(request));
+        else if (body is null)
+        {
+            body = request.IsQuestion ? QuestionBody(request) : PermissionBody(request);
+            body.Tag = request.Id;
+            stack.Children.Add(body);
+        }
         if (s.Pending.Count > 1)
         {
             var more = new TextBlock { Text = Strings.T("agents.more", s.Pending.Count - 1), FontSize = 11, Margin = new Thickness(16, 4, 0, 0) };
@@ -140,47 +168,83 @@ public sealed class AgentsView : Grid
             stack.Children.Add(more);
         }
 
-        var card = new Border { Child = stack, Margin = new Thickness(0, 0, 0, 6) };
+        var actions = new WrapPanel { Margin = new Thickness(16, 3, 0, 0) };
+        if (request is null && s.Terminal is not null)
+            actions.Children.Add(Small("agents.openTerminal", () => _a.OpenTerminal(s), ghost: true));
+        if (s.Workers.Count > 0)
+            actions.Children.Add(Small(null, () => ShowWorkers(s), ghost: true,
+                text: Strings.T("agents.children", s.Workers.Count(w => w.Done), s.Workers.Count)));
+        if (s.LatestChange is { } change)
+        {
+            var nameWithCounts = AgentText.OneLine(change.FileName, 28) + Counts(change);
+            var diff = Small(null, () => ShowDiff(change), ghost: true, tipKey: "agents.showDiff", text: nameWithCounts);
+            System.Windows.Automation.AutomationProperties.SetName(diff, Strings.T("agents.showDiff") + " · " + nameWithCounts);
+            actions.Children.Add(diff);
+        }
+        if (actions.Children.Count > 0) stack.Children.Add(actions);
+
+        var card = existing ?? new Border { Child = stack, Margin = new Thickness(0, 0, 0, 6) };
         card.SetResourceReference(StyleProperty, "Card");
         return card;
     }
 
     FrameworkElement PermissionBody(AgentRequest r)
     {
-        var stack = new StackPanel { Margin = new Thickness(16, 4, 0, 0) };
-        var what = new TextBlock { Text = Strings.T("agents.wantsTool", r.Tool), FontSize = 11.5 };
+        var body = new Grid { Margin = new Thickness(16, 2, 0, 0) };
+        body.ColumnDefinitions.Add(new ColumnDefinition());
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) };
+        var what = new TextBlock { Text = Strings.T("agents.wantsTool", r.Tool), FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = r.Tool };
         what.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
-        stack.Children.Add(what);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        labels.Children.Add(what);
+        body.Children.Add(labels);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         if (r.ApprovalInput is { } input)
         {
             var allow = Small("agents.allow", () => _a.Allow(r), accent: true);
             allow.IsDefault = false;
             allow.IsEnabled = false;
-            var detail = new TextBlock { Text = input, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(7, 3, 7, 3) };
+            var detail = new TextBlock { Text = AgentText.ReviewInput(input), FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(7, 3, 7, 3) };
             detail.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
             detail.SetResourceReference(TextBlock.ForegroundProperty, "FgBrush");
             var scroll = new ScrollViewer
             {
-                Content = detail, MaxHeight = 44, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = detail, MaxHeight = 50, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = true,
             };
             System.Windows.Automation.AutomationProperties.SetName(scroll, Strings.T("agents.reviewInput"));
-            scroll.ScrollChanged += (_, _) =>
-                allow.IsEnabled = scroll.ViewportHeight > 0 && scroll.VerticalOffset >= scroll.ScrollableHeight - 0.5;
+            var hint = Wrap(Strings.T("agents.scrollToEnd"));
+            hint.FontSize = 11;
+            void UpdateGate()
+            {
+                // A completed review stays complete for this immutable request, even after resizing.
+                allow.IsEnabled |= scroll.ViewportHeight > 0 && scroll.VerticalOffset >= scroll.ScrollableHeight - 0.5;
+                hint.Visibility = allow.IsEnabled ? Visibility.Collapsed : Visibility.Visible;
+            }
+            scroll.ScrollChanged += (_, _) => UpdateGate();
+            scroll.Loaded += (_, _) => UpdateGate();
             var box = new Border { Child = scroll, CornerRadius = new CornerRadius(6), Margin = new Thickness(0, 3, 0, 0) };
             box.SetResourceReference(Border.BackgroundProperty, "SurfaceHoverBrush");
-            stack.Children.Add(box);
+            labels.Children.Add(hint);
+            SetRow(box, 1);
+            SetColumnSpan(box, 2);
+            body.Children.Add(box);
             row.Children.Add(allow);
         }
         else
         {
-            stack.Children.Add(Wrap(Strings.T("agents.reviewInTerminal")));
+            var explanation = Wrap(Strings.T("agents.reviewInTerminal"));
+            SetRow(explanation, 1);
+            SetColumnSpan(explanation, 2);
+            body.Children.Add(explanation);
         }
         row.Children.Add(Small("agents.deny", () => _a.Deny(r)));
         row.Children.Add(Small("agents.terminal", () => _a.Terminal(r), ghost: true, tipKey: "agents.terminalTip"));
-        stack.Children.Add(row);
-        return stack;
+        SetColumn(row, 1);
+        body.Children.Add(row);
+        return body;
     }
 
     FrameworkElement QuestionBody(AgentRequest r)
@@ -237,6 +301,7 @@ public sealed class AgentsView : Grid
         if (p.Index + 1 < r.Questions.Count)
         {
             _progress[r.Id] = (p.Index + 1, p.Picks);
+            _requestCards.Remove(r.Id);
             Refresh();
             return;
         }
@@ -251,6 +316,68 @@ public sealed class AgentsView : Grid
         AgentState.Done => "OkBrush",
         _ => "FgFaintBrush",
     };
+
+    internal void ShowWorkers(AgentSession session)
+    {
+        var panel = new StackPanel();
+        RenderWorkers(panel, session);
+        ShowOverlay(Strings.T("agents.childrenTitle"), new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        _workerKey = session.Key;
+        _workerPanel = panel;
+    }
+
+    static void RenderWorkers(StackPanel panel, AgentSession session)
+    {
+        panel.Children.Clear();
+        var summary = Wrap(Strings.T("agents.childrenDone", session.Workers.Count(w => w.Done), session.Workers.Count));
+        summary.Margin = new Thickness(0, 0, 0, 6);
+        panel.Children.Add(summary);
+        foreach (var worker in session.Workers.OrderBy(w => w.Done).ThenByDescending(w => w.ObservedAt))
+        {
+            var top = new DockPanel();
+            var state = Wrap(Strings.T(worker.Done ? "agents.state.done" : "agents.state.working"), worker.Done ? "OkBrush" : "AccentTextBrush");
+            state.Margin = new Thickness(8, 0, 0, 0);
+            DockPanel.SetDock(state, Dock.Right);
+            top.Children.Add(state);
+            var name = worker.Name.Length > 0 ? worker.Name : Strings.T("agents.child");
+            var id = worker.Id.Length <= 8 ? worker.Id : worker.Id[^8..];
+            var label = Wrap(name + " · " + id, "FgBrush");
+            label.ToolTip = worker.Id;
+            top.Children.Add(label);
+            var row = new StackPanel { Children = { top } };
+            if (worker.Activity.Length > 0) row.Children.Add(Wrap(worker.Activity));
+            var card = new Border { Child = row, Margin = new Thickness(0, 0, 0, 5), Padding = new Thickness(8, 4, 8, 4) };
+            card.SetResourceReference(StyleProperty, "Card");
+            panel.Children.Add(card);
+        }
+    }
+
+    internal void ShowDiff(AgentChange change)
+    {
+        var panel = new StackPanel();
+        var path = Wrap(change.Path, "FgBrush");
+        path.Margin = new Thickness(0, 0, 0, 4);
+        panel.Children.Add(path);
+        if (change.Preview.Length > 0)
+        {
+            var diff = new TextBlock { FontSize = 11.5, TextWrapping = TextWrapping.Wrap, FlowDirection = FlowDirection.LeftToRight };
+            diff.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
+            using var reader = new StringReader(change.Preview);
+            while (reader.ReadLine() is { } line)
+            {
+                var run = new Run(line + "\n");
+                run.SetResourceReference(TextElement.ForegroundProperty, line.StartsWith('+') ? "OkBrush" : line.StartsWith('-') ? "DangerBrush" : "FgDimBrush");
+                diff.Inlines.Add(run);
+            }
+            panel.Children.Add(diff);
+        }
+        if (change.Limited || change.Preview.Length == 0)
+            panel.Children.Add(Wrap(Strings.T(change.Preview.Length == 0 ? "agents.noDiff" : "agents.limitedDiff")));
+        ShowOverlay(Strings.T("agents.latestChange") + Counts(change), new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = true });
+    }
+
+    static string Counts(AgentChange change) => change is { Added: int added, Removed: int removed }
+        ? FormattableString.Invariant($"  +{added} −{removed}") : "";
 
     // ---- hooks overlay ----
 
@@ -329,6 +456,8 @@ public sealed class AgentsView : Grid
 
     void ShowOverlay(string title, FrameworkElement body, FrameworkElement? extra = null, bool closable = true)
     {
+        _workerKey = null;
+        _workerPanel = null;
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -352,6 +481,8 @@ public sealed class AgentsView : Grid
 
     public void HideOverlay()
     {
+        _workerKey = null;
+        _workerPanel = null;
         _overlay.Visibility = Visibility.Collapsed;
         _overlay.Child = null;
     }

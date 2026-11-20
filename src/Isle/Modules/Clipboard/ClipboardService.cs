@@ -45,7 +45,6 @@ public sealed class ClipboardService : IDisposable
     readonly Func<IntPtr> _pasteTarget;
     readonly Dispatcher _ui;
     HwndSource? _source;
-    uint _ignoreSequence;
     readonly uint _fmtExclude = Native.RegisterClipboardFormat(ClipPrivacy.ExcludeFormat);
     readonly uint _fmtHistory = Native.RegisterClipboardFormat(ClipPrivacy.HistoryFormat);
     readonly uint _fmtViewerIgnore = Native.RegisterClipboardFormat(ClipPrivacy.ViewerIgnoreFormat);
@@ -83,8 +82,7 @@ public sealed class ClipboardService : IDisposable
         try
         {
             var seq = Native.GetClipboardSequenceNumber();
-            if (seq == _ignoreSequence && seq != 0) return; // our own write
-            if (ClipboardOps.IsQuiet) return;              // another Isle feature is borrowing the clipboard
+            if (ClipboardOps.IgnoreCapture(seq)) return;
             if (IsPrivate()) return;
             var owner = Native.GetClipboardOwner();
             var app = owner != IntPtr.Zero ? ForegroundWatcher.ProcessName(owner) : "";
@@ -168,7 +166,6 @@ public sealed class ClipboardService : IDisposable
             }
             var result = await ClipboardOps.PasteDataAsync(payload, _pasteTarget());
             if (ClipboardOps.PasteNotice(result) is { } notice) App.Island?.ShowToast(notice);
-            _ignoreSequence = Native.GetClipboardSequenceNumber();
         }
         catch (Exception ex) { Logger.Error("clipboard paste", ex); App.Island?.ShowToast(Strings.T("clipboard.pasteFailed")); }
     }
@@ -180,7 +177,7 @@ public sealed class ClipboardService : IDisposable
     {
         try
         {
-            if (e.Kind == ClipKind.Text) System.Windows.Clipboard.SetText(e.Text);
+            if (e.Kind == ClipKind.Text) ClipboardOps.Write(() => System.Windows.Clipboard.SetText(e.Text));
             else
             {
                 var bmp = new BitmapImage();
@@ -188,9 +185,8 @@ public sealed class ClipboardService : IDisposable
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.UriSource = new Uri(_store.ImagePath(e));
                 bmp.EndInit();
-                System.Windows.Clipboard.SetImage(bmp);
+                ClipboardOps.Write(() => System.Windows.Clipboard.SetImage(bmp));
             }
-            _ignoreSequence = Native.GetClipboardSequenceNumber();
             return true;
         }
         catch (Exception ex) { Logger.Error("clipboard set", ex); return false; }

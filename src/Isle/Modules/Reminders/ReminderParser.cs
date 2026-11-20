@@ -85,6 +85,7 @@ public static class ReminderParser
         public bool NextWeek;
         public int? PartOfDay; // default hour for morning/evening...
         public RepeatRule? Repeat;
+        public bool InvalidRepeat;
         /// <summary>Span and amount of a relative time introduced by Ukrainian "за", which also means "for"
         /// ("звіт за тиждень"); dropped again when the phrase has an explicit time.</summary>
         public (int Index, int Length, TimeSpan Amount)? ZaRelative;
@@ -103,17 +104,8 @@ public static class ReminderParser
         var list = new List<Rule>
         {
             // ---- repeats ----
-            new($@"{L}(?:every|each)\s+(other|{Num})?\s*({UMin}|{UHour}|{UDay}|{UWeek}|{UMonth}){R}", (m, s) =>
-            {
-                var n = m.Groups[1].Value.Equals("other", StringComparison.OrdinalIgnoreCase) ? 2 : m.Groups[1].Success ? (int)Math.Round(NumberOf(m.Groups[1].Value)) : 1;
-                s.Repeat = RepeatFor(m.Groups[2].Value, n);
-                return s.Repeat is not null;
-            }),
-            new($@"{L}кожн(?:і|их)\s+({Num})\s*({UMin}|{UHour}|{UDay}|{UWeek}|{UMonth}){R}", (m, s) =>
-            {
-                s.Repeat = RepeatFor(m.Groups[2].Value, (int)Math.Round(NumberOf(m.Groups[1].Value)));
-                return s.Repeat is not null;
-            }),
+            new($@"{L}(?:every|each)\s+(other|{Num})?\s*({UMin}|{UHour}|{UDay}|{UWeek}|{UMonth}){R}", SetRepeat),
+            new($@"{L}кожн(?:і|их)\s+({Num})\s*({UMin}|{UHour}|{UDay}|{UWeek}|{UMonth}){R}", SetRepeat),
             new($@"{L}(?:daily|every\s*day|щодня|щоденно|кож(?:ен|ного)\s+дня?|кожен\s+день|кожного\s+дня|кожний\s+день){R}", (_, s) => { s.Repeat = RepeatRule.Daily(); return true; }),
             new($@"{L}(?:every\s+morning|щоранку|кожного\s+ранку){R}", (_, s) => { s.Repeat = RepeatRule.Daily(); s.PartOfDay ??= 9; return true; }),
             new($@"{L}(?:every\s+(?:evening|night)|щовечора|кожного\s+вечора){R}", (_, s) => { s.Repeat = RepeatRule.Daily(); s.PartOfDay ??= 19; return true; }),
@@ -143,12 +135,7 @@ public static class ReminderParser
                 s.Repeat = RepeatRule.Weekly(days);
                 return days.Length > 0;
             }),
-            // monthly day: "on the 5th", "5-го числа", "5 числа"
-            new($@"{L}(?:on\s+the\s+)?(\d{{1,2}})(?:st|nd|rd|th){R}(?!\s*(?:{Month}))", (m, s) =>
-            {
-                var d = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-                return SetMonthDay(s, d);
-            }),
+            // monthly day: "5-го числа", "5 числа"
             new($@"{L}(\d{{1,2}})(?:-?го)?\s+числа{R}", (m, s) =>
             {
                 var d = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
@@ -191,6 +178,8 @@ public static class ReminderParser
                 SetDate(s, m.Groups[3].Success ? Int(m, 3) : 0, MonthOf(m.Groups[2].Value), Int(m, 1), m.Groups[3].Success)),
             new($@"{L}(?:on\s+)?({Month})\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(\d{{4}}))?{R}", (m, s) =>
                 SetDate(s, m.Groups[3].Success ? Int(m, 3) : 0, MonthOf(m.Groups[1].Value), Int(m, 2), m.Groups[3].Success)),
+            // Standalone ordinal ("on the 5th") after the complete dates ("February 29th").
+            new($@"{L}(?:on\s+the\s+)?(\d{{1,2}})(?:st|nd|rd|th){R}(?!\s*(?:of\s+)?(?:{Month}))", (m, s) => SetMonthDay(s, Int(m, 1))),
 
             // ---- day words ----
             new($@"{L}(?:(?:the\s+)?day\s+after\s+tomorrow|післязавтра){R}", (_, s) => SetDay(s, 2)),
@@ -220,11 +209,20 @@ public static class ReminderParser
     // ---- entry point ----
 
     /// <summary>Parses a phrase. Returns null when it contains no recognisable time.</summary>
-    public static ParsedReminder? Parse(string? phrase, DateTimeOffset now, TimeZoneInfo? tz = null)
+    public static ParsedReminder? Parse(string? phrase, DateTimeOffset now, TimeZoneInfo? tz = null) =>
+        Parse(phrase, now, tz ?? TimeZoneInfo.Local, 0);
+
+    internal static ParsedReminder? Parse(string? phrase, DateTimeOffset now, TimeZoneInfo tz, int ambiguousPrefixLength)
     {
         if (string.IsNullOrWhiteSpace(phrase)) return null;
-        tz ??= TimeZoneInfo.Local;
-        var original = phrase.Trim();
+        // A syntactically valid quantity can exceed the range of TimeSpan or of the resulting date.
+        try { return ParseCore(phrase.Trim(), now, tz, ambiguousPrefixLength); }
+        catch (OverflowException) { return null; }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
+
+    static ParsedReminder? ParseCore(string original, DateTimeOffset now, TimeZoneInfo tz, int ambiguousPrefixLength)
+    {
         var text = Normalize(original);
         var consumed = new bool[text.Length];
         var state = new State();
@@ -250,13 +248,24 @@ public static class ReminderParser
             for (var i = za.Index; i < za.Index + za.Length; i++) consumed[i] = false;
         }
 
+        if (ambiguousPrefixLength > 0 && !ExtendsDurationPrefix(text, consumed, ambiguousPrefixLength)) return null;
         var due = Resolve(state, now, tz);
         if (due is null) return null;
         return new ParsedReminder(CleanText(original, consumed), due.Value, state.Repeat);
     }
 
+    // Prefer a reminder only when its rules account for the leading number/clock and an additional cue.
+    static bool ExtendsDurationPrefix(string text, bool[] consumed, int length)
+    {
+        if (consumed.AsSpan(0, length).Contains(false)) return false;
+        for (var i = length; i < consumed.Length; i++)
+            if (consumed[i] && !char.IsWhiteSpace(text[i])) return true;
+        return false;
+    }
+
     static DateTimeOffset? Resolve(State s, DateTimeOffset now, TimeZoneInfo tz)
     {
+        if (s.InvalidRepeat) return null;
         var local = TimeZoneInfo.ConvertTime(now, tz).DateTime;
 
         // purely relative ("in 2 hours", "every 30 minutes")
@@ -277,11 +286,16 @@ public static class ReminderParser
         DateTime candidate;
         if (s.HasDate)
         {
+            if (s.DateDay > DateTime.DaysInMonth(2000, s.DateMonth)) return null; // impossible even in a leap year
             var y = s.DateYear > 0 ? s.DateYear : local.Year;
             DateTime? Build(int year) => s.DateDay <= DateTime.DaysInMonth(year, s.DateMonth)
                 ? new DateTime(year, s.DateMonth, s.DateDay) + new TimeSpan(hour, minute, 0) : null;
             var built = Build(y);
-            if (s.DateYear == 0 && (built is null || built <= local)) built = Build(y + 1) ?? Build(y + 4);
+            while (s.DateYear == 0 && (built is null || built <= local))
+            {
+                if (y == DateTime.MaxValue.Year) return null;
+                built = Build(++y);
+            }
             if (built is null) return null;
             candidate = built.Value;
         }
@@ -462,12 +476,43 @@ public static class ReminderParser
         return TimeSpan.FromMinutes(1);
     }
 
-    static RepeatRule? RepeatFor(string unit, int n)
+    static bool SetRepeat(Match m, State s)
     {
-        n = Math.Max(1, n);
-        var u = unit.ToLowerInvariant();
-        if (Regex.IsMatch(u, $"^(?:{UMonth})$")) return new RepeatRule { Kind = RepeatKind.Monthly, Interval = n };
-        if (Regex.IsMatch(u, $"^(?:{UWeek})$")) return n == 1 ? RepeatRule.Weekly() : RepeatRule.Daily(7 * n);
+        var quantity = m.Groups[1].Value;
+        decimal amount = 0;
+        if (quantity.Length > 0 && char.IsDigit(quantity[0]))
+        {
+            var digits = quantity.Replace(',', '.');
+            var point = digits.IndexOf('.');
+            // No supported unit can yield whole minutes with more than five fractional places.
+            if (point < 0 || digits.AsSpan(point + 1).TrimEnd('0').Length <= 5)
+                decimal.TryParse(digits, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out amount);
+        }
+        else
+            amount = quantity == "other" ? 2 : (decimal)NumberOf(quantity);
+        s.Repeat = RepeatFor(m.Groups[2].Value, amount);
+        s.InvalidRepeat |= s.Repeat is null;
+        return true;
+    }
+
+    static RepeatRule? RepeatFor(string u, decimal amount)
+    {
+        if (amount is <= 0 or > int.MaxValue) return null;
+        var monthly = Regex.IsMatch(u, $"^(?:{UMonth})$");
+        if (amount != decimal.Truncate(amount))
+        {
+            if (monthly) return null;
+            var minutes = amount * (decimal)UnitSpan(u).TotalMinutes;
+            return minutes == decimal.Truncate(minutes) && minutes <= int.MaxValue
+                ? new RepeatRule { Kind = RepeatKind.EveryNMinutes, Interval = (int)minutes } : null;
+        }
+        var n = (int)amount;
+        if (monthly) return new RepeatRule { Kind = RepeatKind.Monthly, Interval = n };
+        if (Regex.IsMatch(u, $"^(?:{UWeek})$"))
+        {
+            if (n > int.MaxValue / 7) return null;
+            return n == 1 ? RepeatRule.Weekly() : RepeatRule.Daily(7 * n);
+        }
         if (Regex.IsMatch(u, $"^(?:{UDay})$")) return RepeatRule.Daily(n);
         if (Regex.IsMatch(u, $"^(?:{UHour})$")) return new RepeatRule { Kind = RepeatKind.EveryNHours, Interval = n };
         if (Regex.IsMatch(u, $"^(?:{UMin})$")) return new RepeatRule { Kind = RepeatKind.EveryNMinutes, Interval = n };
@@ -496,8 +541,10 @@ public static class ReminderParser
     }
 
     static readonly Regex LeadingFiller = new(
-        @"^(?:(?:please|будь\s+ласка)\s+)?(?:remind(?:\s+me)?|set\s+(?:a\s+)?reminder|reminder|нагадай(?:те)?|нагадати|нагадування|нагадуй)(?:\s+(?:me|мені|мене))?(?:\s*[:,\-—])?\s*",
+        @"^(?:(?:please|будь\s+ласка)\s+)?(?:remind(?:er)?|set\s+(?:a\s+)?reminder|нагадай(?:те)?|нагадати|нагадування|нагадуй)(?:\s+(?:me|мені|мене))?(?=$|\s|[:,—]|-\s)(?:\s*[:,\-—])?\s*",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    internal static bool HasCommandPrefix(string text) => LeadingFiller.IsMatch(text.TrimStart());
+
     static readonly Regex EdgeWords = new(@"^(?:to|that|about|of|at|on|in|and|for|що|щоб|про|о|об|в|у|на|і|й|та|,|:|-|—)(?:\s+|$)|(?:\s+|^)(?:to|at|on|in|and|for|о|об|в|у|на|і|й|та|,|:|-|—)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 

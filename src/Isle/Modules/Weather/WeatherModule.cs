@@ -30,7 +30,7 @@ public sealed class WeatherModule(IslandWindow island) : IModule, IDisposable
 
     static Settings S => Settings.Current;
     static bool Fahrenheit => S.Opt("weather.units") == "F";
-    static bool HasPlace => S.OptBool("weather.ip") || S.Opt("weather.lat").Length > 0;
+    static bool HasPlace => S.OptBool("weather.ip") || StoredPlace() is not null;
 
     public void Start()
     {
@@ -39,7 +39,7 @@ public sealed class WeatherModule(IslandWindow island) : IModule, IDisposable
         _svc = new WeatherService(new OpenMeteoSource(_http), Paths.File("weather.json"));
         island.AddTab(new TabInfo(TabId, "tab.weather", "Icon.Weather", () =>
         {
-            _view = new WeatherView(new WeatherActions(Search, Pick, UseIp, () => _ = RefreshNow(), SetUnits, SetInPill, SetRainAlerts));
+            _view = new WeatherView(new WeatherActions(Search, Pick, SetIp, () => _ = RefreshNow(), SetUnits, SetInPill, SetRainAlerts));
             ShowCurrent();
             return _view;
         }, 80));
@@ -64,20 +64,25 @@ public sealed class WeatherModule(IslandWindow island) : IModule, IDisposable
         if (_busy || _svc is null || _cts is null) return;
         if (!HasPlace) { ShowCurrent(); return; }
         _busy = true;
+        var request = _cts;
+        var service = _svc;
+        var ct = request.Token;
         try
         {
-            if (_svc.Report is null) _view?.ShowLoading();
-            var place = await ResolvePlace(_cts.Token);
+            if (service.Report is null) _view?.ShowLoading();
+            var place = await ResolvePlace(ct);
+            ct.ThrowIfCancellationRequested();
             if (place is null) { ShowCurrent(failed: true); return; }
-            var report = await _svc.RefreshAsync(place, _cts.Token);
-            Logger.Info(_svc.LastFailed ? "weather refresh failed (cache kept)" : "weather refreshed");
-            ShowCurrent(_svc.LastFailed);
+            var report = await service.RefreshAsync(place, ct);
+            ct.ThrowIfCancellationRequested();
+            Logger.Info(service.LastFailed ? "weather refresh failed (cache kept)" : "weather refreshed");
+            ShowCurrent(service.LastFailed);
             UpdatePill();
-            if (report is not null && !_svc.LastFailed) CheckRain(report);
+            if (report is not null && !service.LastFailed) CheckRain(report);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Logger.Error("weather refresh", ex); }
-        finally { _busy = false; }
+        finally { if (ReferenceEquals(request, _cts)) _busy = false; }
     }
 
     /// <summary>The chosen place, or the IP location (falls back to the last stored coordinates when that fails).</summary>
@@ -88,69 +93,94 @@ public sealed class WeatherModule(IslandWindow island) : IModule, IDisposable
             Place? ip = null;
             try { ip = await new OpenMeteoSource(_http!).LocateByIpAsync(ct); }
             catch (Exception ex) when (ex is not OperationCanceledException) { Logger.Warn($"ip location: {ex.GetType().Name}"); }
-            if (ip is not null)
-            {
-                StorePlace(ip, keepIp: true);
-                return ip;
-            }
+            ct.ThrowIfCancellationRequested();
+            if (ip is not null) return ip;
         }
         return StoredPlace();
     }
 
     static Place? StoredPlace()
     {
+        if (S.OptBool("weather.ip") && S.Opt("weather.placeSource") != "city") return null;
         if (!double.TryParse(S.Opt("weather.lat"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lat) ||
             !double.TryParse(S.Opt("weather.lon"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lon)) return null;
         return new Place(S.Opt("weather.city"), "", lat, lon);
     }
 
-    static void StorePlace(Place p, bool keepIp)
+    static void StorePlace(Place p)
     {
         S.SetOpt("weather.city", p.Name);
         S.SetOpt("weather.lat", p.Lat.ToString("0.####", CultureInfo.InvariantCulture));
         S.SetOpt("weather.lon", p.Lon.ToString("0.####", CultureInfo.InvariantCulture));
-        S.SetOpt("weather.ip", keepIp);
+        S.SetOpt("weather.ip", false);
+        S.SetOpt("weather.placeSource", "city");
         S.Save("Options");
     }
 
     void ShowCurrent(bool failed = false)
     {
         if (_view is null || _svc is null) return;
-        if (!HasPlace) { _view.ShowSetup(S.OptBool("weather.ip")); return; }
+        if (!HasPlace) { _view.ShowSetup(S.OptBool("weather.ip"), clearReport: true); return; }
         if (_svc.Report is { } r) _view.ShowReport(r, failed || _svc.LastFailed, Fahrenheit);
         else if (failed) _view.ShowError();
         else _view.ShowLoading();
     }
 
+    public void OpenSetup()
+    {
+        island.HideOverlay();
+        island.Expand(TabId, sticky: true);
+        _view?.ShowSetup(S.OptBool("weather.ip"));
+    }
+
     // ---- tab actions ----
 
-    async Task<List<Place>> Search(string text)
+    async Task<List<Place>> Search(string text, CancellationToken ct)
     {
-        if (_http is null || string.IsNullOrWhiteSpace(text)) return [];
-        try { return await new OpenMeteoSource(_http).SearchAsync(text, Strings.Language, _cts?.Token ?? default); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { Logger.Warn($"geocoding: {ex.GetType().Name}"); return []; }
+        if (_http is null || _cts is null || string.IsNullOrWhiteSpace(text)) return [];
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
+        try { return await new OpenMeteoSource(_http).SearchAsync(text, Strings.Language, request.Token); }
+        catch (OperationCanceledException) { return []; }
+        catch (Exception ex) { Logger.Warn($"geocoding: {ex.GetType().Name}"); return []; }
     }
 
     void Pick(Place p)
     {
-        StorePlace(p, keepIp: false);
+        StorePlace(p);
         PlaceChanged();
     }
 
-    void UseIp()
+    internal static void ChangeIpOption(Settings settings, bool on)
     {
-        S.SetOpt("weather.ip", true);
+        var wasOn = settings.OptBool("weather.ip");
+        if (on && !wasOn && settings.Opt("weather.lat").Length > 0)
+            settings.SetOpt("weather.placeSource", "city");
+        // Older versions stored IP results in the same fields as a selected city.
+        if (!on && wasOn && settings.Opt("weather.placeSource") != "city")
+            foreach (var key in new[] { "weather.city", "weather.lat", "weather.lon" }) settings.Options.Remove(key);
+        settings.SetOpt("weather.ip", on);
+    }
+
+    void SetIp(bool on)
+    {
+        ChangeIpOption(S, on);
         S.Save("Options");
         PlaceChanged();
     }
 
     void PlaceChanged()
     {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _busy = false;
         _svc?.Clear();
         S.Options.Remove("weather.lastAlert");
         island.Pill.Remove(RainPillId);
         UpdatePill();
-        _timer?.Start();
+        if (HasPlace) _timer?.Start();
+        else _timer?.Stop();
+        ShowCurrent();
         _ = RefreshNow();
     }
 

@@ -35,7 +35,7 @@ public sealed record HookPlan(HookTarget Target, bool FileExists, string? Backup
 
 /// <summary>
 /// Adds / removes Isle's entries in an agent's hook config. Never runs without a button press. Rules: back up the
-/// file first, merge (other hooks untouched), Isle's handlers are recognised by their command (Isle.Hook.exe), removal
+/// file first, merge (other hooks untouched), Isle's handlers are recognised by an exact trusted helper path and supported arguments; removal
 /// takes only those out. Invalid JSON is never overwritten. Both agents use the same hooks JSON shape
 /// ({"hooks": {Event: [{matcher?, hooks: [{type: "command", …}]}]}}).
 /// </summary>
@@ -55,6 +55,9 @@ public static class HookInstaller
         new("UserPromptSubmit", null, false),
         new("PreToolUse", null, false),
         new("PreToolUse", "AskUserQuestion", true),
+        new("PostToolUse", "Edit|Write|MultiEdit", false),
+        new("SubagentStart", null, false),
+        new("SubagentStop", null, false),
         new("PermissionRequest", null, true),
         new("Notification", null, false),
         new("Stop", null, false),
@@ -67,6 +70,9 @@ public static class HookInstaller
         new("SessionStart", null, false),
         new("UserPromptSubmit", null, false),
         new("PreToolUse", null, false),
+        new("PostToolUse", "apply_patch", false),
+        new("SubagentStart", null, false),
+        new("SubagentStop", null, false),
         new("PermissionRequest", null, true),
         new("Stop", null, false),
         new("SessionEnd", null, false),
@@ -127,7 +133,7 @@ public static class HookInstaller
     /// <summary>Removes old Isle entries, then appends one matcher group per <see cref="Entry"/>.</summary>
     public static void Merge(JsonObject root, string agent, string exe, int timeoutSeconds)
     {
-        Strip(root);
+        Strip(root, exe);
         if (root["hooks"] is not JsonObject hooks)
         {
             hooks = new JsonObject();
@@ -162,8 +168,8 @@ public static class HookInstaller
         return h;
     }
 
-    /// <summary>Removes every handler whose command runs Isle.Hook.exe; drops groups/events left empty by that.</summary>
-    public static bool Strip(JsonObject root)
+    /// <summary>Removes handlers invoking the trusted Isle helper with supported arguments; drops groups/events left empty by that.</summary>
+    public static bool Strip(JsonObject root, string? helperPath = null)
     {
         if (root["hooks"] is not JsonObject hooks) return false;
         var changed = false;
@@ -176,7 +182,7 @@ public static class HookInstaller
                 if (groups[g] is not JsonObject group || group["hooks"] is not JsonArray handlers) continue;
                 var before = handlers.Count;
                 for (var h = handlers.Count - 1; h >= 0; h--)
-                    if (IsIsleHandler(handlers[h])) handlers.RemoveAt(h);
+                    if (IsIsleHandler(handlers[h], helperPath)) handlers.RemoveAt(h);
                 if (handlers.Count == before) continue;
                 changed = here = true;
                 if (handlers.Count == 0) groups.RemoveAt(g);
@@ -187,12 +193,72 @@ public static class HookInstaller
         return changed;
     }
 
-    public static bool HasIsle(JsonObject root) =>
+    public static bool HasIsle(JsonObject root, string? helperPath = null) =>
         root["hooks"] is JsonObject hooks && hooks.Any(p => p.Value is JsonArray groups &&
-            groups.Any(g => g is JsonObject go && go["hooks"] is JsonArray hs && hs.Any(IsIsleHandler)));
+            groups.Any(g => g is JsonObject go && go["hooks"] is JsonArray hs && hs.Any(h => IsIsleHandler(h, helperPath))));
 
-    static bool IsIsleHandler(JsonNode? n) =>
-        n is JsonObject h && HookTextOf(h, "command").Contains(ExeName, StringComparison.OrdinalIgnoreCase);
+    // Parse only our direct exec/shell forms. Never evaluate a command or infer ownership from its basename.
+    static bool IsIsleHandler(JsonNode? n, string? helperPath)
+    {
+        if (n is not JsonObject h || HookTextOf(h, "type") != "command") return false;
+        var command = HookTextOf(h, "command");
+        if (command.IndexOfAny(['\r', '\n']) >= 0) return false;
+        string executable;
+        string[] args;
+        if (h["args"] is JsonArray array)
+        {
+            executable = command;
+            args = new string[array.Count];
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (array[i] is not JsonValue value || !value.TryGetValue<string>(out var arg)) return false;
+                args[i] = arg;
+            }
+        }
+        else
+        {
+            if (h.ContainsKey("args")) return false;
+            if (command.StartsWith('"'))
+            {
+                var end = command.IndexOf('"', 1);
+                if (end < 0 || end + 1 < command.Length && !char.IsWhiteSpace(command[end + 1])) return false;
+                executable = command[1..end];
+                command = command[(end + 1)..];
+            }
+            else
+            {
+                var end = command.IndexOfAny([' ', '\t']);
+                executable = end < 0 ? command : command[..end];
+                command = end < 0 ? "" : command[end..];
+            }
+            args = command.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        }
+        if (!TrustedHelper(executable, helperPath) || args.Length == 0 || args[0] is not ("claude" or "codex")) return false;
+        // Both current exec-array hooks and legacy direct command lines use these switches.
+        var asyncSeen = false;
+        var timeoutSeen = false;
+        for (var i = 1; i < args.Length; i++)
+        {
+            if (args[i] == "--async" && !asyncSeen) asyncSeen = true;
+            else if (args[i] == "--timeout" && !timeoutSeen && ++i < args.Length &&
+                     int.TryParse(args[i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var timeout) && timeout > 0)
+                timeoutSeen = true;
+            else return false;
+        }
+        return true;
+    }
+
+    static bool TrustedHelper(string executable, string? helperPath)
+    {
+        try
+        {
+            if (!Path.IsPathFullyQualified(executable)) return false;
+            var path = Path.GetFullPath(executable);
+            return new[] { InstalledExe, Path.Combine(AppContext.BaseDirectory, ExeName), helperPath }
+                .Any(trusted => trusted is not null && string.Equals(path, Path.GetFullPath(trusted), StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+    }
 
     static string HookTextOf(JsonObject o, string name) =>
         o[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
@@ -234,10 +300,7 @@ public static class HookInstaller
             var from = Path.Combine(sourceDir, name);
             var to = Path.Combine(dir, name);
             if (File.Exists(from))
-            {
-                try { File.Copy(from, to, overwrite: true); }
-                catch (IOException) when (File.Exists(to)) { Logger.Warn($"hook helper {name} in use; kept the existing copy"); }
-            }
+                File.Copy(from, to, overwrite: true);
             else if (name != ExeName && File.Exists(to)) File.Delete(to); // switched to a single-file helper
         }
         return InstalledExe;

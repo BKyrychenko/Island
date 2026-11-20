@@ -69,6 +69,8 @@ public sealed class Equalizer : StackPanel
             Children.Add(bar);
         }
         IsVisibleChanged += (_, _) => Apply();
+        Loaded += (_, _) => { SystemParameters.StaticPropertyChanged += OnSystemParametersChanged; Apply(); };
+        Unloaded += (_, _) => SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
     }
 
     public bool Playing
@@ -77,9 +79,14 @@ public sealed class Equalizer : StackPanel
         set { if (_playing != value) { _playing = value; Apply(); } }
     }
 
+    void OnSystemParametersChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Dispatcher.Invoke(Apply);
+    }
+
     void Apply()
     {
-        var run = _playing && IsVisible;
+        var run = _playing && IsVisible && SystemParameters.ClientAreaAnimation;
         if (run == _running) return;
         _running = run;
         for (var i = 0; i < 4; i++)

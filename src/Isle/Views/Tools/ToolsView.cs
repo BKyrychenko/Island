@@ -48,12 +48,12 @@ public sealed class ToolsView : Grid
         {
             Color c;
             try { c = (Color)ColorConverter.ConvertFromString(hex); } catch { continue; }
-            var sw = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Margin = new Thickness(0, 0, 6, 6), Background = new SolidColorBrush(c), Cursor = System.Windows.Input.Cursors.Hand, ToolTip = hex };
-            sw.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
-            sw.BorderThickness = new Thickness(1);
-            var h = hex;
-            sw.MouseLeftButtonUp += (_, e) => { e.Handled = true; _copy(h); };
-            colors.Children.Add(sw);
+            var swatch = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(c), BorderThickness = new Thickness(1) };
+            swatch.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
+            var button = new Button { Content = swatch, ToolTip = $"{Strings.T("tools.copy")} {hex}" };
+            button.SetResourceReference(StyleProperty, "IconButton");
+            button.Click += (_, _) => _copy(hex);
+            colors.Children.Add(button);
         }
         var stack = new StackPanel();
         var rec = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };

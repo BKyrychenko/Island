@@ -1,10 +1,33 @@
 using Isle.Modules.Characters;
+using Isle.Views.Characters;
+using System.Windows;
+using System.Windows.Controls;
 using Xunit;
 
 namespace Isle.Tests;
 
 public class CharacterTests
 {
+    [Fact]
+    public void Character_cards_are_focusable_and_use_button_activation()
+    {
+        FakeSink.Run(_ =>
+        {
+            string? picked = null;
+            var gallery = new CharacterGallery(new GalleryActions(id => picked = id, _ => { }, _ => { }, () => { }), null);
+            gallery.Show("pebb", false, 5);
+            var content = Assert.IsType<StackPanel>(Assert.Single(gallery.Children.Cast<UIElement>()));
+            var cards = Assert.IsType<StackPanel>(content.Children[1]);
+            Assert.Equal(3, cards.Children.Count);
+            foreach (var card in cards.Children.Cast<Button>())
+            {
+                Assert.True(card.Focusable);
+                card.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(card.Tag, picked);
+            }
+        });
+    }
+
     sealed class FakeClock
     {
         public DateTimeOffset Now = new(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);

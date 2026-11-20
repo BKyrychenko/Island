@@ -26,7 +26,12 @@ public static class Autostart
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (enabled) key.SetValue(ValueName, $"\"{Environment.ProcessPath}\"");
+            if (enabled)
+            {
+                if (Environment.ProcessPath is not { } app) return;
+                var launcher = Path.ChangeExtension(app, ".Launcher.exe");
+                key.SetValue(ValueName, $"\"{(File.Exists(launcher) ? launcher : app)}\"");
+            }
             else key.DeleteValue(ValueName, throwOnMissingValue: false);
         }
         catch (Exception ex) { Logger.Error("autostart", ex); }

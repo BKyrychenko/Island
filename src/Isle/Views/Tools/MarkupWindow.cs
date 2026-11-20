@@ -22,12 +22,16 @@ namespace Isle.Views.Tools;
 public sealed class MarkupWindow : Window
 {
     enum Tool { Pen, Highlighter, Arrow, Rect, Ellipse, Text, Pixelate }
+    enum ExportAction { Copy, Save, CopyPath }
 
     static readonly Color[] Palette = [Color.FromRgb(0xFF, 0x4D, 0x4D), Color.FromRgb(0xFF, 0xC8, 0x1F), Color.FromRgb(0x34, 0xC7, 0x59), Color.FromRgb(0x3D, 0x8B, 0xFF), Colors.White, Colors.Black];
     static readonly double[] Widths = [2, 4, 8];
 
     readonly Selection _sel;
     readonly Action<string> _copyText;
+    readonly Action<BitmapSource> _copyImage;
+    readonly Func<BitmapSource, string> _savePng;
+    readonly TextBlock _error = new() { Margin = new Thickness(4, 6, 4, 0), Visibility = Visibility.Collapsed };
     readonly Canvas _canvas = new() { ClipToBounds = true, Background = Brushes.Transparent };
     readonly List<UIElement> _undo = [], _redo = [];
     readonly Dictionary<Tool, PickButton> _toolButtons = [];
@@ -43,15 +47,17 @@ public sealed class MarkupWindow : Window
 
     public static void Open(Selection sel, Action<string> copyText)
     {
-        var w = new MarkupWindow(sel, copyText);
+        var w = new MarkupWindow(sel, copyText, System.Windows.Clipboard.SetImage, ScreenGrab.SavePng);
         w.Show();
         w.Activate();
     }
 
-    MarkupWindow(Selection sel, Action<string> copyText)
+    internal MarkupWindow(Selection sel, Action<string> copyText, Action<BitmapSource> copyImage, Func<BitmapSource, string> savePng)
     {
         _sel = sel;
         _copyText = copyText;
+        _copyImage = copyImage;
+        _savePng = savePng;
         _s = Math.Max(1, sel.Monitor.DpiScale);
         Title = "Isle — " + Strings.T("tools.screenshot");
         WindowStyle = WindowStyle.None;
@@ -86,6 +92,8 @@ public sealed class MarkupWindow : Window
         var root = new StackPanel();
         root.Children.Add(imageFrame);
         root.Children.Add(toolbar);
+        _error.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        root.Children.Add(_error);
         var chrome = new Border { Child = root, Padding = new Thickness(8), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) };
         chrome.SetResourceReference(Border.BackgroundProperty, "PanelBgBrush");
         chrome.SetResourceReference(Border.BorderBrushProperty, "StrokeBrush");
@@ -93,7 +101,7 @@ public sealed class MarkupWindow : Window
         Content = chrome;
 
         SourceInitialized += (_, _) => PlaceOnMonitor();
-        PreviewKeyDown += OnKey;
+        PreviewKeyDown += (_, e) => { if (HandleKey(e.Key, Keyboard.Modifiers)) e.Handled = true; };
         SelectTool(_tool);
         SelectColor(0);
         SelectWidth(1);
@@ -156,9 +164,9 @@ public sealed class MarkupWindow : Window
         bar.Children.Add(left);
 
         var right = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 0, 0) };
-        right.Children.Add(TextButton("markup.copy", "AccentButton", () => { CopyImage(); Close(); }));
-        right.Children.Add(TextButton("markup.save", "FlatButton", () => { Save(); Close(); }));
-        right.Children.Add(TextButton("markup.copyPath", "FlatButton", () => { var p = Save(); if (p is not null) _copyText(p); Close(); }));
+        right.Children.Add(TextButton("markup.copy", "AccentButton", () => Export(ExportAction.Copy)));
+        right.Children.Add(TextButton("markup.save", "FlatButton", () => Export(ExportAction.Save)));
+        right.Children.Add(TextButton("markup.copyPath", "FlatButton", () => Export(ExportAction.CopyPath)));
         right.Children.Add(IconButton("Icon.Close", "markup.close", Close));
         DockPanel.SetDock(right, Dock.Right);
         bar.Children.Add(right);
@@ -190,7 +198,7 @@ public sealed class MarkupWindow : Window
     {
         var b = new Button { Content = Strings.T(key), Margin = new Thickness(4, 0, 0, 0), Padding = new Thickness(12, 4, 12, 4) };
         b.SetResourceReference(StyleProperty, style);
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("markup action", ex); } };
+        b.Click += (_, _) => click();
         return b;
     }
 
@@ -352,6 +360,7 @@ public sealed class MarkupWindow : Window
 
     void Push(UIElement e)
     {
+        _savedPath = null;
         if (!_canvas.Children.Contains(e)) _canvas.Children.Add(e);
         _undo.Add(e);
         _redo.Clear();
@@ -361,6 +370,7 @@ public sealed class MarkupWindow : Window
     {
         CommitText();
         if (_undo.Count == 0) return;
+        _savedPath = null;
         var e = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
         _canvas.Children.Remove(e);
@@ -370,32 +380,34 @@ public sealed class MarkupWindow : Window
     void Redo()
     {
         if (_redo.Count == 0) return;
+        _savedPath = null;
         var e = _redo[^1];
         _redo.RemoveAt(_redo.Count - 1);
         _canvas.Children.Add(e);
         _undo.Add(e);
     }
 
-    void OnKey(object sender, KeyEventArgs e)
+    internal bool HandleKey(Key key, ModifierKeys modifiers)
     {
-        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        if (_typing is not null)
+        var ctrl = (modifiers & ModifierKeys.Control) != 0;
+        if (ctrl && key == Key.S) Export(ExportAction.Save);
+        else if (_typing is not null)
         {
-            if (e.Key == Key.Escape || (e.Key == Key.Enter && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))) { CommitText(); e.Handled = true; }
-            return;
+            if (key != Key.Escape && (key != Key.Enter || modifiers.HasFlag(ModifierKeys.Shift))) return false;
+            CommitText();
         }
-        if (e.Key == Key.Escape) { Close(); e.Handled = true; }
-        else if (ctrl && e.Key == Key.Z) { Undo(); e.Handled = true; }
-        else if (ctrl && e.Key == Key.Y) { Redo(); e.Handled = true; }
-        else if (ctrl && e.Key == Key.C) { CopyImage(); Close(); e.Handled = true; }
-        else if (ctrl && e.Key == Key.S) { Save(); Close(); e.Handled = true; }
+        else if (key == Key.Escape) Close();
+        else if (ctrl && key == Key.Z) Undo();
+        else if (ctrl && key == Key.Y) Redo();
+        else if (ctrl && key == Key.C) Export(ExportAction.Copy);
+        else return false;
+        return true;
     }
 
     // ---- export ----
 
     BitmapSource Render()
     {
-        CommitText();
         _canvas.Measure(new Size(_canvas.Width, _canvas.Height));
         _canvas.Arrange(new Rect(0, 0, _canvas.Width, _canvas.Height));
         var rtb = new RenderTargetBitmap((int)_canvas.Width, (int)_canvas.Height, 96, 96, PixelFormats.Pbgra32);
@@ -404,17 +416,31 @@ public sealed class MarkupWindow : Window
         return rtb;
     }
 
-    void CopyImage()
+    void Export(ExportAction action)
     {
-        try { System.Windows.Clipboard.SetImage(Render()); }
-        catch (Exception ex) { Logger.Error("copy screenshot", ex); }
-    }
-
-    string? Save()
-    {
-        if (_savedPath is not null) return _savedPath;
-        try { return _savedPath = ScreenGrab.SavePng(Render()); }
-        catch (Exception ex) { Logger.Error("save screenshot", ex); return null; }
+        var error = action == ExportAction.Copy ? "markup.copyFailed" : "markup.saveFailed";
+        try
+        {
+            CommitText();
+            if (action == ExportAction.Copy) _copyImage(Render());
+            else
+            {
+                if (_drawing is not null || !File.Exists(_savedPath)) _savedPath = _savePng(Render());
+                if (action == ExportAction.CopyPath)
+                {
+                    error = "markup.copyPathFailed";
+                    _copyText(_savedPath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(error, ex);
+            _error.Text = Strings.T(error);
+            _error.Visibility = Visibility.Visible;
+            return;
+        }
+        Close();
     }
 }
 

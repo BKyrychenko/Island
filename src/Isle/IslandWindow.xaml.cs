@@ -52,6 +52,14 @@ public partial class IslandWindow : Window
     {
         var screen = Screen;
         var s = Math.Min(Settings.Current.Scale, Math.Min(screen.Width / (BaseWidth * screen.DpiScale), screen.Height / (BaseHeight * screen.DpiScale)));
+        if (s != UiScale.ScaleX)
+        {
+            var target = s < 1 ? Math.Ceiling(24 / s) : 0d;
+            var fontSize = Math.Max(12, 12 / s);
+            Resources["CompactTargetMin"] = target;
+            Resources["NavigationFontSize"] = Math.Max(12.5, fontSize);
+            Tabs.SetMetrics(Math.Max(28, target), fontSize);
+        }
         UiScale.ScaleX = UiScale.ScaleY = s;
         Width = BaseWidth * s;
         Height = BaseHeight * s;
@@ -103,7 +111,7 @@ public partial class IslandWindow : Window
         if (_hasFocus) ex &= ~(long)Native.WS_EX_NOACTIVATE;
         else ex |= Native.WS_EX_NOACTIVATE;
         // click-through, except while the settings panel is open (otherwise it could never be switched off there)
-        if (Settings.Current.ClickThrough && !(_expanded && _overlay is Views.SettingsPanel.SettingsView { IsVisible: true })) ex |= Native.WS_EX_TRANSPARENT;
+        if (Settings.Current.ClickThrough && !(_expanded && _overlay is Views.SettingsPanel.SettingsView { Visibility: Visibility.Visible })) ex |= Native.WS_EX_TRANSPARENT;
         else ex &= ~(long)Native.WS_EX_TRANSPARENT;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
     }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Isle.Core;
+using Isle.Modules.Reminders;
 using Isle.Modules.Timers;
 
 namespace Isle.Modules.Commands;
@@ -75,26 +76,29 @@ public sealed partial class TimerProvider(Func<TimersController?> controller, Ac
     [GeneratedRegex(@"^(?:timer|таймер)\s+(.+)$", RegexOptions.IgnoreCase)]
     private static partial Regex TimerPrefix();
 
-    [GeneratedRegex(@"^(?:remind(?:\s+me)?|reminder|нагадай(?:\s+мені)?|нагадування)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex RemindPrefix();
-
     public Task<IEnumerable<CommandItem>> QueryAsync(string text, CancellationToken ct)
     {
         var list = new List<CommandItem>();
         var t = TimerPrefix().Match(text.Trim());
         if (t.Success && DurationParser.TryParse(t.Groups[1].Value, out var d, out var label))
         {
+            var ctl = controller();
+            var unavailable = ctl is null ? Strings.T("cmd.timersOff") : ctl.Timers.Timers.Count >= TimerBook.MaxTimers ? Strings.T("timers.full") : null;
             list.Add(new CommandItem
             {
                 Title = Strings.T("cmd.startTimer", DurationParser.Describe(d, k => Strings.T("unit." + k))) + (label.Length > 0 ? $" · {label}" : ""),
-                Subtitle = Strings.T("tab.timers"), IconKey = "Icon.Timer", Score = 4700,
-                Run = () => { if (controller()?.AddTimer(d, label) == true) notify(Strings.T("cmd.timerStarted")); },
+                Subtitle = unavailable ?? Strings.T("tab.timers"), IconKey = "Icon.Timer", Score = 4700,
+                Run = unavailable is not null ? null : () =>
+                {
+                    var current = controller();
+                    notify(Strings.T(current is null ? "cmd.timersOff" : current.AddTimer(d, label) ? "cmd.timerStarted" : current.LastSaveFailed ? "timers.saveFailed" : "timers.full"));
+                },
             });
         }
-        else if (RemindPrefix().IsMatch(text.Trim()) && controller() is { } ctl)
+        else if (ReminderParser.HasCommandPrefix(text))
         {
-            var parsed = Reminders.ReminderParser.Parse(text, ctl.Clock(), ctl.Zone);
-            if (parsed is not null)
+            var ctl = controller();
+            if (ctl is not null && ReminderParser.Parse(text, ctl.Clock(), ctl.Zone) is { } parsed)
             {
                 var due = TimeZoneInfo.ConvertTime(parsed.Due, ctl.Zone);
                 list.Add(new CommandItem
@@ -102,9 +106,15 @@ public sealed partial class TimerProvider(Func<TimersController?> controller, Ac
                     Title = parsed.Text.Length > 0 ? parsed.Text : Strings.T("cmd.reminder"),
                     Subtitle = Strings.T("cmd.remindAt", due.ToString("ddd d MMM HH:mm", CalculatorProvider.Culture())),
                     IconKey = "Icon.Bell", Score = 4700,
-                    Run = () => { if (controller()?.AddReminder(text) is not null) notify(Strings.T("cmd.reminderSet")); },
+                    Run = () =>
+                    {
+                        var current = controller();
+                        notify(Strings.T(current is null ? "cmd.timersOff" : current.AddReminder(text) is not null ? "cmd.reminderSet" : current.LastSaveFailed ? "timers.saveFailed" : "timers.invalid"));
+                    },
                 });
             }
+            else
+                list.Add(new CommandItem { Title = Strings.T("cmd.reminder"), Subtitle = Strings.T(ctl is null ? "cmd.timersOff" : "timers.invalid"), IconKey = "Icon.Bell", Score = 4700 });
         }
         return Task.FromResult<IEnumerable<CommandItem>>(list);
     }
@@ -171,7 +181,7 @@ public sealed partial class WebProvider : ICommandProvider
     {
         var q = text.Trim();
         var list = new List<CommandItem>();
-        if (q.Length == 0) return Task.FromResult<IEnumerable<CommandItem>>(list);
+        if (q.Length == 0 || ReminderParser.HasCommandPrefix(q)) return Task.FromResult<IEnumerable<CommandItem>>(list);
         if (q.StartsWith("? ") || q.StartsWith('?') && q.Length > 1)
         {
             var question = q[1..].Trim();

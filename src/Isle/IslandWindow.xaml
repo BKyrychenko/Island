@@ -55,7 +55,8 @@
                     <!-- overlay list for tabs that do not fit ("more") -->
                     <Border x:Name="MoreOverlay" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,44,12,0"
                             Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1"
-                            CornerRadius="12" Padding="4" MinWidth="150" MaxHeight="164">
+                            CornerRadius="12" Padding="4" MinWidth="150" MaxHeight="164"
+                            KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.DirectionalNavigation="Cycle">
                         <ScrollViewer>
                             <StackPanel x:Name="MoreList" />
                         </ScrollViewer>

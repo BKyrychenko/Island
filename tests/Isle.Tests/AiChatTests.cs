@@ -114,6 +114,9 @@ public class AttachmentTests
     [InlineData("A1", 0)]
     [InlineData("C7", 2)]
     [InlineData("AA10", 26)]
+    [InlineData("XFD1048576", 16383)]
+    [InlineData("XFE1", -1)]
+    [InlineData("A0", -1)]
     [InlineData(null, -1)]
     [InlineData("12", -1)]
     public void ColumnIndex(string? cell, int expected) => Assert.Equal(expected, Attachments.ColumnIndex(cell));
@@ -212,6 +215,21 @@ public class TextActionTests
         Assert.Equal(TextActions.MaxChars, c.Messages[0].Text.Length);
     }
 
+    [Theory]
+    [InlineData(8, false, false, false, "", true)]
+    [InlineData(TextActions.MaxChars, false, false, false, "", true)]
+    [InlineData(TextActions.MaxChars + 1, false, false, false, "", false)]
+    [InlineData(8, true, false, false, "", false)]
+    [InlineData(8, false, true, false, "", false)]
+    [InlineData(8, false, false, true, "", false)]
+    [InlineData(8, false, false, false, "Connection lost", false)]
+    public void ReplaceRequiresTheFullSelectionAndCompletedAnswer(int chars, bool streaming, bool stopped, bool error, string note, bool expected)
+    {
+        var selection = new string('x', chars);
+        var answer = new ChatMessage { Text = "Edited text", Stopped = stopped, Error = error, Note = note };
+        Assert.Equal(expected, TextActions.CanReplace(selection, answer, streaming));
+    }
+
     [Fact]
     public void ReplacingActions()
     {
@@ -229,12 +247,5 @@ public class TextActionTests
         Assert.Equal("why is the sky blue?", c.Messages[0].Text);
     }
 
-    [Fact]
-    public void ClipboardQuietWindow()
-    {
-        Isle.Core.ClipboardOps.Quiet(TimeSpan.FromSeconds(5));
-        Assert.True(Isle.Core.ClipboardOps.IsQuiet);
-        Isle.Core.ClipboardOps.Quiet(TimeSpan.Zero);
-        Assert.False(Isle.Core.ClipboardOps.IsQuiet);
-    }
+
 }

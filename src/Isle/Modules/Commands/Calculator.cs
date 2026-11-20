@@ -24,7 +24,7 @@ public static partial class Calculator
             result = new Result(value, Format(value) + " " + unit, unit);
             return true;
         }
-        s = PercentOf().Replace(s, "(($1)/100*");
+        s = PercentOf().Replace(s, "$1% * ");
         try
         {
             var p = new Parser(Normalize(s));
@@ -36,7 +36,7 @@ public static partial class Calculator
         catch (FormatException) { return false; }
     }
 
-    // "15% of 80" → ((15)/100*80 — the open paren is closed by appending ")" in Normalize when unbalanced
+    // Keep the percentage in the existing expression's parentheses and precedence.
     [GeneratedRegex(@"([\d.,\s]+)%\s*(?:of|від|з)\s+", RegexOptions.IgnoreCase)]
     private static partial Regex PercentOf();
 
@@ -51,12 +51,28 @@ public static partial class Calculator
     {
         s = s.Replace('×', '*').Replace('·', '*').Replace('÷', '/').Replace('−', '-').Replace('–', '-');
         s = SpaceThousands().Replace(s, "");
-        s = CommaThousands().Replace(s, m => m.Value.Replace(",", ""));
-        // a remaining comma between digits is a decimal comma ("3,5"), unless followed by a space ("round(3.14, 2)")
+        // Commas separate arguments in multi-argument functions; elsewhere they are numeric separators.
+        var arguments = new Stack<bool>();
         var sb = new StringBuilder(s.Length);
         for (var i = 0; i < s.Length; i++)
         {
-            if (s[i] == ',' && i > 0 && i + 1 < s.Length && char.IsDigit(s[i - 1]) && char.IsDigit(s[i + 1])) sb.Append('.');
+            if (s[i] == '(')
+            {
+                var end = i;
+                while (end > 0 && char.IsWhiteSpace(s[end - 1])) end--;
+                var start = end;
+                while (start > 0 && char.IsLetter(s[start - 1])) start--;
+                arguments.Push(s[start..end].ToLowerInvariant() is "round" or "log" or "min" or "max");
+            }
+            else if (s[i] == ')' && arguments.Count > 0) arguments.Pop();
+            if (char.IsDigit(s[i]) && (arguments.Count == 0 || !arguments.Peek()))
+            {
+                var start = i;
+                while (i + 1 < s.Length && (char.IsDigit(s[i + 1]) || s[i + 1] == '.' ||
+                    (s[i + 1] == ',' && char.IsDigit(s[i]) && i + 2 < s.Length && char.IsDigit(s[i + 2])))) i++;
+                var number = CommaThousands().Replace(s[start..(i + 1)], m => m.Value.Replace(",", ""));
+                sb.Append(number.Replace(',', '.'));
+            }
             else sb.Append(s[i]);
         }
         var open = sb.ToString().Count(c => c == '(') - sb.ToString().Count(c => c == ')');

@@ -14,12 +14,10 @@ namespace Isle.Views.Agents;
 public sealed class AgentPill : Grid
 {
     readonly FrameworkElement _mark;
-    readonly bool _pulse;
 
     public AgentPill(AgentState state, string text, string sub = "")
     {
         _mark = Mark(state);
-        _pulse = state == AgentState.Working;
         var row = new DockPanel { Margin = new Thickness(14, 0, 14, 0) };
         _mark.Margin = new Thickness(0, 0, 8, 0);
         DockPanel.SetDock(_mark, Dock.Left);
@@ -35,7 +33,7 @@ public sealed class AgentPill : Grid
         t.SetResourceReference(TextBlock.ForegroundProperty, "FgBrush");
         row.Children.Add(t);
         Children.Add(row);
-        if (_pulse) { Loaded += (_, _) => StartPulse(_mark); Unloaded += (_, _) => _mark.BeginAnimation(OpacityProperty, null); }
+        if (state == AgentState.Working) PulseWhenAllowed(_mark);
     }
 
     /// <summary>Just the status mark, for the pill's side slot.</summary>
@@ -43,7 +41,7 @@ public sealed class AgentPill : Grid
     {
         var m = Mark(state);
         m.HorizontalAlignment = HorizontalAlignment.Center;
-        if (state == AgentState.Working) { m.Loaded += (_, _) => StartPulse(m); m.Unloaded += (_, _) => m.BeginAnimation(OpacityProperty, null); }
+        if (state == AgentState.Working) PulseWhenAllowed(m);
         return m;
     }
 
@@ -61,10 +59,34 @@ public sealed class AgentPill : Grid
         return e;
     }
 
-    static void StartPulse(FrameworkElement e)
+    static void PulseWhenAllowed(FrameworkElement element)
     {
-        var a = new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() };
-        Timeline.SetDesiredFrameRate(a, 12);
-        e.BeginAnimation(OpacityProperty, a);
+        void Update()
+        {
+            if (element.IsLoaded && SystemParameters.ClientAreaAnimation)
+            {
+                var pulse = new DoubleAnimation(1, 0.3, TimeSpan.FromMilliseconds(700))
+                    { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase() };
+                Timeline.SetDesiredFrameRate(pulse, 12);
+                element.BeginAnimation(OpacityProperty, pulse);
+            }
+            else element.BeginAnimation(OpacityProperty, null);
+        }
+
+        void OnPreferenceChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SystemParameters.ClientAreaAnimation)) Update();
+        }
+
+        element.Loaded += (_, _) =>
+        {
+            SystemParameters.StaticPropertyChanged += OnPreferenceChanged;
+            Update();
+        };
+        element.Unloaded += (_, _) =>
+        {
+            SystemParameters.StaticPropertyChanged -= OnPreferenceChanged;
+            element.BeginAnimation(OpacityProperty, null);
+        };
     }
 }

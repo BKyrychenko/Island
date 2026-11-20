@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -13,12 +14,18 @@ namespace Isle.Views;
 /// </summary>
 public sealed class TabBar : Grid
 {
-    const double TabWidth = 34, LabelRoom = 118, SideButton = 32;
+    const double TabWidth = 34, MaxLabelWidth = 90;
+    double _labelFontSize = 12;
 
     readonly StackPanel _strip = new() { Orientation = Orientation.Horizontal };
-    readonly Border _indicator = new() { Height = 28, CornerRadius = new CornerRadius(14), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+    readonly Border _indicator = new() { CornerRadius = new CornerRadius(14), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
     readonly TranslateTransform _indicatorX = new();
     readonly Button _more, _gear;
+    readonly TextBlock _moreLabel = new()
+    {
+        FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(6, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+    };
     readonly ContentPresenter _mascot = new() { Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly Dictionary<string, RadioButton> _buttons = [];
     List<TabInfo> _tabs = [];
@@ -33,6 +40,7 @@ public sealed class TabBar : Grid
     public string? SelectedId => _selected;
     /// <summary>Tabs that did not fit and live in the "more" list.</summary>
     public IReadOnlyList<TabInfo> Hidden => _hidden;
+    internal Button MoreButton => _more;
     public double AvailableWidth { get; set; } = 496;
 
     /// <summary>Optional character next to the gear (characters module); takes room from the tab strip.</summary>
@@ -65,6 +73,11 @@ public sealed class TabBar : Grid
         Children.Add(host);
 
         _more = SideIcon("Icon.More", "tabs.more");
+        var moreContent = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(6, 0, 6, 0) };
+        var moreIcon = (Icon)_more.Content;
+        _more.Content = moreContent;
+        moreContent.Children.Add(moreIcon);
+        moreContent.Children.Add(_moreLabel);
         _more.Click += (_, _) => MoreRequested?.Invoke(_hidden);
         _more.Visibility = Visibility.Collapsed;
         SetColumn(_more, 2);
@@ -86,9 +99,8 @@ public sealed class TabBar : Grid
         SetColumn(_gear, 3);
         Children.Add(_gear);
 
-        Strings.LanguageChanged += Rebuild;
         Unloaded += (_, _) => Strings.LanguageChanged -= Rebuild;
-        Loaded += (_, _) => { Strings.LanguageChanged -= Rebuild; Strings.LanguageChanged += Rebuild; };
+        Loaded += (_, _) => { Strings.LanguageChanged += Rebuild; Rebuild(); };
         _strip.LayoutUpdated += (_, _) => MoveIndicator();
     }
 
@@ -112,6 +124,14 @@ public sealed class TabBar : Grid
         Rebuild();
     }
 
+    internal void SetMetrics(double targetHeight, double fontSize)
+    {
+        if (Height == targetHeight && _labelFontSize == fontSize) return;
+        Height = targetHeight;
+        _labelFontSize = fontSize;
+        Rebuild();
+    }
+
     public void Select(string id, bool animate = true)
     {
         if (_tabs.All(t => t.Id != id)) return;
@@ -122,28 +142,30 @@ public sealed class TabBar : Grid
 
     void Rebuild()
     {
+        var focused = _buttons.FirstOrDefault(entry => entry.Value.IsKeyboardFocused).Key;
         _strip.Children.Clear();
         _buttons.Clear();
 
         // how many fit?
-        var labelRoom = _tabs.Count == 0 ? 0 : Math.Min(LabelRoom, _tabs.Max(t =>
+        var maxLabelWidth = MaxLabelWidth * _labelFontSize / 12;
+        var labelRoom = _tabs.Count == 0 ? 0 : _tabs.Max(t =>
         {
-            var measure = new TextBlock { Text = Strings.T(t.TitleKey), FontSize = 12, FontWeight = FontWeights.SemiBold };
+            var measure = new TextBlock { Text = Strings.T(t.TitleKey), FontFamily = System.Windows.Documents.TextElement.GetFontFamily(this), FontSize = _labelFontSize, FontWeight = FontWeights.SemiBold, MaxWidth = maxLabelWidth };
             measure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return measure.DesiredSize.Width + 10;
-        }));
-        var avail = AvailableWidth - SideButton - (Mascot is { } m ? (double.IsNaN(m.Width) ? 28 : m.Width) + 4 : 0);
+            return Math.Ceiling(measure.DesiredSize.Width) + 7;
+        });
+        var sideWidth = Height + _gear.Margin.Left;
+        var tabWidth = Math.Max(TabWidth, Height);
+        var avail = AvailableWidth - sideWidth - _mascot.Margin.Left - (Mascot is { } m ? (double.IsNaN(m.Width) ? 28 : m.Width) : 0);
         var visible = _tabs;
         _hidden = [];
-        if (_tabs.Count * TabWidth + labelRoom > avail)
+        if (_tabs.Count * tabWidth + labelRoom > avail)
         {
-            var n = Math.Max(1, (int)((avail - SideButton - labelRoom) / TabWidth));
+            var n = Math.Max(1, (int)((avail - sideWidth - labelRoom) / tabWidth));
             visible = [.. _tabs.Take(n)];
             _hidden = [.. _tabs.Skip(n)];
         }
         _more.Visibility = _hidden.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        _more.ToolTip = _hidden.Any(t => t.Id == _selected)
-            ? Strings.T(_hidden.First(t => t.Id == _selected).TitleKey) : Strings.T("tabs.more");
 
         foreach (var tab in visible)
         {
@@ -151,8 +173,8 @@ public sealed class TabBar : Grid
             icon.SetResourceReference(Icon.DataProperty, tab.IconKey);
             var label = new TextBlock
             {
-                Text = Strings.T(tab.TitleKey), FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 1, 0),
-                VerticalAlignment = VerticalAlignment.Center, MaxWidth = LabelRoom - 28, TextTrimming = TextTrimming.CharacterEllipsis,
+                Text = Strings.T(tab.TitleKey), FontSize = _labelFontSize, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 1, 0),
+                VerticalAlignment = VerticalAlignment.Center, MaxWidth = maxLabelWidth, TextTrimming = TextTrimming.CharacterEllipsis,
             };
             var content = new StackPanel { Orientation = Orientation.Horizontal };
             content.Children.Add(icon);
@@ -173,10 +195,34 @@ public sealed class TabBar : Grid
         }
         _animateNext = false;
         UpdateButtons();
+        if (focused is not null)
+        {
+            if (_buttons.TryGetValue(focused, out var button)) button.Focus();
+            else _more.Focus();
+        }
     }
 
     void UpdateButtons()
     {
+        var hidden = _hidden.FirstOrDefault(t => t.Id == _selected);
+        var moreName = Strings.T("tabs.more");
+        _moreLabel.Visibility = hidden is null ? Visibility.Collapsed : Visibility.Visible;
+        if (hidden is null)
+        {
+            _more.ClearValue(WidthProperty);
+            _more.ClearValue(Button.BackgroundProperty);
+        }
+        else
+        {
+            _moreLabel.Text = Strings.T(hidden.TitleKey);
+            _moreLabel.FontSize = _labelFontSize;
+            _moreLabel.MaxWidth = MaxLabelWidth * _labelFontSize / 12;
+            _more.Width = double.NaN;
+            _more.SetResourceReference(Button.BackgroundProperty, "SurfaceBrush");
+            moreName += $" ({_moreLabel.Text})";
+        }
+        _more.ToolTip = moreName;
+        AutomationProperties.SetName(_more, moreName);
         foreach (var (id, rb) in _buttons)
         {
             var on = id == _selected;

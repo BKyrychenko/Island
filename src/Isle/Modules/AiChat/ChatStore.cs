@@ -34,11 +34,11 @@ public sealed class ChatStore(string file)
     /// <summary>Marks a conversation as changed (moves it to the top, sets a title from the first user line) and saves.</summary>
     public void Touch(Conversation c)
     {
+        var i = D.Chats.IndexOf(c);
+        if (i < 0) return; // Deleted or evicted while an answer was in flight.
         c.Updated = DateTimeOffset.Now;
         if (c.Title.Length == 0 && c.Messages.FirstOrDefault(m => m.Role == "user") is { } first) c.Title = TitleFrom(first.Text, first.Attachments);
-        var i = D.Chats.IndexOf(c);
         if (i > 0) { D.Chats.RemoveAt(i); D.Chats.Insert(0, c); }
-        else if (i < 0) D.Chats.Insert(0, c);
         Save();
     }
 

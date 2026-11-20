@@ -17,6 +17,7 @@ namespace Isle.Views.AiChat;
 public sealed class AiChatView : Grid, ITabView
 {
     readonly AiModule _m;
+    readonly bool? _snapshotReady;
     readonly Button _title = new() { HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(6, 1, 6, 1), MinHeight = 24, Margin = new Thickness(-6, 0, 0, 0) };
     readonly TextBlock _titleText = new() { FontSize = 12.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     readonly StackPanel _messages = new() { Margin = new Thickness(0, 0, 6, 0) };
@@ -26,15 +27,25 @@ public sealed class AiChatView : Grid, ITabView
     readonly TextBlock _placeholder = new() { IsHitTestVisible = false, Margin = new Thickness(19, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
     readonly Button _send = new() { Width = 30, Height = 30, Margin = new Thickness(6, 0, 0, 0) };
     readonly Border _overlay = new() { Visibility = Visibility.Collapsed };
-    readonly List<ChatAttachment> _pending = [];
+    sealed class Draft
+    {
+        public string Text = "";
+        public readonly List<ChatAttachment> Attachments = [];
+    }
+    readonly Dictionary<string, Draft> _drafts = [];
+    Draft _draft = new();
+    List<ChatAttachment> _pending => _draft.Attachments;
     readonly DispatcherTimer _render = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(80) };
     ChatMessage? _streaming;
     Border? _streamingBubble;
     Conversation? _chat;
 
-    public AiChatView(AiModule module)
+    public AiChatView(AiModule module) : this(module, null) { }
+
+    internal AiChatView(AiModule module, bool? snapshotReady)
     {
         _m = module;
+        _snapshotReady = snapshotReady;
         ClipToBounds = true;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -46,7 +57,7 @@ public sealed class AiChatView : Grid, ITabView
         var buttons = new StackPanel { Orientation = Orientation.Horizontal };
         buttons.Children.Add(IconAction("Icon.Edit", "ai.systemPrompt", ShowSystemPrompt));
         buttons.Children.Add(IconAction("Icon.Plus", "ai.newChat", () => { _m.NewChat(); FocusInput(); }));
-        buttons.Children.Add(IconAction("Icon.Key", "ai.settings", ShowSettings));
+        buttons.Children.Add(IconAction("Icon.Settings", "ai.settings", ShowSettings));
         DockPanel.SetDock(buttons, Dock.Right);
         head.Children.Add(buttons);
         _title.SetResourceReference(StyleProperty, "GhostButton");
@@ -86,7 +97,7 @@ public sealed class AiChatView : Grid, ITabView
         _input.SetResourceReference(StyleProperty, "FlatTextBox");
         _input.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, new System.Windows.Data.Binding("[ai.inputName]") { Source = Strings.Instance });
         _input.PreviewKeyDown += OnInputKey;
-        _input.TextChanged += (_, _) => UpdatePlaceholder();
+        _input.TextChanged += (_, _) => { _draft.Text = _input.Text; UpdatePlaceholder(); UpdateSendButton(); };
         _placeholder.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
         row.Children.Add(new Grid { Children = { _input, _placeholder } });
         SetRow(row, 3);
@@ -113,13 +124,33 @@ public sealed class AiChatView : Grid, ITabView
 
     // ---- conversation ----
 
+    void ShowDraft(Draft draft)
+    {
+        _draft = draft;
+        _input.Text = draft.Text;
+        RefreshChips();
+    }
+
     public void ShowChat(Conversation? c)
     {
+        if (!ReferenceEquals(_chat, c))
+        {
+            _drafts[_chat?.Id ?? ""] = _draft;
+            if (!_drafts.TryGetValue(c?.Id ?? "", out var draft)) draft = new Draft();
+            ShowDraft(draft);
+        }
         _chat = c;
-        _streaming = null;
-        _streamingBubble = null;
         HideOverlay();
         _titleText.Text = c is { Title.Length: > 0 } ? c.Title : Strings.T("ai.newChatTitle");
+        RenderMessages(c);
+        UpdateSendButton();
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _scroll.ScrollToEnd());
+    }
+
+    void RenderMessages(Conversation? c)
+    {
+        _streaming = null;
+        _streamingBubble = null;
         _messages.Children.Clear();
         if (c is null || c.Messages.Count == 0)
         {
@@ -134,13 +165,11 @@ public sealed class AiChatView : Grid, ITabView
                 if (m.Role == "assistant" && _m.Busy && ReferenceEquals(m, c.Messages[^1])) { _streaming = m; _streamingBubble = b; }
             }
         }
-        UpdateSendButton();
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _scroll.ScrollToEnd());
     }
 
     FrameworkElement EmptyState()
     {
-        var ready = AiConfig.FromSettings(Settings.Current).IsReady;
+        var ready = _snapshotReady ?? _m.IsProviderInstalled(AiProviders.FromSettings(Settings.Current));
         var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) };
         var t = Dim(Strings.T(ready ? "ai.emptyHint" : "ai.setupHint"));
         t.HorizontalAlignment = HorizontalAlignment.Center;
@@ -196,7 +225,9 @@ public sealed class AiChatView : Grid, ITabView
         }
         if (m.Text.Length == 0 && streaming)
         {
-            content.Children.Add(Dim(Strings.T("ai.thinking")));
+            var waiting = Dim(Strings.T(AiProviders.FromSettings(Settings.Current) == AiProviderKind.Codex ? "ai.codexWaiting" : "ai.thinking"));
+            waiting.TextWrapping = TextWrapping.Wrap;
+            content.Children.Add(waiting);
             return;
         }
         content.Children.Add(MarkdownView.Render(m.Text));
@@ -230,10 +261,12 @@ public sealed class AiChatView : Grid, ITabView
         if (!_render.IsEnabled) _render.Start();
     }
 
+    bool AtEnd => _scroll.VerticalOffset >= _scroll.ScrollableHeight - 24;
+
     void RenderStreaming()
     {
         if (_streaming is null || _streamingBubble?.Child is not StackPanel content) return;
-        var atEnd = _scroll.VerticalOffset >= _scroll.ScrollableHeight - 24;
+        var atEnd = AtEnd;
         FillAnswer(content, _streaming);
         if (atEnd) Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _scroll.ScrollToEnd());
     }
@@ -241,13 +274,15 @@ public sealed class AiChatView : Grid, ITabView
     public void Finished(ChatMessage m)
     {
         _render.Stop();
+        var atEnd = AtEnd;
         var bubble = _streamingBubble;
         _streaming = null;
-        if (bubble?.Child is StackPanel content) FillAnswer(content, m);
-        else ShowChat(_chat);
+        _streamingBubble = null;
+        if (_chat?.Messages.Count == _messages.Children.Count && bubble?.Child is StackPanel content) FillAnswer(content, m);
+        else RenderMessages(_chat);
         _titleText.Text = _chat is { Title.Length: > 0 } ? _chat.Title : Strings.T("ai.newChatTitle");
         UpdateSendButton();
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _scroll.ScrollToEnd());
+        if (atEnd) Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _scroll.ScrollToEnd());
     }
 
     // ---- input ----
@@ -269,29 +304,45 @@ public sealed class AiChatView : Grid, ITabView
     async void SendOrStop()
     {
         if (_m.Busy) { _m.Cancel(); return; }
+        if (!HasDraftContent) return;
         var text = _input.Text;
-        if (text.Trim().Length == 0 && _pending.Count == 0) return;
+        if (!_m.IsProviderInstalled(AiProviders.FromSettings(Settings.Current))) { ShowSettings(); return; }
         var files = _pending.ToList();
-        _input.Text = "";
-        _pending.Clear();
-        RefreshChips();
+        var draft = _draft;
+        if (_chat is null)
+        {
+            _m.NewChat();
+            // Move the draft itself so file reads already in flight finish in this chat.
+            _drafts.Remove("");
+            ShowDraft(draft);
+        }
         try
         {
-            var send = _m.Send(text, files);
-            UpdateSendButton();
-            await send;
+            await _m.Send(text, files, () =>
+            {
+                // Preserve edits made while the CLI was starting or signing in.
+                if (draft.Text == text) draft.Text = "";
+                foreach (var file in files) draft.Attachments.Remove(file);
+                if (ReferenceEquals(_draft, draft)) { _input.Text = draft.Text; RefreshChips(); }
+            });
         }
         catch (Exception ex) { Logger.Error("ai send", ex); }
-        UpdateSendButton();
     }
 
-    void UpdateSendButton()
+    bool HasDraftContent => _pending.Count > 0 || !string.IsNullOrWhiteSpace(_input.Text);
+
+    void UpdateSendButton(bool previewStreaming = false)
     {
-        var busy = _m.Busy;
+        var busy = _m.Busy || previewStreaming;
+        _send.IsEnabled = busy || HasDraftContent;
+        var label = Strings.T(busy ? "ai.stop" : "ai.send");
+        if (Equals(_send.ToolTip, label)) return;
         _send.Content = MarkdownView.SmallIcon(busy ? "Icon.Stop" : "Icon.Send", 15, "AccentFgBrush");
-        _send.ToolTip = Strings.T(busy ? "ai.stop" : "ai.send");
-        System.Windows.Automation.AutomationProperties.SetName(_send, Strings.T(busy ? "ai.stop" : "ai.send"));
+        _send.ToolTip = label;
+        System.Windows.Automation.AutomationProperties.SetName(_send, label);
     }
+
+    internal void RefreshBusy() => UpdateSendButton();
 
     void UpdatePlaceholder()
     {
@@ -312,23 +363,25 @@ public sealed class AiChatView : Grid, ITabView
 
     async void PickFiles()
     {
+        var draft = _draft;
         var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Filter = Attachments.DialogFilter, Title = Strings.T("ai.attach") };
         App.Island?.HoldOpen("ai-dialog");
         bool? ok;
         try { ok = dlg.ShowDialog(); }
         finally { App.Island?.ReleaseOpen("ai-dialog"); }
         if (ok != true) return;
-        foreach (var path in dlg.FileNames) await AddFile(path);
+        foreach (var path in dlg.FileNames) await AddFile(path, draft);
     }
 
-    async Task AddFile(string path)
+    async Task AddFile(string path, Draft draft)
     {
-        if (_pending.Count >= Attachments.MaxPerMessage) { App.Island?.ShowToast(Strings.T("ai.att.tooMany", Attachments.MaxPerMessage)); return; }
+        if (draft.Attachments.Count >= Attachments.MaxPerMessage) { App.Island?.ShowToast(Strings.T("ai.att.tooMany", Attachments.MaxPerMessage)); return; }
         try
         {
             var a = await Task.Run(() => Attachments.Read(path));
-            _pending.Add(a);
-            RefreshChips();
+            if (draft.Attachments.Count >= Attachments.MaxPerMessage) return;
+            draft.Attachments.Add(a);
+            if (ReferenceEquals(_draft, draft)) RefreshChips();
         }
         catch (AiException ex) { App.Island?.ShowToast(Strings.T(ex.Key) + (ex.Detail.Length > 0 ? " · " + ex.Detail : "")); }
         catch (Exception ex) { Logger.Error("ai attach", ex); }
@@ -359,7 +412,7 @@ public sealed class AiChatView : Grid, ITabView
         _streaming = c.Messages[^1];
         _streamingBubble = _messages.Children.OfType<Border>().LastOrDefault();
         if (_streamingBubble?.Child is StackPanel content) FillAnswer(content, _streaming);
-        _send.Content = MarkdownView.SmallIcon("Icon.Stop", 15, "AccentFgBrush");
+        UpdateSendButton(previewStreaming: true);
     }
 
     internal void ScrollToEndNow() { UpdateLayout(); _scroll.ScrollToEnd(); }
@@ -367,11 +420,14 @@ public sealed class AiChatView : Grid, ITabView
     /// <summary>Snapshot helper.</summary>
     internal void AddPending(ChatAttachment a) { _pending.Add(a); RefreshChips(); }
 
+    internal void ForgetDraft(Conversation c) => _drafts.Remove(c.Id);
+
     void RefreshChips()
     {
         _chips.Children.Clear();
         foreach (var a in _pending) _chips.Children.Add(Chip(a, () => { _pending.Remove(a); RefreshChips(); }));
         _chips.Visibility = _pending.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSendButton();
     }
 
     static FrameworkElement Chip(ChatAttachment a, Action? remove)
@@ -428,7 +484,7 @@ public sealed class AiChatView : Grid, ITabView
         var list = new StackPanel();
         var chats = _m.Store.All;
         if (chats.Count == 0) list.Children.Add(Dim(Strings.T("ai.noChats")));
-        foreach (var c in chats.Take(60))
+        foreach (var c in chats)
         {
             var row = new DockPanel();
             var del = IconAction("Icon.Trash", "ai.deleteChat", () => { _m.Delete(c); ShowChatList(); });
@@ -475,77 +531,63 @@ public sealed class AiChatView : Grid, ITabView
 
     internal void ShowSettings()
     {
-        var s = Settings.Current;
-        var cfg = AiConfig.FromSettings(s);
-        var kind = cfg.Provider;
+        var kind = AiProviders.FromSettings(Settings.Current);
         var stack = new StackPanel();
 
         var providers = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
         var group = "aiprov" + Guid.NewGuid().ToString("N");
-        var anth = new RadioButton { Content = "Anthropic", IsChecked = kind == AiProviderKind.Anthropic, GroupName = group, Margin = new Thickness(0, 0, 4, 0) };
-        var oai = new RadioButton { Content = Strings.T("ai.openaiCompat"), IsChecked = kind == AiProviderKind.OpenAi, GroupName = group };
-        anth.SetResourceReference(StyleProperty, "ChipRadio");
-        oai.SetResourceReference(StyleProperty, "ChipRadio");
-        providers.Children.Add(anth);
-        providers.Children.Add(oai);
+        var codex = new RadioButton { Content = Strings.T("ai.codex"), IsChecked = kind == AiProviderKind.Codex, GroupName = group, Margin = new Thickness(0, 0, 4, 0) };
+        var claude = new RadioButton { Content = Strings.T("ai.claudeCode"), IsChecked = kind == AiProviderKind.ClaudeCode, GroupName = group };
+        codex.SetResourceReference(StyleProperty, "ChipRadio");
+        claude.SetResourceReference(StyleProperty, "ChipRadio");
+        providers.Children.Add(codex);
+        providers.Children.Add(claude);
 
-        var model = Field();
-        var baseUrl = Field();
-        var key = new PasswordBox { MinHeight = 26, Padding = new Thickness(8, 0, 8, 0), VerticalContentAlignment = VerticalAlignment.Center };
-        var keyHint = new TextBlock { IsHitTestVisible = false, Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 11.5 };
-        keyHint.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        key.PasswordChanged += (_, _) => keyHint.Visibility = key.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        var baseRow = Row("ai.baseUrl", baseUrl);
-        stack.Children.Add(Row("ai.model", model));
-        stack.Children.Add(baseRow);
-        stack.Children.Add(Row("ai.key", new Grid { Children = { key, keyHint } }));
+        var hint = Dim("");
+        hint.TextWrapping = TextWrapping.Wrap;
+        stack.Children.Add(hint);
 
         var status = Dim("");
         status.TextWrapping = TextWrapping.Wrap;
         status.FontSize = 11;
         status.Margin = new Thickness(0, 4, 0, 0);
 
-        AiProviderKind Kind() => oai.IsChecked == true ? AiProviderKind.OpenAi : AiProviderKind.Anthropic;
-        void Load()
+        AiProviderKind Kind() => claude.IsChecked == true ? AiProviderKind.ClaudeCode : AiProviderKind.Codex;
+        void UpdateHint()
         {
-            var k = Kind();
-            var p = k == AiProviderKind.OpenAi ? "ai.openai" : "ai.anthropic";
-            model.Text = s.Opt(p + ".model", k == AiProviderKind.Anthropic ? AiConfig.DefaultAnthropicModel : "");
-            baseUrl.Text = s.Opt("ai.openai.base", AiConfig.DefaultOpenAiBase);
-            baseRow.Visibility = k == AiProviderKind.OpenAi ? Visibility.Visible : Visibility.Collapsed;
-            key.Password = "";
-            keyHint.Text = Strings.T(s.Opt(p + ".key").Length > 0 ? "ai.keySaved" : "ai.keyEmpty");
-            keyHint.Visibility = Visibility.Visible;
+            var provider = Kind();
+            var installed = _snapshotReady ?? _m.IsProviderInstalled(provider);
+            hint.Text = Strings.T(installed
+                ? provider == AiProviderKind.ClaudeCode ? "ai.claudeHint" : "ai.codexHint"
+                : AiProviders.MissingKey(provider));
             status.Text = "";
         }
-        anth.Checked += (_, _) => Load();
-        oai.Checked += (_, _) => Load();
-        Load();
+        codex.Checked += (_, _) => UpdateHint();
+        claude.Checked += (_, _) => UpdateHint();
+        UpdateHint();
 
-        void Save()
+        var actions = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        actions.Children.Add(Small("ai.save", () =>
         {
-            AiModule.SaveConfig(Kind(), model.Text, baseUrl.Text, key.Password);
-            Load();
-        }
-
-        var actions = new WrapPanel { Margin = new Thickness(72, 2, 0, 0) };
-        actions.Children.Add(Small("ai.save", () => { Save(); status.Text = Strings.T("ai.saved"); ShowEmptyIfNeeded(); }, accent: true));
+            AiModule.SaveConfig(Kind());
+            status.Text = Strings.T("ai.saved");
+            status.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
+            ShowEmptyIfNeeded();
+        }, accent: true));
         var test = Small("ai.test", () => { });
         test.Margin = new Thickness(6, 0, 0, 0);
         test.Click += async (_, _) =>
         {
             if (_m.Busy) return;
-            Save();
+            var provider = Kind();
             status.Text = Strings.T("ai.testing");
             status.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
-            var err = await _m.TestConnection();
+            var err = await _m.TestConnection(provider);
+            if (provider != Kind()) return;
             status.Text = err ?? Strings.T("ai.testOk");
             status.SetResourceReference(TextBlock.ForegroundProperty, err is null ? "OkBrush" : "WarnBrush");
         };
         actions.Children.Add(test);
-        var forget = Small("ai.forgetKey", () => { AiModule.ForgetKey(Kind()); Load(); ShowEmptyIfNeeded(); });
-        forget.Margin = new Thickness(6, 0, 0, 0);
-        actions.Children.Add(forget);
         stack.Children.Add(actions);
         stack.Children.Add(status);
         ShowOverlay("ai.settings", new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, providers);
@@ -556,25 +598,6 @@ public sealed class AiChatView : Grid, ITabView
         if (_chat is not null && _chat.Messages.Count > 0) return;
         _messages.Children.Clear();
         _messages.Children.Add(EmptyState());
-    }
-
-    static TextBox Field()
-    {
-        var t = new TextBox { MinHeight = 26, Padding = new Thickness(4.5, 0, 4.5, 0), VerticalContentAlignment = VerticalAlignment.Center };
-        t.SetResourceReference(StyleProperty, "FlatTextBox");
-        return t;
-    }
-
-    static FrameworkElement Row(string labelKey, FrameworkElement field)
-    {
-        var dock = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var l = Dim(Strings.T(labelKey));
-        l.Width = 72;
-        l.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(l, Dock.Left);
-        dock.Children.Add(l);
-        dock.Children.Add(field);
-        return dock;
     }
 
     // ---- helpers ----

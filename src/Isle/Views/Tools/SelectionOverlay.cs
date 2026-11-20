@@ -130,6 +130,7 @@ public static class SelectionSession
             MouseLeftButtonUp += OnUp;
             MouseRightButtonUp += (_, _) => Cancel();
             KeyDown += OnKey;
+            Closed += (_, _) => { if (!_closing) Cancel(); };
             Deactivated += (_, _) => { /* other monitors' overlays may take focus; nothing to do */ };
         }
 
@@ -193,6 +194,7 @@ public static class SelectionSession
 
         void SetSelection(PxRect r)
         {
+            r = r.Intersect(new PxRect(0, 0, _img.PixelWidth, _img.PixelHeight));
             _current = r;
             var full = new RectangleGeometry(new Rect(0, 0, _img.PixelWidth, _img.PixelHeight));
             var hole = new RectangleGeometry(new Rect(r.X, r.Y, r.Width, r.Height));
@@ -242,6 +244,7 @@ public static class SelectionSession
 
         void Complete(PxRect r)
         {
+            r = r.Intersect(new PxRect(0, 0, _img.PixelWidth, _img.PixelHeight));
             if (r.Width < 2 || r.Height < 2) { Cancel(); return; }
             var crop = ScreenGrab.Crop(_img, new Int32Rect(r.X, r.Y, r.Width, r.Height));
             _done(new Selection(crop, new PxRect(Monitor.Left + r.X, Monitor.Top + r.Y, r.Width, r.Height), Monitor));

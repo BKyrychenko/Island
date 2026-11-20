@@ -67,15 +67,9 @@ public static class ScreenGrab
     public static List<PxRect> WindowRects()
     {
         var list = new List<PxRect>();
-        var own = (uint)Environment.ProcessId;
         Native.EnumWindows((h, _) =>
         {
-            if (!Native.IsWindowVisible(h) || Native.IsIconic(h)) return true;
-            Native.GetWindowThreadProcessId(h, out var pid);
-            if (pid == own) return true;
-            if (Native.DwmGetWindowAttributeInt(h, Native.DWMWA_CLOAKED, out var cloaked, 4) == 0 && cloaked != 0) return true;
-            if (Native.DwmGetWindowAttribute(h, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var rc, System.Runtime.InteropServices.Marshal.SizeOf<Native.RECT>()) != 0 && !Native.GetWindowRect(h, out rc)) return true;
-            if (rc.Width < 40 || rc.Height < 30) return true;
+            if (!ForegroundWatcher.TryGetExternalWindowBounds(h, out var rc) || rc.Width < 40 || rc.Height < 30) return true;
             list.Add(new PxRect(rc.Left, rc.Top, rc.Width, rc.Height));
             return true;
         }, IntPtr.Zero);

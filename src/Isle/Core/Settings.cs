@@ -23,6 +23,7 @@ public sealed class Settings
     public bool HideInFullscreen { get; set; } = true;
     public bool ShowClock { get; set; }
     public List<string> ExcludedApps { get; set; } = [];
+    public bool ExcludedAppsOnlyOnOverlap { get; set; }
     public string LastTab { get; set; } = "";
 
     /// <summary>Module id → enabled. Missing id means the module's default.</summary>

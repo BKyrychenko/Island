@@ -77,6 +77,24 @@ public class NotesStoreTests
     }
 
     [Fact]
+    public void Folder_identity_is_case_insensitive_in_older_files_and_after_moves()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("notes.json");
+        File.WriteAllText(path, """{"Folders":["Work","work"],"Notes":[{"Id":"old","Folder":"WORK","Plain":"old note"}]}""");
+        var store = new NotesStore(path);
+        Assert.Equal(["Work"], store.Folders);
+        Assert.Equal("old", Assert.Single(store.Search(null, "work")).Id);
+        var note = store.Create(plain: "new note");
+        store.Move(note.Id, "work");
+        Assert.Equal(2, store.Search(null, "Work").Count);
+        store.DeleteFolder("wOrK");
+        Assert.Empty(store.Folders);
+        Assert.All(store.Notes, n => Assert.Equal("", n.Folder));
+        Assert.Equal(2, new NotesStore(path).Search(null, "").Count);
+    }
+
+    [Fact]
     public void Corrupt_file_is_backed_up_and_replaced()
     {
         using var dir = new TempDir();

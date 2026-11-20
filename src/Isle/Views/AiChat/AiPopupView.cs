@@ -84,7 +84,9 @@ public sealed class AiPopupView : Grid, ITabView
         _action = null;
         _icon.SetResourceReference(Icon.DataProperty, "Icon.Ai");
         _title.Text = Strings.T("ta.title");
-        _preview.Text = "“" + OneLine(text) + "”";
+        var clipped = TextActions.IsClipped(text);
+        _preview.Text = clipped ? Strings.T("ta.selectionClipped") : "“" + OneLine(text) + "”";
+        _preview.TextWrapping = clipped ? TextWrapping.Wrap : TextWrapping.NoWrap;
         _preview.Visibility = Visibility.Visible;
         BuildChips();
         _chips.Visibility = Visibility.Visible;
@@ -115,7 +117,7 @@ public sealed class AiPopupView : Grid, ITabView
 
     // ---- questions ----
 
-    public void ShowQuestion(string question)
+    public void ShowQuestion(string question, bool startRequest = true)
     {
         _question = question;
         _selection = "";
@@ -124,20 +126,23 @@ public sealed class AiPopupView : Grid, ITabView
         _title.Text = question;
         _preview.Visibility = Visibility.Collapsed;
         _chips.Visibility = Visibility.Collapsed;
-        _ = Stream(TextActions.Question(question, Strings.Language));
+        if (startRequest) _ = Stream(TextActions.Question(question, Strings.Language));
     }
 
     // ---- streaming ----
 
+    static string WaitingKey => AiProviders.FromSettings(Settings.Current) == AiProviderKind.Codex ? "ai.codexWaiting" : "ai.thinking";
+
     async Task Stream(Conversation c)
     {
-        if (_streaming) { _m.Cancel(); await ClipboardOps.WaitFor(() => !_m.Busy, TimeSpan.FromSeconds(2)); }
-        if (_m.Busy) { _result.Content = Hint(Strings.T("ta.busy")); return; }
-        var run = ++_run;
         var answer = new ChatMessage { Role = "assistant" };
         _answer = answer;
+        if (_streaming) { _m.Cancel(); await ClipboardOps.WaitFor(() => !_m.Busy, TimeSpan.FromSeconds(2)); }
+        if (!ReferenceEquals(_answer, answer)) return;
+        if (_m.Busy) { _result.Content = Hint(Strings.T("ta.busy")); BuildFooter(); return; }
+        var run = ++_run;
         _streaming = true;
-        _result.Content = Hint(Strings.T("ai.thinking"));
+        _result.Content = Hint(Strings.T(WaitingKey));
         BuildFooter();
         App.Island?.HoldOpen("ai-popup");
         try
@@ -167,7 +172,7 @@ public sealed class AiPopupView : Grid, ITabView
             _result.Content = e;
             return;
         }
-        if (a.Text.Length == 0) { _result.Content = Hint(Strings.T(_streaming ? "ai.thinking" : a.Stopped ? "ai.stopped" : "ai.err.empty")); return; }
+        if (a.Text.Length == 0) { _result.Content = Hint(Strings.T(_streaming ? WaitingKey : a.Stopped ? "ai.stopped" : "ai.err.empty")); return; }
         var atEnd = _scroll.VerticalOffset >= _scroll.ScrollableHeight - 24;
         var body = MarkdownView.Render(a.Text);
         if (a.Note.Length > 0 || a.Stopped)
@@ -192,16 +197,19 @@ public sealed class AiPopupView : Grid, ITabView
         }
         if (!has)
         {
-            if (_answer is { Error: true } && !AiConfig.FromSettings(Settings.Current).IsReady)
+            if (_answer is { Error: true } && !_m.IsProviderInstalled(AiProviders.FromSettings(Settings.Current)))
                 _footer.Children.Add(Small("ai.openSettings", _m.OpenSettings, accent: true));
             return;
         }
-        var text = _answer!.Text;
+        var answer = _answer!;
+        var text = answer.Text;
         if (_question.Length == 0)
         {
-            var replace = Small("ta.replace", () => Replace(text), accent: _action is { } a && TextActions.Replaces(a));
-            _footer.Children.Add(replace);
-            _footer.Children.Add(Spaced(Small("ai.copy", () => AiChatView.CopyText(text), accent: _action is { } b && !TextActions.Replaces(b))));
+            var canReplace = TextActions.CanReplace(_selection, answer, _streaming);
+            var preferReplace = canReplace && _action is { } a && TextActions.Replaces(a);
+            if (canReplace) _footer.Children.Add(Small("ta.replace", () => Replace(answer), accent: preferReplace));
+            var copy = Small("ai.copy", () => AiChatView.CopyText(text), accent: !preferReplace);
+            _footer.Children.Add(canReplace ? Spaced(copy) : copy);
         }
         else
         {
@@ -210,12 +218,14 @@ public sealed class AiPopupView : Grid, ITabView
         }
     }
 
-    async void Replace(string text)
+    async void Replace(ChatMessage answer)
     {
+        if (!ReferenceEquals(answer, _answer) || !TextActions.CanReplace(_selection, answer, _streaming)) return;
+        var target = _target;
         App.Island?.Collapse();
         try
         {
-            var result = await ClipboardOps.PasteTextAsync(text, _target);
+            var result = await ClipboardOps.PasteTextAsync(answer.Text, target);
             if (ClipboardOps.PasteNotice(result) is { } notice) App.Island?.ShowToast(notice);
         }
         catch (Exception ex) { Logger.Error("ai replace", ex); App.Island?.ShowToast(Strings.T("clipboard.pasteFailed")); }
@@ -223,11 +233,11 @@ public sealed class AiPopupView : Grid, ITabView
 
     // ---- snapshot helpers ----
 
-    internal void ShowDemoResult(TextAction? action, string text, bool streaming)
+    internal void ShowDemoResult(TextAction? action, string text, bool streaming, bool error = false)
     {
         _action = action;
         if (action is not null) BuildChips();
-        _answer = new ChatMessage { Role = "assistant", Text = text };
+        _answer = new ChatMessage { Role = "assistant", Text = text, Error = error };
         _streaming = streaming;
         RenderResult();
         BuildFooter();

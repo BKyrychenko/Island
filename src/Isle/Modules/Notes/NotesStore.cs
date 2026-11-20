@@ -57,6 +57,7 @@ public sealed class NotesStore
 {
     readonly string? _path;
     readonly Func<DateTimeOffset> _now;
+    bool _needsLoad;
 
     public NotesDoc Doc { get; }
     public event Action? Changed;
@@ -68,11 +69,19 @@ public sealed class NotesStore
     {
         _path = path;
         _now = now ?? (() => DateTimeOffset.Now);
-        Doc = path is null ? new NotesDoc() : JsonStore.Load<NotesDoc>(path);
-        Doc.Notes ??= [];
-        Doc.Folders ??= [];
-        Doc.Notes.RemoveAll(n => n is null);
-        foreach (var n in Doc.Notes) { n.Folder ??= ""; n.Xaml ??= ""; n.Plain ??= ""; }
+        if (path is not null && JsonStore.TryLoad(path, out NotesDoc loaded)) Doc = loaded;
+        else { Doc = new NotesDoc(); _needsLoad = path is not null; }
+        Normalize(Doc);
+    }
+
+    static void Normalize(NotesDoc doc)
+    {
+        doc.Notes ??= [];
+        doc.Folders ??= [];
+        doc.Notes.RemoveAll(n => n is null);
+        foreach (var n in doc.Notes) { n.Folder ??= ""; n.Xaml ??= ""; n.Plain ??= ""; }
+        doc.Folders = doc.Folders.Concat(doc.Notes.Select(n => n.Folder))
+            .Where(f => !string.IsNullOrEmpty(f)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public IReadOnlyList<Note> Notes => Doc.Notes;
@@ -129,7 +138,7 @@ public sealed class NotesStore
 
     public void Move(string id, string folder)
     {
-        if (Find(id) is not { } n || n.Folder == folder) return;
+        if (Find(id) is not { } n || string.Equals(n.Folder, folder, StringComparison.OrdinalIgnoreCase)) return;
         n.Folder = folder;
         if (folder.Length > 0) AddFolderQuiet(folder);
         Save();
@@ -152,8 +161,8 @@ public sealed class NotesStore
     /// <summary>Deletes a folder; its notes move to "no folder".</summary>
     public void DeleteFolder(string name)
     {
-        if (Doc.Folders.RemoveAll(f => f == name) == 0) return;
-        foreach (var n in Doc.Notes.Where(n => n.Folder == name)) n.Folder = "";
+        if (Doc.Folders.RemoveAll(f => string.Equals(f, name, StringComparison.OrdinalIgnoreCase)) == 0) return;
+        foreach (var n in Doc.Notes.Where(n => string.Equals(n.Folder, name, StringComparison.OrdinalIgnoreCase))) n.Folder = "";
         Save();
     }
 
@@ -163,7 +172,7 @@ public sealed class NotesStore
     {
         var words = (query ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return [.. Doc.Notes
-            .Where(n => folder is null || n.Folder == folder)
+            .Where(n => folder is null || string.Equals(n.Folder, folder, StringComparison.OrdinalIgnoreCase))
             .Where(n => words.All(w => n.Plain.Contains(w, StringComparison.CurrentCultureIgnoreCase)))
             .OrderByDescending(n => n.Pinned)
             .ThenByDescending(n => n.Updated)];
@@ -172,20 +181,48 @@ public sealed class NotesStore
     void Save()
     {
         HasUnsavedChanges = true;
-        Flush();
-        try { Changed?.Invoke(); }
-        catch (Exception ex) { Logger.Error("notes changed handler", ex); }
+        Flush(changed: true);
     }
 
-    public bool Flush()
+    public bool Flush() => Flush(changed: false);
+
+    bool Flush(bool changed)
     {
-        if (!HasUnsavedChanges) return true;
-        if (_path is null || JsonStore.Save(_path, Doc))
+        if (!HasUnsavedChanges && !_needsLoad) return true;
+        bool saved;
+        if (_needsLoad)
         {
-            HasUnsavedChanges = false;
-            return true;
+            saved = TryRecover();
+            changed |= saved;
         }
-        SaveFailed?.Invoke();
-        return false;
+        else saved = _path is null || JsonStore.Save(_path, Doc);
+
+        if (saved) HasUnsavedChanges = false;
+        else if (HasUnsavedChanges) SaveFailed?.Invoke();
+        if (changed)
+        {
+            try { Changed?.Invoke(); }
+            catch (Exception ex) { Logger.Error("notes changed handler", ex); }
+        }
+        return saved;
+    }
+
+    bool TryRecover()
+    {
+        if (!JsonStore.TryLoad(_path!, out NotesDoc original, requireExisting: true)) return false;
+        Normalize(original);
+        if (original.Notes.Any(n => Find(n.Id) is not null))
+        {
+            Logger.Warn("notes recovery: a pending note ID conflicts with a saved note");
+            return false;
+        }
+        original.Notes.AddRange(Doc.Notes);
+        original.Folders = original.Folders.Union(Doc.Folders, StringComparer.OrdinalIgnoreCase).ToList();
+        // Keep drafts separate until replacement succeeds, so a retry reads the current file again.
+        if (HasUnsavedChanges && !JsonStore.Save(_path!, original)) return false;
+        Doc.Notes = original.Notes;
+        Doc.Folders = original.Folders;
+        _needsLoad = false;
+        return true;
     }
 }

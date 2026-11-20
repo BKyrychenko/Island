@@ -58,7 +58,7 @@ public static class BluetoothDevices
                 for (uint i = 0; i < count && !done; i++)
                 {
                     if (coll.Item(i, out var endpoint) != 0) continue;
-                    try { done = TryEndpoint(endpoint, address, device.Name, connect); }
+                    try { done = TryEndpoint(enumerator, endpoint, address, connect); }
                     catch (Exception ex) { Logger.Warn($"bt audio endpoint skipped: {ex.GetType().Name}"); }
                     finally { Marshal.ReleaseComObject(endpoint); }
                 }
@@ -71,7 +71,7 @@ public static class BluetoothDevices
         return done;
     }
 
-    static bool TryEndpoint(IMMDevice endpoint, string address, string name, bool connect)
+    static bool TryEndpoint(IMMDeviceEnumerator enumerator, IMMDevice endpoint, string address, bool connect)
     {
         var iid = CoreAudioIds.IDeviceTopology;
         if (endpoint.Activate(ref iid, CoreAudioIds.CLSCTX_ALL, IntPtr.Zero, out var topoObj) != 0) return false;
@@ -79,25 +79,36 @@ public static class BluetoothDevices
         try
         {
             if (topology.GetConnector(0, out var connector) != 0) return false;
-            if (connector.GetConnectedTo(out var other) != 0 || other is not IPart part) return false;
-            if (part.GetTopologyObject(out var filterTopology) != 0) return false;
-            filterTopology.GetDeviceId(out var filterId);
-            // the KS filter of a Bluetooth audio device has "BTHENUM"/"BTHHFENUM" and the device address in its id
-            var isBt = filterId.Contains("BTH", StringComparison.OrdinalIgnoreCase);
-            if (!isBt || !filterId.Contains(address, StringComparison.OrdinalIgnoreCase)) return false;
-            var ksIid = CoreAudioIds.IKsControl;
-            if (part.Activate(CoreAudioIds.CLSCTX_ALL, ref ksIid, out var ksObj) != 0) return false;
-            var ks = (IKsControl)ksObj;
-            var prop = new KsProperty
+            try
             {
-                Set = KsPropSetIdBtAudio,
-                Id = connect ? KsPropertyOneShotReconnect : KsPropertyOneShotDisconnect,
-                Flags = KsPropertyTypeGet,
-            };
-            var hr = ks.KsProperty(ref prop, (uint)Marshal.SizeOf<KsProperty>(), IntPtr.Zero, 0, out _);
-            Marshal.ReleaseComObject(ks);
-            Logger.Info($"bluetooth audio {(connect ? "connect" : "disconnect")} request: hr=0x{hr:X8}");
-            return hr >= 0;
+                if (connector.GetDeviceIdConnectedTo(out var filterId) != 0) return false;
+                // The connected adapter, rather than IPart, exposes IKsControl.
+                // https://learn.microsoft.com/windows/win32/coreaudio/using-the-ikscontrol-interface-to-access-audio-properties
+                if (!filterId.Contains("BTH", StringComparison.OrdinalIgnoreCase)
+                    || !filterId.Contains(address, StringComparison.OrdinalIgnoreCase)) return false;
+                if (enumerator.GetDevice(filterId, out var adapter) != 0) return false;
+                try
+                {
+                    var ksIid = CoreAudioIds.IKsControl;
+                    if (adapter.Activate(ref ksIid, CoreAudioIds.CLSCTX_ALL, IntPtr.Zero, out var ksObj) != 0) return false;
+                    var ks = (IKsControl)ksObj;
+                    try
+                    {
+                        var prop = new KsProperty
+                        {
+                            Set = KsPropSetIdBtAudio,
+                            Id = connect ? KsPropertyOneShotReconnect : KsPropertyOneShotDisconnect,
+                            Flags = KsPropertyTypeGet,
+                        };
+                        var hr = ks.KsProperty(ref prop, (uint)Marshal.SizeOf<KsProperty>(), IntPtr.Zero, 0, out _);
+                        Logger.Info($"bluetooth audio {(connect ? "connect" : "disconnect")} request: hr=0x{hr:X8}");
+                        return hr >= 0;
+                    }
+                    finally { Marshal.ReleaseComObject(ks); }
+                }
+                finally { Marshal.ReleaseComObject(adapter); }
+            }
+            finally { Marshal.ReleaseComObject(connector); }
         }
         finally { Marshal.ReleaseComObject(topology); }
     }

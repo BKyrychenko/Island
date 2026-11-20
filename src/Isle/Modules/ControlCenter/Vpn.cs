@@ -47,7 +47,7 @@ public static class VpnDetector
         // Windows built-in profiles: names from the phonebooks; connected = an up PPP adapter with that name
         foreach (var name in env.Phonebooks().SelectMany(ParsePhonebook).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var up = adapters.Any(a => a.Up && string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            var up = adapters.Any(a => a.Up && a.Type == NetworkInterfaceType.Ppp && string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
             var rasdial = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "rasdial.exe");
             result.Add(new VpnEntry("windows", name, up, rasdial, [name], [name, "/disconnect"], null));
         }
@@ -75,7 +75,10 @@ public static class VpnDetector
     }
 
     /// <summary>Runs a client CLI hidden. Returns (ok, needsElevation, output).</summary>
-    public static async Task<(bool Ok, bool NeedsAdmin, string Output)> RunAsync(string exe, string[] args)
+    public static Task<(bool Ok, bool NeedsAdmin, string Output)> RunAsync(string exe, string[] args) =>
+        RunAsync(exe, args, TimeSpan.FromSeconds(25));
+
+    internal static async Task<(bool Ok, bool NeedsAdmin, string Output)> RunAsync(string exe, string[] args, TimeSpan timeout)
     {
         if (!Path.IsPathFullyQualified(exe)) return (false, false, "");
         try
@@ -84,11 +87,27 @@ public static class VpnDetector
             foreach (var a in args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);
             if (p is null) return (false, false, "");
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            using var cts = new CancellationTokenSource(timeout);
             var stdout = p.StandardOutput.ReadToEndAsync(cts.Token);
             var stderr = p.StandardError.ReadToEndAsync(cts.Token);
-            await p.WaitForExitAsync(cts.Token);
-            var output = (await stdout + "\n" + await stderr).Trim();
+            string output;
+            try
+            {
+                await p.WaitForExitAsync(cts.Token);
+                output = (await stdout + "\n" + await stderr).Trim();
+            }
+            catch (OperationCanceledException)
+            {
+                // A timed-out connect must not finish later after the UI reports failure.
+                try
+                {
+                    p.Kill(entireProcessTree: true);
+                    await p.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (InvalidOperationException) when (p.HasExited) { }
+                catch (Exception ex) { Logger.Error("stop timed-out vpn command", ex); }
+                return (false, false, "timeout");
+            }
             var admin = p.ExitCode == 5 || output.Contains("elevat", StringComparison.OrdinalIgnoreCase) || output.Contains("access is denied", StringComparison.OrdinalIgnoreCase)
                         || output.Contains("administrator", StringComparison.OrdinalIgnoreCase);
             return (p.ExitCode == 0, admin, output);

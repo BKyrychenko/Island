@@ -23,10 +23,15 @@ public static partial class DurationParser
 
     public static bool TryParse(string? text, out TimeSpan duration) => TryParse(text, out duration, out _);
 
-    public static bool TryParse(string? text, out TimeSpan duration, out string label)
+    public static bool TryParse(string? text, out TimeSpan duration, out string label) =>
+        TryParse(text, out duration, out label, out _);
+
+    // Bare numbers and two-part clocks can also begin a calendar phrase in the combined input.
+    internal static bool TryParse(string? text, out TimeSpan duration, out string label, out int ambiguousPrefixLength)
     {
         duration = TimeSpan.Zero;
         label = "";
+        ambiguousPrefixLength = 0;
         if (string.IsNullOrWhiteSpace(text)) return false;
         var s = text.Trim();
         var rest = s;
@@ -45,6 +50,7 @@ public static partial class DurationParser
             {
                 if (b >= 60) return false;
                 duration = new TimeSpan(0, a, b);
+                ambiguousPrefixLength = clock.Length;
             }
             rest = s[clock.Length..];
         }
@@ -66,6 +72,7 @@ public static partial class DurationParser
                 if (!bare.Success || !TryNumber(bare.Groups[1].Value, out var minutes)) return false;
                 duration = TimeSpan.FromMinutes(minutes);
                 rest = rest[bare.Length..];
+                ambiguousPrefixLength = bare.Length;
             }
         }
 

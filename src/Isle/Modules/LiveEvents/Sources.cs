@@ -492,7 +492,8 @@ public sealed class SteamSource(ILiveSink sink) : ILiveSource
 {
     const string PillId = "steam";
     readonly List<FileSystemWatcher> _watchers = [];
-    readonly Dictionary<string, (SteamDownload Dl, SpeedMeter Speed)> _active = [];
+    readonly Dictionary<string, (SteamDownload Dl, SpeedMeter Speed)> _active = new(StringComparer.OrdinalIgnoreCase);
+    bool _disposed;
     IndicatorPill? _view;
 
     public void Start()
@@ -505,19 +506,32 @@ public sealed class SteamSource(ILiveSink sink) : ILiveSource
         string? vdf = null;
         try { if (File.Exists(vdfPath)) vdf = File.ReadAllText(vdfPath); } catch { }
         foreach (var lib in Steam.Libraries(steam, vdf).Where(Directory.Exists))
-        {
-            var w = new FileSystemWatcher(lib, "appmanifest_*.acf") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size };
-            w.Changed += (_, e) => sink.Ui.BeginInvoke(() => Read(e.FullPath));
-            w.Created += (_, e) => sink.Ui.BeginInvoke(() => Read(e.FullPath));
-            w.Renamed += (_, e) => sink.Ui.BeginInvoke(() => Read(e.FullPath));
-            w.EnableRaisingEvents = true;
-            _watchers.Add(w);
-            try { foreach (var f in Directory.EnumerateFiles(lib, "appmanifest_*.acf")) Read(f); } catch { }
-        }
+            WatchLibrary(lib);
+    }
+
+    internal void WatchLibrary(string lib)
+    {
+        var w = new FileSystemWatcher(lib) { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size };
+        w.Changed += (_, e) => sink.Ui.BeginInvoke(() => Read(e.FullPath));
+        w.Created += (_, e) => sink.Ui.BeginInvoke(() => Read(e.FullPath));
+        w.Deleted += (_, e) => sink.Ui.BeginInvoke(() => Remove(e.FullPath));
+        w.Renamed += (_, e) => sink.Ui.BeginInvoke(() => { Remove(e.OldFullPath); Read(e.FullPath); });
+        w.EnableRaisingEvents = true;
+        _watchers.Add(w);
+        try { foreach (var f in Directory.EnumerateFiles(lib, "appmanifest_*.acf")) Read(f); } catch { }
+    }
+
+    void Remove(string path)
+    {
+        if (_disposed) return;
+        _active.Remove(path);
+        Update();
     }
 
     void Read(string path)
     {
+        if (_disposed || !System.IO.Enumeration.FileSystemName.MatchesSimpleExpression("appmanifest_*.acf", Path.GetFileName(path), ignoreCase: true)) return;
+        if (!File.Exists(path)) { Remove(path); return; }
         string? text = null;
         for (var i = 0; i < 3 && text is null; i++)
         {
@@ -558,6 +572,8 @@ public sealed class SteamSource(ILiveSink sink) : ILiveSource
 
     public void Dispose()
     {
+        _disposed = true;
+        _active.Clear();
         foreach (var w in _watchers) w.Dispose();
         _watchers.Clear();
         sink.Hide(PillId);

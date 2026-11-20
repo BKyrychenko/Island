@@ -20,6 +20,27 @@ public static class AgentText
         return text is { Length: <= MaxReviewChars } ? text : null;
     }
 
+    /// <summary>Show every leaf with its JSON path; string values retain their actual newlines and backslashes.</summary>
+    public static string ReviewInput(string json)
+    {
+        var text = new StringBuilder();
+        void Add(JsonNode? node, string path)
+        {
+            if (node is JsonObject obj && obj.Count > 0)
+                foreach (var (key, value) in obj) Add(value, path + "[" + JsonSerializer.Serialize(key) + "]");
+            else if (node is JsonArray array && array.Count > 0)
+                for (var i = 0; i < array.Count; i++) Add(array[i], path + "[" + i + "]");
+            else
+            {
+                if (text.Length > 0) text.Append("\n\n");
+                text.Append(path).Append(":\n");
+                text.Append(node is JsonValue value && value.TryGetValue<string>(out var str) ? str : node?.ToJsonString(ReviewFormat) ?? "null");
+            }
+        }
+        Add(JsonNode.Parse(json), "$");
+        return text.ToString();
+    }
+
     /// <summary>"Bash · npm test", "Edit · Program.cs", … for the "last action" line.</summary>
     public static string Describe(string tool, JsonObject? input)
     {
@@ -49,7 +70,7 @@ public static class AgentText
             "WebFetch" => Get("url"),
             "WebSearch" => Get("query"),
             "Task" or "Agent" => Get("description"),
-            "apply_patch" => PatchFiles(Get("input") is { Length: > 0 } pi ? pi : Get("patch")),
+            "apply_patch" => PatchFiles(Get("command") is { Length: > 0 } command ? command : Get("input") is { Length: > 0 } patch ? patch : Get("patch")),
             _ => "",
         };
         text = text.Trim();

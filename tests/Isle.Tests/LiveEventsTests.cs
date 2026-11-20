@@ -146,6 +146,26 @@ public class DownloadDetectorTests
 
 public class SteamParserTests
 {
+    [Fact]
+    public void ActiveManifestDeletionAndRenameRemovePill()
+    {
+        using var dir = new TempDir();
+        FakeSink.Run(sink =>
+        {
+            using var source = new SteamSource(sink);
+            var file = Path.Combine(dir.Path, "appmanifest_1.acf");
+            File.WriteAllText(file, Manifest(1026, 250, 1000));
+            source.WatchLibrary(dir.Path);
+            Assert.True(sink.Items.ContainsKey("steam"));
+            File.Move(file, file + ".old");
+            Assert.True(sink.PumpUntil(() => !sink.Items.ContainsKey("steam")));
+            File.WriteAllText(file, Manifest(1026, 250, 1000));
+            Assert.True(sink.PumpUntil(() => sink.Items.ContainsKey("steam")));
+            File.Delete(file);
+            Assert.True(sink.PumpUntil(() => !sink.Items.ContainsKey("steam")));
+        });
+    }
+
     const string LibraryFoldersNew = """
         "libraryfolders"
         {

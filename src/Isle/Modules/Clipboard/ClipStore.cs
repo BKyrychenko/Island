@@ -41,9 +41,13 @@ public sealed class ClipStore
     readonly string _file, _dir;
     readonly Func<DateTimeOffset> _now;
     readonly List<ClipEntry> _entries = [];
+    HashSet<string> _savedImages = new(StringComparer.OrdinalIgnoreCase);
 
     public int Limit { get; set; } = 200;
+    public bool HasPendingChanges { get; private set; }
+    public string? SaveErrorKey { get; private set; }
     public event Action? Changed;
+    public event Action? SaveStatusChanged;
 
     public ClipStore(string file, string imageDir, Func<DateTimeOffset>? now = null)
     {
@@ -59,8 +63,9 @@ public sealed class ClipStore
 
     public void Load()
     {
+        if (!JsonStore.TryLoad<ClipFile>(_file, out var f))
+            throw new IOException("Could not read the clipboard index.");
         _entries.Clear();
-        var f = JsonStore.Load<ClipFile>(_file);
         foreach (var e in f.Entries)
         {
             if (e.Kind == ClipKind.Text)
@@ -69,17 +74,55 @@ public sealed class ClipStore
                 if (text is null) continue; // another user/machine, or damaged: drop
                 e.Text = text;
             }
-            else if (e.Image is null || !File.Exists(ImagePath(e))) continue;
+            else if (e.Image is null || Path.GetFileName(e.Image) != e.Image || !File.Exists(ImagePath(e))) continue;
             _entries.Add(e);
         }
-        Sort();
+        Sort(_entries);
+        _savedImages = ImageNames(_entries);
+        HasPendingChanges = false;
     }
 
-    public void Save()
+    public bool Save()
     {
-        foreach (var e in _entries)
-            if (e.Kind == ClipKind.Text && e.Cipher is null) e.Cipher = Encrypt(e.Text);
-        JsonStore.Save(_file, new ClipFile { Entries = _entries });
+        var saved = TryWrite(_entries);
+        if (!saved) SetSaveError("clip.captureSaveFailed");
+        else if (SaveErrorKey == "clip.captureSaveFailed") SetSaveError(null);
+        return saved;
+    }
+
+    bool TryWrite(List<ClipEntry> next)
+    {
+        try
+        {
+            foreach (var e in next)
+                if (e.Kind == ClipKind.Text && e.Cipher is null) e.Cipher = Encrypt(e.Text);
+        }
+        catch (CryptographicException ex)
+        {
+            Logger.Error("encrypt clipboard history", ex);
+            return false;
+        }
+        if (!JsonStore.Save(_file, new ClipFile { Entries = next })) return false;
+
+        // Old PNGs stay usable by the on-disk index until its atomic replacement succeeds.
+        var keep = ImageNames(next);
+        _savedImages.UnionWith(ImageNames(_entries));
+        _savedImages.ExceptWith(keep);
+        foreach (var name in _savedImages) DeleteImage(name);
+        _savedImages = keep;
+        HasPendingChanges = false;
+        return true;
+    }
+
+    static HashSet<string> ImageNames(IEnumerable<ClipEntry> entries) =>
+        entries.Where(e => e.Kind == ClipKind.Image && e.Image is not null)
+               .Select(e => e.Image!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    void SetSaveError(string? key)
+    {
+        if (SaveErrorKey == key) return;
+        SaveErrorKey = key;
+        SaveStatusChanged?.Invoke();
     }
 
     /// <summary>Adds text (empty/whitespace ignored). Returns the entry (existing one when it was a repeat).</summary>
@@ -89,33 +132,43 @@ public sealed class ClipStore
         var existing = _entries.FirstOrDefault(e => e.Kind == ClipKind.Text && e.Text == text);
         if (existing is not null) return Touch(existing);
         var entry = new ClipEntry { Kind = ClipKind.Text, Text = text, Time = _now() };
-        _entries.Add(entry);
-        Trim();
-        Sort();
-        Changed?.Invoke();
-        return entry;
+        return AddCaptured(entry);
     }
 
-    /// <summary>Adds an image from PNG bytes; <paramref name="pixelHash"/> identifies repeats.</summary>
+    /// <summary>Adds PNG bytes; the pixel hash and dimensions together identify repeats, including legacy hashes.</summary>
     public ClipEntry AddImage(byte[] png, string pixelHash, int width, int height)
     {
-        var existing = _entries.FirstOrDefault(e => e.Kind == ClipKind.Image && e.ImageHash == pixelHash);
+        var existing = _entries.FirstOrDefault(e => e.Kind == ClipKind.Image && e.ImageHash == pixelHash && e.ImageWidth == width && e.ImageHeight == height);
         if (existing is not null) return Touch(existing);
         var entry = new ClipEntry { Kind = ClipKind.Image, Time = _now(), ImageHash = pixelHash, ImageWidth = width, ImageHeight = height };
         entry.Image = entry.Id + ".png";
-        Directory.CreateDirectory(_dir);
-        File.WriteAllBytes(ImagePath(entry), png);
+        try { JsonStore.WriteAtomic(ImagePath(entry), png); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetSaveError("clip.editFailed");
+            throw;
+        }
+        return AddCaptured(entry);
+    }
+
+    ClipEntry AddCaptured(ClipEntry entry)
+    {
         _entries.Add(entry);
-        Trim();
-        Sort();
-        Changed?.Invoke();
-        return entry;
+        foreach (var e in Trim(_entries))
+            if (e.Image is { } name && !_savedImages.Contains(name)) DeleteImage(name);
+        return CaptureChanged(entry);
     }
 
     ClipEntry Touch(ClipEntry e)
     {
         e.Time = _now();
-        Sort();
+        return CaptureChanged(e);
+    }
+
+    ClipEntry CaptureChanged(ClipEntry e)
+    {
+        Sort(_entries);
+        HasPendingChanges = true;
         Changed?.Invoke();
         return e;
     }
@@ -124,35 +177,46 @@ public sealed class ClipStore
     {
         var e = Find(id);
         if (e is null || e.Pinned == pinned) return;
+        var next = new List<ClipEntry>(_entries);
         e.Pinned = pinned;
-        Trim();
-        Sort();
-        Changed?.Invoke();
+        Trim(next);
+        Sort(next);
+        CommitEdit(next, () => e.Pinned = !pinned);
     }
 
     public void Delete(string id)
     {
-        var e = Find(id);
-        if (e is null) return;
-        Remove(e);
-        Changed?.Invoke();
+        if (Find(id) is not null) CommitEdit(_entries.Where(e => e.Id != id).ToList());
     }
 
     /// <summary>Removes every unpinned entry (pinned ones are kept — they "never expire").</summary>
     public void ClearUnpinned()
     {
-        foreach (var e in _entries.Where(e => !e.Pinned).ToList()) Remove(e);
+        if (_entries.Any(e => !e.Pinned)) CommitEdit(_entries.Where(e => e.Pinned).ToList());
+    }
+
+    void CommitEdit(List<ClipEntry> next, Action? rollback = null)
+    {
+        if (!TryWrite(next))
+        {
+            rollback?.Invoke();
+            SetSaveError("clip.editFailed");
+            return;
+        }
+        _entries.Clear();
+        _entries.AddRange(next);
+        SetSaveError(null);
         Changed?.Invoke();
     }
 
     public ClipEntry? Find(string id) => _entries.FirstOrDefault(e => e.Id == id);
 
-    /// <summary>Pinned first, then newest; text entries filtered by every word of the query (case-insensitive).</summary>
-    public IEnumerable<ClipEntry> Search(string? query)
+    /// <summary>Pinned first, then newest; filter text or image label/dimensions by every query word (case-insensitive).</summary>
+    public IEnumerable<ClipEntry> Search(string? query, string imageLabel = "Image")
     {
         var words = (query ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return _entries;
-        return _entries.Where(e => e.Kind == ClipKind.Text && words.All(w => e.Text.Contains(w, StringComparison.CurrentCultureIgnoreCase)));
+        return _entries.Where(e => words.All(w => (e.Kind == ClipKind.Text ? e.Text : $"{imageLabel} {e.ImageWidth} × {e.ImageHeight} {e.ImageWidth}x{e.ImageHeight}").Contains(w, StringComparison.CurrentCultureIgnoreCase)));
     }
 
     public static string Preview(string text, int max = 160)
@@ -171,22 +235,20 @@ public sealed class ClipStore
 
     public static string HashPixels(byte[] pixels) => Convert.ToHexString(SHA256.HashData(pixels));
 
-    void Trim()
+    List<ClipEntry> Trim(List<ClipEntry> entries)
     {
-        var unpinned = _entries.Where(e => !e.Pinned).OrderByDescending(e => e.Time).ToList();
-        foreach (var e in unpinned.Skip(Math.Max(0, Limit))) Remove(e);
+        var removed = entries.Where(e => !e.Pinned).OrderByDescending(e => e.Time).Skip(Math.Max(0, Limit)).ToList();
+        foreach (var e in removed) entries.Remove(e);
+        return removed;
     }
 
-    void Remove(ClipEntry e)
+    void DeleteImage(string name)
     {
-        _entries.Remove(e);
-        if (e.Kind == ClipKind.Image)
-        {
-            try { File.Delete(ImagePath(e)); } catch (Exception ex) { Logger.Warn($"clip image delete: {ex.GetType().Name}"); }
-        }
+        try { File.Delete(Path.Combine(_dir, name)); }
+        catch (Exception ex) { Logger.Warn($"clip image delete: {ex.GetType().Name}"); }
     }
 
-    void Sort() => _entries.Sort((a, b) => a.Pinned != b.Pinned ? (a.Pinned ? -1 : 1) : b.Time.CompareTo(a.Time));
+    static void Sort(List<ClipEntry> entries) => entries.Sort((a, b) => a.Pinned != b.Pinned ? (a.Pinned ? -1 : 1) : b.Time.CompareTo(a.Time));
 
     static string Encrypt(string text) => Convert.ToBase64String(Secret.ProtectBytes(Encoding.UTF8.GetBytes(text)));
 

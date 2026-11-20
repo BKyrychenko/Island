@@ -16,6 +16,9 @@ public static class Attachments
     public const long MaxFileBytes = 10 * 1024 * 1024;   // docx/xlsx/text input size
     public const int MaxTextChars = 300_000;             // extracted text per file (~75k tokens)
     public const int MaxPerMessage = 5;
+    const int MaxXmlPartBytes = 8 * 1024 * 1024;
+    const int MaxExpandedBytes = 24 * 1024 * 1024;
+    const int MaxColumns = 16_384;
 
     static readonly HashSet<string> TextExt = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -115,22 +118,19 @@ public static class Attachments
     {
         using var zip = new ZipArchive(docx, ZipArchiveMode.Read);
         var entry = zip.GetEntry("word/document.xml") ?? throw new InvalidDataException("no document.xml");
-        var xml = new XmlDocument { XmlResolver = null };
-        using (var s = entry.Open()) xml.Load(XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit }));
+        var remaining = MaxExpandedBytes;
+        var xml = ReadOfficeXml(entry, ref remaining);
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("w", W);
         var sb = new StringBuilder();
         foreach (XmlNode p in xml.SelectNodes("//w:body//w:p", ns)!)
         {
-            var line = new StringBuilder();
-            if (p.SelectSingleNode("w:pPr/w:numPr", ns) is not null) line.Append("- ");
+            if (p.SelectSingleNode("w:pPr/w:numPr", ns) is not null) AppendText(sb, "- ");
             foreach (XmlNode n in p.SelectNodes(".//w:t|.//w:tab|.//w:br", ns)!)
             {
-                if (n.LocalName == "t") line.Append(n.InnerText);
-                else if (n.LocalName == "tab") line.Append('\t');
-                else line.Append('\n');
+                if (AppendText(sb, n.LocalName switch { "t" => n.InnerText, "tab" => "\t", _ => "\n" })) return sb.ToString();
             }
-            sb.Append(line).Append('\n');
+            if (AppendText(sb, "\n")) break;
         }
         return sb.ToString().Trim();
     }
@@ -139,16 +139,14 @@ public static class Attachments
     public static string XlsxText(Stream xlsx)
     {
         using var zip = new ZipArchive(xlsx, ZipArchiveMode.Read);
-        var rs = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit };
+        if (zip.Entries.Count > 2048) throw new InvalidDataException("Too many workbook parts.");
+        var remaining = MaxExpandedBytes;
 
         XmlDocument? Load(string path)
         {
             var e = zip.GetEntry(path);
             if (e is null) return null;
-            var d = new XmlDocument { XmlResolver = null };
-            using var s = e.Open();
-            d.Load(XmlReader.Create(s, rs));
-            return d;
+            return ReadOfficeXml(e, ref remaining);
         }
 
         var shared = new List<string>();
@@ -194,16 +192,20 @@ public static class Attachments
             if (doc is null) continue;
             var nsm = new XmlNamespaceManager(doc.NameTable);
             nsm.AddNamespace("s", S);
-            sb.Append("## ").Append(name).Append('\n');
+            AppendText(sb, "## ");
+            if (AppendText(sb, name) || AppendText(sb, "\n")) return sb.ToString();
             var rows = 0;
             foreach (XmlNode row in doc.SelectNodes("//s:sheetData/s:row", nsm)!)
             {
-                if (++rows > 5000) { sb.Append("[…more rows]\n"); break; }
-                var cells = new List<string>();
+                if (++rows > 5000) { if (AppendText(sb, "[…more rows]\n")) return sb.ToString(); break; }
+                var nextColumn = 0;
+                var lastWritten = -1;
                 foreach (XmlNode c in row.SelectNodes("s:c", nsm)!)
                 {
-                    var col = ColumnIndex(c.Attributes?["r"]?.Value);
-                    while (col >= 0 && cells.Count < col) cells.Add("");
+                    var reference = c.Attributes?["r"]?.Value;
+                    var col = reference is null ? nextColumn : ColumnIndex(reference);
+                    if (col < nextColumn || col >= MaxColumns) throw new InvalidDataException("Invalid workbook column.");
+                    nextColumn = col + 1;
                     var type = c.Attributes?["t"]?.Value;
                     string v;
                     if (type == "inlineStr") v = c.SelectSingleNode("s:is", nsm)?.InnerText ?? "";
@@ -213,12 +215,15 @@ public static class Attachments
                         if (type == "s" && int.TryParse(v, out var si) && si >= 0 && si < shared.Count) v = shared[si];
                         else if (type == "b") v = v == "1" ? "TRUE" : "FALSE";
                     }
-                    cells.Add(Csv(v));
+                    if (v.Length == 0) continue;
+                    var commas = col - Math.Max(0, lastWritten);
+                    sb.Append(',', Math.Min(commas, MaxTextChars + 1 - sb.Length));
+                    if (sb.Length > MaxTextChars || AppendText(sb, Csv(v[..Math.Min(v.Length, MaxTextChars + 1)]))) return sb.ToString();
+                    lastWritten = col;
                 }
-                while (cells.Count > 0 && cells[^1].Length == 0) cells.RemoveAt(cells.Count - 1);
-                if (cells.Count > 0) sb.Append(string.Join(",", cells)).Append('\n');
+                if (lastWritten >= 0 && AppendText(sb, "\n")) return sb.ToString();
             }
-            sb.Append('\n');
+            if (AppendText(sb, "\n")) return sb.ToString();
         }
         return sb.ToString().Trim();
     }
@@ -229,8 +234,34 @@ public static class Attachments
         if (string.IsNullOrEmpty(cellRef)) return -1;
         var col = 0;
         var i = 0;
-        for (; i < cellRef.Length && char.IsAsciiLetter(cellRef[i]); i++) col = col * 26 + (char.ToUpperInvariant(cellRef[i]) - 'A' + 1);
-        return i == 0 ? -1 : col - 1;
+        for (; i < cellRef.Length && char.IsAsciiLetter(cellRef[i]); i++)
+        {
+            col = col * 26 + (char.ToUpperInvariant(cellRef[i]) - 'A' + 1);
+            if (col > MaxColumns) return -1;
+        }
+        return i > 0 && int.TryParse(cellRef.AsSpan(i), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var row) && row is >= 1 and <= 1_048_576 ? col - 1 : -1;
+    }
+
+    static XmlDocument ReadOfficeXml(ZipArchiveEntry entry, ref int remaining)
+    {
+        if (entry.Length > MaxXmlPartBytes || entry.Length > remaining) throw new InvalidDataException("Office XML exceeds the extraction limit.");
+        var bytes = new byte[(int)entry.Length];
+        using var source = entry.Open();
+        source.ReadExactly(bytes);
+        if (source.ReadByte() != -1) throw new InvalidDataException("Office XML exceeds its declared size.");
+        remaining -= bytes.Length;
+        using var input = new MemoryStream(bytes, writable: false);
+        using var reader = XmlReader.Create(input, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, MaxCharactersInDocument = MaxXmlPartBytes });
+        var document = new XmlDocument { XmlResolver = null };
+        document.Load(reader);
+        return document;
+    }
+
+    static bool AppendText(StringBuilder output, string text)
+    {
+        output.Append(text.AsSpan(0, Math.Min(text.Length, MaxTextChars + 1 - output.Length)));
+        return output.Length > MaxTextChars;
     }
 
     static string Csv(string v) => v.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? "\"" + v.Replace("\"", "\"\"") + "\"" : v;

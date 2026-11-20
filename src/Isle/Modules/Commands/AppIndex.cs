@@ -9,6 +9,7 @@ public sealed record IndexEntry(string Name, string Path, EntryKind Kind);
 public sealed class IndexFile
 {
     public DateTimeOffset Built { get; set; }
+    public string[]? Roots { get; set; }
     public List<IndexEntry> Entries { get; set; } = [];
 }
 
@@ -25,6 +26,7 @@ public sealed class AppIndex(string cacheFile, Func<IEnumerable<string>>? extraF
 
     volatile IReadOnlyList<IndexEntry> _entries = [];
     DateTimeOffset _built;
+    string[]? _roots;
     int _building;
 
     public IReadOnlyList<IndexEntry> Entries => _entries;
@@ -35,28 +37,48 @@ public sealed class AppIndex(string cacheFile, Func<IEnumerable<string>>? extraF
     /// <summary>Loads the cache (if any) and rebuilds in the background when it is stale. Never blocks.</summary>
     public void Refresh()
     {
+        var roots = NormalizeRoots(extraFolders?.Invoke() ?? []);
         if (_built == default && File.Exists(cacheFile))
         {
             var f = JsonStore.Load<IndexFile>(cacheFile);
-            _entries = f.Entries;
-            _built = f.Built;
+            if (SameRoots(f.Roots, roots))
+            {
+                _entries = f.Entries;
+                _built = f.Built;
+                _roots = roots;
+            }
         }
+        if (!SameRoots(_roots, roots)) { _entries = []; _built = default; }
         if (DateTimeOffset.Now - _built < MaxAge) return;
         if (Interlocked.Exchange(ref _building, 1) == 1) return;
         _ = Task.Run(() =>
         {
             try
             {
-                var list = Build(extraFolders?.Invoke() ?? []);
+                var list = Build(roots);
+                if (!SameRoots(roots, NormalizeRoots(extraFolders?.Invoke() ?? []))) return;
+                _roots = roots;
                 _entries = list;
                 _built = DateTimeOffset.Now;
-                JsonStore.Save(cacheFile, new IndexFile { Built = _built, Entries = list });
+                JsonStore.Save(cacheFile, new IndexFile { Built = _built, Roots = roots, Entries = list });
                 Updated?.Invoke();
             }
             catch (Exception ex) { Logger.Error("app index", ex); }
-            finally { Interlocked.Exchange(ref _building, 0); }
+            finally
+            {
+                Interlocked.Exchange(ref _building, 0);
+                if (!SameRoots(roots, NormalizeRoots(extraFolders?.Invoke() ?? []))) Refresh();
+            }
         });
     }
+
+    internal static string[] NormalizeRoots(IEnumerable<string> roots) => roots
+        .Where(r => !string.IsNullOrWhiteSpace(r))
+        .Select(r => { try { return Path.TrimEndingDirectorySeparator(Path.GetFullPath(r.Trim())); } catch { return null; } })
+        .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    internal static bool SameRoots(string[]? left, string[] right) =>
+        left is not null && left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase);
 
     public static List<IndexEntry> Build(IEnumerable<string> folders)
     {

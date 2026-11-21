@@ -32,7 +32,6 @@ public static partial class CurrencyParser
         return d;
     }
 
-    public static bool IsCurrency(string token) => Aliases.ContainsKey(token.Trim());
 
     [GeneratedRegex(@"^\s*(?<pre>[$€£¥₴₺₹₪₩])?\s*(?<num>\d[\d\s.,]*)?\s*(?<from>[^\d\s][^\d]*?)?\s+(?:to|in|into|=|в|у|на)\s+(?<to>[^\d]+?)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex Query();

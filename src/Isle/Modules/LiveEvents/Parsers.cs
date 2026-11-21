@@ -180,8 +180,6 @@ public static class Steam
     }
 }
 
-public sealed record CapabilityUse(string App, bool InUse);
-
 /// <summary>Who uses the microphone/camera, from the CapabilityAccessManager consent store (LastUsedTimeStart/Stop).</summary>
 public static class ConsentStore
 {

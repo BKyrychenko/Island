@@ -9,7 +9,6 @@ using System.Windows.Shapes;
 using Isle.Core;
 using Isle.Modules.Tools;
 using Path = System.Windows.Shapes.Path;
-using IconView = Isle.Views.Icon;
 using TextElement = System.Windows.Documents.TextElement;
 
 namespace Isle.Views.Tools;
@@ -177,28 +176,21 @@ public sealed class MarkupWindow : Window
 
     static PickButton IconToggle(string icon, string tip)
     {
-        var i = new IconView { Width = 16, Height = 16 };
-        i.SetResourceReference(IconView.DataProperty, icon);
-        i.SetResourceReference(IconView.ForegroundProperty, "FgBrush");
-        return new PickButton(i, 30) { ToolTip = Strings.T(tip) };
+        return new PickButton(Ui.MakeIcon(icon, 16, "FgBrush"), 30) { ToolTip = Strings.T(tip) };
     }
 
     static Button IconButton(string icon, string tip, Action click)
     {
-        var i = new IconView { Width = 16, Height = 16 };
-        i.SetResourceReference(IconView.DataProperty, icon);
-        i.SetResourceReference(IconView.ForegroundProperty, "FgDimBrush");
-        var b = new Button { Content = i, Width = 30, Height = 28, ToolTip = Strings.T(tip) };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Click += (_, _) => click();
+        var b = Ui.IconButton(Ui.MakeIcon(icon, 16), 28, click, area: null);
+        b.Width = 30;
+        b.ToolTip = Strings.T(tip);
         return b;
     }
 
     static Button TextButton(string key, string style, Action click)
     {
-        var b = new Button { Content = Strings.T(key), Margin = new Thickness(4, 0, 0, 0), Padding = new Thickness(12, 4, 12, 4) };
-        b.SetResourceReference(StyleProperty, style);
-        b.Click += (_, _) => click();
+        var b = Ui.TextButton(Strings.T(key), style, new Thickness(12, 4, 12, 4), click, area: null);
+        b.Margin = new Thickness(4, 0, 0, 0);
         return b;
     }
 

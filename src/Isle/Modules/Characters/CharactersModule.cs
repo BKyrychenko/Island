@@ -34,7 +34,6 @@ public sealed class CharactersModule(IslandWindow island) : IModule, IDisposable
     public static bool InPill => S.OptBool("chars.inPill");
     public static int SleepMinutes => Math.Clamp(S.OptInt("chars.sleepMin", 5), 0, 120);
 
-    public CreatureBrain? Brain => _brain;
 
     public void Start()
     {

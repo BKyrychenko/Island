@@ -66,7 +66,6 @@ public sealed class AgentsView : Grid
         Children.Add(_overlay);
     }
 
-    public bool OverlayOpen => _overlay.Visibility == Visibility.Visible;
 
     public void Show(IReadOnlyList<AgentSession> sessions, bool anyHooks)
     {
@@ -458,24 +457,8 @@ public sealed class AgentsView : Grid
     {
         _workerKey = null;
         _workerPanel = null;
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var head = new DockPanel { Margin = new Thickness(0, -2, 0, 6) };
-        if (closable)
-        {
-            var close = IconAction("Icon.Close", "ai.close", HideOverlay);
-            DockPanel.SetDock(close, Dock.Right);
-            head.Children.Add(close);
-        }
-        if (extra is not null) { DockPanel.SetDock(extra, Dock.Right); head.Children.Add(extra); }
-        var t = new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        t.SetResourceReference(StyleProperty, "TextTitle");
-        head.Children.Add(t);
-        grid.Children.Add(head);
-        SetRow(body, 1);
-        grid.Children.Add(body);
-        _overlay.Child = grid;
+        var close = closable ? IconAction("Icon.Close", "ai.close", HideOverlay) : null;
+        _overlay.Child = Ui.OverlayFrame(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis }, body, close, extra, 6);
         _overlay.Visibility = Visibility.Visible;
     }
 
@@ -498,22 +481,12 @@ public sealed class AgentsView : Grid
 
     static Button Small(string? key, Action click, bool accent = false, bool ghost = false, string? tipKey = null, string? text = null)
     {
-        var b = new Button { Content = text ?? Strings.T(key!), Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(12, 3, 12, 4), FontSize = 12 };
+        var b = Ui.TextButton(text ?? Strings.T(key!), accent ? "AccentButton" : ghost ? "GhostButton" : "FlatButton", new Thickness(12, 3, 12, 4), click, "agents action");
+        b.Margin = new Thickness(0, 0, 6, 0);
+        b.FontSize = 12;
         if (tipKey is not null) b.ToolTip = Strings.T(tipKey);
-        b.SetResourceReference(StyleProperty, accent ? "AccentButton" : ghost ? "GhostButton" : "FlatButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("agents action", ex); } };
         return b;
     }
 
-    static Button IconAction(string icon, string tipKey, Action click)
-    {
-        var i = new Icon { Width = 15, Height = 15 };
-        i.SetResourceReference(Icon.DataProperty, icon);
-        i.SetResourceReference(Icon.ForegroundProperty, "FgBrush");
-        var b = new Button { Width = 28, Height = 28, ToolTip = Strings.T(tipKey), Content = i };
-        System.Windows.Automation.AutomationProperties.SetName(b, Strings.T(tipKey));
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("agents action", ex); } };
-        return b;
-    }
+    static Button IconAction(string icon, string tipKey, Action click) => Ui.IconAction(icon, tipKey, click, "agents action", "FgBrush");
 }

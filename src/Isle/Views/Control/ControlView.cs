@@ -52,7 +52,7 @@ public sealed class ControlView : Grid, ITabView, IDisposable
         // volume
         _muteButton = new Button { Width = 30, Height = 30, Content = _muteIcon };
         _muteButton.SetResourceReference(StyleProperty, "IconButton");
-        _muteButton.SetBinding(ToolTipProperty, Loc("cc.mute"));
+        _muteButton.SetBinding(ToolTipProperty, Ui.Loc("cc.mute"));
         _muteIcon.SetResourceReference(Icon.ForegroundProperty, "FgBrush");
         _muteButton.Click += (_, _) => { if (_s.Audio.Available) _s.Audio.SetMuted(!_s.Audio.Muted); };
         _volume.ValueChanged += (_, e) => { if (!_updatingSliders) { _s.Audio.SetLevel((float)(e.NewValue / 100)); ShowVolume(); } };
@@ -103,8 +103,6 @@ public sealed class ControlView : Grid, ITabView, IDisposable
         Strings.LanguageChanged += ShowAll;
         ShowAll();
     }
-
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
 
     static Grid SliderRow(FrameworkElement lead, Slider slider, TextBlock value)
     {
@@ -385,7 +383,7 @@ public sealed class ControlView : Grid, ITabView, IDisposable
         {
             _main.SetResourceReference(StyleProperty, "FlatButton");
             _icon.SetResourceReference(Icon.DataProperty, icon);
-            _label.SetBinding(TextBlock.TextProperty, Loc(labelKey));
+            _label.SetBinding(TextBlock.TextProperty, Ui.Loc(labelKey));
             var content = new StackPanel { Margin = new Thickness(10, 6, 10, 6), HorizontalAlignment = HorizontalAlignment.Stretch };
             content.Children.Add(_icon);
             content.Children.Add(_label);
@@ -400,7 +398,7 @@ public sealed class ControlView : Grid, ITabView, IDisposable
                 var ci = new Icon { Width = 12, Height = 12 };
                 ci.SetResourceReference(Icon.DataProperty, "Icon.ChevronDown");
                 chevron.Content = ci;
-                chevron.SetBinding(ToolTipProperty, Loc("cc.btDevices"));
+                chevron.SetBinding(ToolTipProperty, Ui.Loc("cc.btDevices"));
                 chevron.Click += (_, _) => more();
                 Children.Add(chevron);
             }

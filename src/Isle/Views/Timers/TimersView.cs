@@ -41,13 +41,13 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         var sw = new Button { Width = 30, Height = 30, Margin = new Thickness(4, 0, 0, 0) };
         sw.SetResourceReference(StyleProperty, "IconButton");
         sw.Content = MakeIcon("Icon.Stopwatch", 16, "FgDimBrush");
-        sw.SetBinding(ToolTipProperty, Loc("timers.stopwatch"));
+        sw.SetBinding(ToolTipProperty, Ui.Loc("timers.stopwatch"));
         sw.Click += (_, _) => { if (!_ctl.Timers.Stopwatch.Active) _ctl.StopwatchToggle(); };
         DockPanel.SetDock(sw, Dock.Right);
         top.Children.Add(sw);
         var submit = new Button { MinHeight = 30, Margin = new Thickness(4, 0, 0, 0), Padding = new Thickness(8, 0, 8, 0) };
         submit.SetResourceReference(StyleProperty, "FlatButton");
-        submit.SetBinding(ContentControl.ContentProperty, Loc("timers.submit"));
+        submit.SetBinding(ContentControl.ContentProperty, Ui.Loc("timers.submit"));
         submit.Click += (_, _) => Submit();
         DockPanel.SetDock(submit, Dock.Right);
         top.Children.Add(submit);
@@ -68,7 +68,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         _input.KeyDown += OnInputKey;
         _input.TextChanged += (_, _) => { _placeholder.Visibility = _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; _hint.Visibility = Visibility.Collapsed; };
         _placeholder.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        _placeholder.SetBinding(TextBlock.TextProperty, Loc("timers.placeholder"));
+        _placeholder.SetBinding(TextBlock.TextProperty, Ui.Loc("timers.placeholder"));
         _placeholder.TextTrimming = TextTrimming.CharacterEllipsis;
         inputHost.Children.Add(_input);
         inputHost.Children.Add(_placeholder);
@@ -91,7 +91,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         emptyIcon.HorizontalAlignment = HorizontalAlignment.Center;
         var emptyText = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center };
         emptyText.SetResourceReference(StyleProperty, "TextDim");
-        emptyText.SetBinding(TextBlock.TextProperty, Loc("timers.empty"));
+        emptyText.SetBinding(TextBlock.TextProperty, Ui.Loc("timers.empty"));
         _empty.Children.Add(emptyIcon);
         _empty.Children.Add(emptyText);
         SetRow(_empty, 2);
@@ -102,15 +102,7 @@ public sealed class TimersView : Grid, ITabView, IDisposable
         Rebuild();
     }
 
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
-
-    static Icon MakeIcon(string key, double size, string brush, bool filled = false)
-    {
-        var i = new Icon { Width = size, Height = size, Filled = filled };
-        i.SetResourceReference(Icon.DataProperty, key);
-        i.SetResourceReference(Icon.ForegroundProperty, brush);
-        return i;
-    }
+    static Icon MakeIcon(string key, double size, string brush, bool filled = false) => Ui.MakeIcon(key, size, brush, filled);
 
     void OnInputKey(object sender, KeyEventArgs e)
     {
@@ -221,11 +213,8 @@ public sealed class TimersView : Grid, ITabView, IDisposable
 
     static Button Action(string icon, string tip, Action click, bool filled = false)
     {
-        var b = new Button { Width = 28, Height = 28 };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Content = MakeIcon(icon, filled ? 12 : 14, "FgDimBrush", filled);
-        b.SetBinding(ToolTipProperty, Loc(tip));
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("timers action", ex); } };
+        var b = Ui.IconButton(MakeIcon(icon, filled ? 12 : 14, "FgDimBrush", filled), 28, click, "timers action");
+        b.SetBinding(ToolTipProperty, Ui.Loc(tip));
         return b;
     }
 

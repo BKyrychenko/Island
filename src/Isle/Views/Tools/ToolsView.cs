@@ -136,9 +136,8 @@ public sealed class ToolsView : Grid
 
     static Button SmallAction(string key, Action click)
     {
-        var b = new Button { Content = Strings.T(key), Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(12, 4, 12, 4) };
-        b.SetResourceReference(StyleProperty, "FlatButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("tools action", ex); } };
+        var b = Ui.TextButton(Strings.T(key), "FlatButton", new Thickness(12, 4, 12, 4), click, "tools action");
+        b.Margin = new Thickness(0, 0, 6, 0);
         return b;
     }
 

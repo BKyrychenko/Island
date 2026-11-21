@@ -68,8 +68,6 @@ struct PropVariant
     [FieldOffset(0)] public ushort vt;
     [FieldOffset(8)] public IntPtr pointer;
 
-    public readonly string? AsString() => vt == 31 /* VT_LPWSTR */ ? Marshal.PtrToStringUni(pointer) : null;
-
     [DllImport("ole32.dll")]
     public static extern int PropVariantClear(ref PropVariant pvar);
 }

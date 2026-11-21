@@ -3,7 +3,7 @@ using System.Net.Http;
 namespace Isle.Core;
 
 /// <summary>HttpClient created on first use and disposed after <paramref name="idle"/> without requests (spec: heavy resources are lazy).</summary>
-public sealed class IdleHttp(TimeSpan? idle = null) : IDisposable
+public sealed class IdleHttp(TimeSpan? idle = null) : Modules.Lyrics.ILyricsHttp, IDisposable
 {
     readonly TimeSpan _idle = idle ?? TimeSpan.FromMinutes(2);
     readonly object _gate = new();

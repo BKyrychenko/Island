@@ -251,29 +251,12 @@ public sealed class AiPopupView : Grid, ITabView
         return t.Length > 160 ? t[..160] + "…" : t;
     }
 
-    static TextBlock Hint(string text)
-    {
-        var t = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(StyleProperty, "TextDim");
-        return t;
-    }
+    static TextBlock Hint(string text) => Ui.Dim(text, wrap: true);
 
     static FrameworkElement Spaced(FrameworkElement e) { e.Margin = new Thickness(6, 0, 0, 0); return e; }
 
-    static Button Small(string key, Action click, bool accent = false)
-    {
-        var b = new Button { Content = Strings.T(key), Padding = new Thickness(12, 3, 12, 3), MinHeight = 28 };
-        b.SetResourceReference(StyleProperty, accent ? "AccentButton" : "FlatButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("ai popup", ex); } };
-        return b;
-    }
+    static Button Small(string key, Action click, bool accent = false) =>
+        Ui.TextButton(Strings.T(key), accent ? "AccentButton" : "FlatButton", new Thickness(12, 3, 12, 3), click, "ai popup", minHeight: 28);
 
-    static Button IconAction(string icon, string tipKey, Action click)
-    {
-        var b = new Button { Width = 28, Height = 28, ToolTip = Strings.T(tipKey), Content = MarkdownView.SmallIcon(icon, 15) };
-        System.Windows.Automation.AutomationProperties.SetName(b, Strings.T(tipKey));
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("ai popup", ex); } };
-        return b;
-    }
+    static Button IconAction(string icon, string tipKey, Action click) => Ui.IconAction(icon, tipKey, click, "ai popup");
 }

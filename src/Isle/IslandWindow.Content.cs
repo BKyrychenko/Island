@@ -122,7 +122,6 @@ public partial class IslandWindow
 
     /// <summary>The view of a tab if it has been created.</summary>
     public FrameworkElement? TabViewFor(string id) => _views.GetValueOrDefault(id);
-    public string? CurrentTab => _currentTab;
 
     /// <summary>Asks for this tab to be shown the next time the island expands (e.g. Music after a track change).</summary>
     public void RequestTab(string id) => _requestedTab = id;

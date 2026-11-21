@@ -157,10 +157,9 @@ public sealed class TimerDoneBanner : Grid
 
     internal static Button BannerButton(string key, bool accent, Action click)
     {
-        var b = new Button { Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(10, 3, 10, 3), MinHeight = 26 };
-        b.SetResourceReference(StyleProperty, accent ? "AccentButton" : "FlatButton");
-        b.SetBinding(ContentControl.ContentProperty, new System.Windows.Data.Binding($"[{key}]") { Source = Strings.Instance });
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("banner button", ex); } };
+        var b = Ui.TextButton("", accent ? "AccentButton" : "FlatButton", new Thickness(10, 3, 10, 3), click, "banner button", minHeight: 26);
+        b.Margin = new Thickness(6, 0, 0, 0);
+        b.SetBinding(ContentControl.ContentProperty, Ui.Loc(key));
         return b;
     }
 }

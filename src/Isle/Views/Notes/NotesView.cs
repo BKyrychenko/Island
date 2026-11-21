@@ -67,7 +67,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         _search.MinHeight = 28;
         _search.TextChanged += (_, _) => { _searchHint.Visibility = _search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; RebuildList(); };
         _searchHint.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        _searchHint.SetBinding(TextBlock.TextProperty, Loc("notes.search"));
+        _searchHint.SetBinding(TextBlock.TextProperty, Ui.Loc("notes.search"));
         searchHost.Children.Add(_search);
         searchHost.Children.Add(_searchHint);
         searchRow.Children.Add(searchHost);
@@ -122,7 +122,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         _editor.PreviewMouseLeftButtonUp += OnEditorClick;
         _editor.PreviewKeyDown += OnEditorKey;
         _editorHint.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        _editorHint.SetBinding(TextBlock.TextProperty, Loc("notes.startTyping"));
+        _editorHint.SetBinding(TextBlock.TextProperty, Ui.Loc("notes.startTyping"));
         var editorHost = new Grid();
         editorHost.Children.Add(_editor);
         editorHost.Children.Add(_editorHint);
@@ -130,7 +130,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         SetRow(editorHost, 1);
         right.Children.Add(editorHost);
         _empty.SetResourceReference(StyleProperty, "TextDim");
-        _empty.SetBinding(TextBlock.TextProperty, Loc("notes.none"));
+        _empty.SetBinding(TextBlock.TextProperty, Ui.Loc("notes.none"));
         SetRow(_empty, 1);
         right.Children.Add(_empty);
         Children.Add(right);
@@ -148,18 +148,10 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         Open(Settings.Current.Opt("notes.last"));
     }
 
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
-
     static Button SmallButton(string icon, string tip, Action click)
     {
-        var b = new Button { Width = 28, Height = 28 };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        var i = new Icon { Width = 15, Height = 15 };
-        i.SetResourceReference(Icon.DataProperty, icon);
-        i.SetResourceReference(Icon.ForegroundProperty, "FgDimBrush");
-        b.Content = i;
-        b.SetBinding(ToolTipProperty, Loc(tip));
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("notes button", ex); } };
+        var b = Ui.IconButton(Ui.MakeIcon(icon, 15), 28, click, "notes button");
+        b.SetBinding(ToolTipProperty, Ui.Loc(tip));
         return b;
     }
 
@@ -170,7 +162,7 @@ public sealed class NotesView : Grid, ITabView, IDisposable
         t.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
         var b = new Button { Width = 26, Height = 26, Content = t };
         b.SetResourceReference(StyleProperty, "IconButton");
-        b.SetBinding(ToolTipProperty, Loc(tip));
+        b.SetBinding(ToolTipProperty, Ui.Loc(tip));
         b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("notes format", ex); } };
         return b;
     }

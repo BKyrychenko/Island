@@ -9,18 +9,15 @@ internal static partial class Native
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TRANSPARENT = 0x20;
     public const int WS_EX_TOOLWINDOW = 0x80;
-    public const int WS_EX_LAYERED = 0x80000;
     public const int WS_EX_NOACTIVATE = 0x08000000;
     public const int WS_POPUP = unchecked((int)0x80000000);
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
     public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
 
-    public const int WM_DESTROY = 0x0002;
     public const int WM_SETTINGCHANGE = 0x001A;
     public const int WM_MOUSEACTIVATE = 0x0021;
     public const int WM_DISPLAYCHANGE = 0x007E;
-    public const int WM_COMMAND = 0x0111;
     public const int WM_DPICHANGED = 0x02E0;
     public const int WM_HOTKEY = 0x0312;
     public const int WM_USER = 0x0400;
@@ -67,7 +64,6 @@ internal static partial class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int RegisterWindowMessage(string lpString);
 
-    public const int GWL_STYLE = -16;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -94,9 +90,6 @@ internal static partial class Native
 
     [DllImport("shell32.dll")]
     public static extern int SHQueryUserNotificationState(out int state);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
     // ---- hotkeys / keyboard ----
     public const uint MOD_ALT = 1, MOD_CONTROL = 2, MOD_SHIFT = 4, MOD_WIN = 8, MOD_NOREPEAT = 0x4000;
@@ -141,7 +134,7 @@ internal static partial class Native
     }
 
     public const uint MONITORINFOF_PRIMARY = 1;
-    public const uint MONITOR_DEFAULTTOPRIMARY = 1, MONITOR_DEFAULTTONEAREST = 2;
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -163,9 +156,6 @@ internal static partial class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
 
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);

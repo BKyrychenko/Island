@@ -455,21 +455,7 @@ public sealed class AiChatView : Grid, ITabView
 
     void ShowOverlay(string titleKey, FrameworkElement body, FrameworkElement? extra = null)
     {
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var head = new DockPanel { Margin = new Thickness(0, -2, 0, 4) };
-        var close = IconAction("Icon.Close", "ai.close", HideOverlay);
-        DockPanel.SetDock(close, Dock.Right);
-        head.Children.Add(close);
-        if (extra is not null) { DockPanel.SetDock(extra, Dock.Right); head.Children.Add(extra); }
-        var t = new TextBlock { Text = Strings.T(titleKey), VerticalAlignment = VerticalAlignment.Center };
-        t.SetResourceReference(StyleProperty, "TextTitle");
-        head.Children.Add(t);
-        grid.Children.Add(head);
-        SetRow(body, 1);
-        grid.Children.Add(body);
-        _overlay.Child = grid;
+        _overlay.Child = Ui.OverlayFrame(new TextBlock { Text = Strings.T(titleKey) }, body, IconAction("Icon.Close", "ai.close", HideOverlay), extra, 4);
         _overlay.Visibility = Visibility.Visible;
     }
 
@@ -608,27 +594,10 @@ public sealed class AiChatView : Grid, ITabView
         catch (Exception ex) { Logger.Error("ai copy", ex); }
     }
 
-    static TextBlock Dim(string text)
-    {
-        var t = new TextBlock { Text = text };
-        t.SetResourceReference(StyleProperty, "TextDim");
-        return t;
-    }
+    static TextBlock Dim(string text) => Ui.Dim(text);
 
-    static Button Small(string key, Action click, bool accent = false)
-    {
-        var b = new Button { Content = Strings.T(key), Padding = new Thickness(12, 3, 12, 3), MinHeight = 28 };
-        b.SetResourceReference(StyleProperty, accent ? "AccentButton" : "FlatButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("ai action", ex); } };
-        return b;
-    }
+    static Button Small(string key, Action click, bool accent = false) =>
+        Ui.TextButton(Strings.T(key), accent ? "AccentButton" : "FlatButton", new Thickness(12, 3, 12, 3), click, "ai action", minHeight: 28);
 
-    static Button IconAction(string icon, string tipKey, Action click)
-    {
-        var b = new Button { Width = 28, Height = 28, ToolTip = Strings.T(tipKey), Content = MarkdownView.SmallIcon(icon, 15) };
-        System.Windows.Automation.AutomationProperties.SetName(b, Strings.T(tipKey));
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("ai action", ex); } };
-        return b;
-    }
+    static Button IconAction(string icon, string tipKey, Action click) => Ui.IconAction(icon, tipKey, click, "ai action");
 }

@@ -120,11 +120,5 @@ public static class MarkdownView
         return border;
     }
 
-    public static Icon SmallIcon(string key, double size = 13, string brush = "FgDimBrush")
-    {
-        var i = new Icon { Width = size, Height = size };
-        i.SetResourceReference(Icon.DataProperty, key);
-        i.SetResourceReference(Icon.ForegroundProperty, brush);
-        return i;
-    }
+    public static Icon SmallIcon(string key, double size = 13, string brush = "FgDimBrush") => Ui.MakeIcon(key, size, brush);
 }

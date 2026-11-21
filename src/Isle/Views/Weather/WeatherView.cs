@@ -297,20 +297,9 @@ public sealed class WeatherView : Grid, ITabView
 
     // ---- small builders ----
 
-    static Icon WxIcon(string key, double size, string brush = "FgBrush")
-    {
-        var i = new Icon { Width = size, Height = size, Stroke = 1.6 };
-        i.SetResourceReference(Icon.DataProperty, key);
-        i.SetResourceReference(Icon.ForegroundProperty, brush);
-        return i;
-    }
+    static Icon WxIcon(string key, double size, string brush = "FgBrush") => Ui.MakeIcon(key, size, brush, stroke: 1.6);
 
-    static TextBlock Dim(string text)
-    {
-        var t = new TextBlock { Text = text };
-        t.SetResourceReference(StyleProperty, "TextDim");
-        return t;
-    }
+    static TextBlock Dim(string text) => Ui.Dim(text);
 
     static RadioButton Radio(string key, bool on, Action click)
     {
@@ -328,19 +317,13 @@ public sealed class WeatherView : Grid, ITabView
         return chip;
     }
 
-    static Button Small(string key, Action click)
-    {
-        var b = new Button { Content = Strings.T(key), Padding = new Thickness(12, 4, 12, 4), MinHeight = 30 };
-        b.SetResourceReference(StyleProperty, "FlatButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("weather action", ex); } };
-        return b;
-    }
+    static Button Small(string key, Action click) =>
+        Ui.TextButton(Strings.T(key), "FlatButton", new Thickness(12, 4, 12, 4), click, "weather action", minHeight: 30);
 
     static Button IconAction(string icon, string tipKey, Action click)
     {
-        var b = new Button { Width = 28, Height = 28, ToolTip = Strings.T(tipKey), Content = WxIcon(icon, 15, "FgDimBrush") };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("weather action", ex); } };
+        var b = Ui.IconButton(WxIcon(icon, 15, "FgDimBrush"), 28, click, "weather action");
+        b.ToolTip = Strings.T(tipKey);
         return b;
     }
 }

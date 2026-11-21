@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -53,7 +52,7 @@ public sealed partial class LyricsService : IDisposable
 
     public LyricsService(ILyricsHttp? http = null, string? cacheDir = null, Func<DateTimeOffset>? now = null)
     {
-        _http = http ?? new LrclibHttp();
+        _http = http ?? new IdleHttp();
         _cacheDir = cacheDir ?? Path.Combine(Paths.Root, "lyrics");
         _now = now ?? (() => DateTimeOffset.Now);
     }
@@ -205,63 +204,4 @@ public sealed partial class LyricsService : IDisposable
     }
 
     public void Dispose() => (_http as IDisposable)?.Dispose();
-}
-
-/// <summary>Real LRCLIB HTTP client: created lazily, disposed after 2 minutes idle. Sends a descriptive User-Agent as LRCLIB asks.</summary>
-sealed class LrclibHttp : ILyricsHttp, IDisposable
-{
-    HttpClient? _client;
-    Timer? _idle;
-    readonly object _gate = new();
-
-    public async Task<(int Status, string Body)> GetAsync(string url, CancellationToken ct)
-    {
-        HttpClient client;
-        lock (_gate)
-        {
-            _client ??= CreateClient();
-            client = _client;
-            _idle ??= new Timer(_ => ReleaseClient());
-            _idle.Change(TimeSpan.FromMinutes(2), Timeout.InfiniteTimeSpan);
-        }
-        try
-        {
-            using var resp = await client.GetAsync(url, ct).ConfigureAwait(false);
-            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            return ((int)resp.StatusCode, body);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex)
-        {
-            Logger.Warn($"lyrics request failed: {ex.GetType().Name}");
-            return (0, "");
-        }
-    }
-
-    static HttpClient CreateClient()
-    {
-        var c = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("Isle/1.0 (Windows desktop overlay; personal use)");
-        return c;
-    }
-
-    void ReleaseClient()
-    {
-        lock (_gate)
-        {
-            _client?.Dispose();
-            _client = null;
-        }
-    }
-
-    public void Dispose()
-    {
-        lock (_gate)
-        {
-            _idle?.Dispose();
-            _idle = null;
-            _client?.Dispose();
-            _client = null;
-        }
-    }
 }

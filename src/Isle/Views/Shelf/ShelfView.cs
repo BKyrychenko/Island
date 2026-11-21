@@ -45,9 +45,9 @@ public sealed class ShelfView : Grid, ITabView
         _removeAfter.SetResourceReference(StyleProperty, "Chip");
         var removeLabel = new TextBlock();
         var removeStyle = new Style(typeof(TextBlock));
-        removeStyle.Setters.Add(new Setter(TextBlock.TextProperty, Loc("shelf.removeAfterDropOff")));
+        removeStyle.Setters.Add(new Setter(TextBlock.TextProperty, Ui.Loc("shelf.removeAfterDropOff")));
         var enabled = new DataTrigger { Binding = new System.Windows.Data.Binding(nameof(ToggleButton.IsChecked)) { Source = _removeAfter }, Value = true };
-        enabled.Setters.Add(new Setter(TextBlock.TextProperty, Loc("shelf.removeAfterDropOn")));
+        enabled.Setters.Add(new Setter(TextBlock.TextProperty, Ui.Loc("shelf.removeAfterDropOn")));
         removeStyle.Triggers.Add(enabled);
         removeLabel.Style = removeStyle;
         _removeAfter.Content = removeLabel;
@@ -70,13 +70,13 @@ public sealed class ShelfView : Grid, ITabView
         SetRow(scroll, 1);
         Children.Add(scroll);
         _empty.SetResourceReference(StyleProperty, "TextDim");
-        _empty.SetBinding(TextBlock.TextProperty, Loc("shelf.empty"));
+        _empty.SetBinding(TextBlock.TextProperty, Ui.Loc("shelf.empty"));
         SetRow(_empty, 1);
         Children.Add(_empty);
         _dropHint.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
         _dropHint.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
         var hint = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold };
-        hint.SetBinding(TextBlock.TextProperty, Loc("shelf.drop"));
+        hint.SetBinding(TextBlock.TextProperty, Ui.Loc("shelf.drop"));
         _dropHint.Child = hint;
         // opaque underlay so the tiles don't show through the translucent accent
         _dropHintHost.SetResourceReference(Border.BackgroundProperty, "BgBrush");
@@ -87,7 +87,7 @@ public sealed class ShelfView : Grid, ITabView
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 2, 4, 2) };
         error.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
-        error.SetBinding(TextBlock.TextProperty, Loc("shelf.saveFailed"));
+        error.SetBinding(TextBlock.TextProperty, Ui.Loc("shelf.saveFailed"));
         SetRow(error, 2);
         Children.Add(error);
         void UpdateError() => error.Visibility = _store.SaveFailed ? Visibility.Visible : Visibility.Collapsed;
@@ -247,18 +247,11 @@ public sealed class ShelfView : Grid, ITabView
         return src;
     }
 
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
-
     static Button SmallButton(string icon, string tip, Action click)
     {
-        var b = new Button { Width = 28, Height = 28, Margin = new Thickness(2, 0, 0, 0) };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        var i = new Icon { Width = 15, Height = 15 };
-        i.SetResourceReference(Icon.DataProperty, icon);
-        i.SetResourceReference(Icon.ForegroundProperty, "FgDimBrush");
-        b.Content = i;
-        b.SetBinding(ToolTipProperty, Loc(tip));
-        b.Click += (_, _) => { try { click(); } catch (Exception ex) { Logger.Error("shelf button", ex); } };
+        var b = Ui.IconButton(Ui.MakeIcon(icon, 15), 28, click, "shelf button");
+        b.Margin = new Thickness(2, 0, 0, 0);
+        b.SetBinding(ToolTipProperty, Ui.Loc(tip));
         return b;
     }
 }

@@ -41,7 +41,7 @@ public sealed class ClipboardView : Grid, ITabView
         _search.MinHeight = 28;
         _search.TextChanged += (_, _) => { _shown = 60; _searchHint.Visibility = _search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Rebuild(); };
         _searchHint.SetResourceReference(TextBlock.ForegroundProperty, "FgFaintBrush");
-        _searchHint.SetBinding(TextBlock.TextProperty, Loc("clip.search"));
+        _searchHint.SetBinding(TextBlock.TextProperty, Ui.Loc("clip.search"));
         searchHost.Children.Add(_search);
         searchHost.Children.Add(_searchHint);
         top.Children.Add(searchHost);
@@ -50,7 +50,7 @@ public sealed class ClipboardView : Grid, ITabView
         _scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _list };
         var pasteHint = new TextBlock { FontSize = 11, Margin = new Thickness(4, 0, 4, 6), TextWrapping = TextWrapping.Wrap };
         pasteHint.SetResourceReference(TextBlock.ForegroundProperty, "FgDimBrush");
-        pasteHint.SetBinding(TextBlock.TextProperty, Loc("clip.clickToPaste"));
+        pasteHint.SetBinding(TextBlock.TextProperty, Ui.Loc("clip.clickToPaste"));
         SetRow(pasteHint, 1);
         Children.Add(pasteHint);
         SetRow(_scroll, 2);
@@ -64,7 +64,7 @@ public sealed class ClipboardView : Grid, ITabView
         {
             if (_store.SaveErrorKey is { } key)
             {
-                error.SetBinding(TextBlock.TextProperty, Loc(key));
+                error.SetBinding(TextBlock.TextProperty, Ui.Loc(key));
                 error.Visibility = Visibility.Visible;
             }
             else error.Visibility = Visibility.Collapsed;
@@ -104,7 +104,7 @@ public sealed class ClipboardView : Grid, ITabView
             {
                 var more = new Button { Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Stretch };
                 more.SetResourceReference(StyleProperty, "GhostButton");
-                more.SetBinding(ContentControl.ContentProperty, Loc("clip.showMore"));
+                more.SetBinding(ContentControl.ContentProperty, Ui.Loc("clip.showMore"));
                 more.Click += (_, _) =>
                 {
                     var next = _shown;
@@ -164,7 +164,7 @@ public sealed class ClipboardView : Grid, ITabView
         var b = new Button { Content = row, Padding = new Thickness(8, 4, 4, 4), Margin = new Thickness(0, 0, 0, 2), MinHeight = 0 };
         b.SetResourceReference(StyleProperty, "GhostButton");
         b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        b.SetBinding(ToolTipProperty, Loc("clip.clickToPaste"));
+        b.SetBinding(ToolTipProperty, Ui.Loc("clip.clickToPaste"));
         b.Click += (_, _) => { if (_store.Find(id) is { } x) _paste(x); };
         return b;
     }
@@ -194,18 +194,11 @@ public sealed class ClipboardView : Grid, ITabView
         return t.ToLocalTime().ToString("d MMM", System.Globalization.CultureInfo.GetCultureInfo(Strings.Language == "uk" ? "uk-UA" : "en-US"));
     }
 
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
-
     static Button SmallButton(string icon, string tip, Action click, string? brush = null)
     {
-        var b = new Button { Width = 26, Height = 26, Margin = new Thickness(1, 0, 0, 0) };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        var i = new Icon { Width = 14, Height = 14 };
-        i.SetResourceReference(Icon.DataProperty, icon);
-        i.SetResourceReference(Icon.ForegroundProperty, brush ?? "FgDimBrush");
-        b.Content = i;
-        b.SetBinding(ToolTipProperty, Loc(tip));
-        b.Click += (_, e) => { e.Handled = true; try { click(); } catch (Exception ex) { Logger.Error("clipboard button", ex); } };
+        var b = Ui.IconButton(Ui.MakeIcon(icon, 14, brush ?? "FgDimBrush"), 26, click, "clipboard button", handled: true);
+        b.Margin = new Thickness(1, 0, 0, 0);
+        b.SetBinding(ToolTipProperty, Ui.Loc(tip));
         return b;
     }
 }

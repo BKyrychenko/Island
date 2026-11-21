@@ -72,10 +72,10 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         icon.SetResourceReference(Icon.ForegroundProperty, "FgFaintBrush");
         var title = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center };
         title.SetResourceReference(StyleProperty, "TextTitle");
-        title.SetBinding(TextBlock.TextProperty, Loc("music.nothing"));
+        title.SetBinding(TextBlock.TextProperty, Ui.Loc("music.nothing"));
         var hint = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) };
         hint.SetResourceReference(StyleProperty, "TextDim");
-        hint.SetBinding(TextBlock.TextProperty, Loc("music.nothingHint"));
+        hint.SetBinding(TextBlock.TextProperty, Ui.Loc("music.nothingHint"));
         _empty.Children.Add(icon);
         _empty.Children.Add(title);
         _empty.Children.Add(hint);
@@ -122,7 +122,7 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         transport.Children.Add(_next);
 
         _lyricsToggle.SetResourceReference(StyleProperty, "Chip");
-        _lyricsToggle.SetBinding(ContentControl.ContentProperty, Loc("music.lyrics"));
+        _lyricsToggle.SetBinding(ContentControl.ContentProperty, Ui.Loc("music.lyrics"));
         _lyricsToggle.HorizontalAlignment = HorizontalAlignment.Right;
         _lyricsToggle.VerticalAlignment = VerticalAlignment.Bottom;
         _lyricsToggle.Margin = new Thickness(0, 0, 0, 6);
@@ -134,7 +134,7 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         // lyrics panel (same area as the info column)
         _lyricsMessage.SetResourceReference(StyleProperty, "TextDim");
         _lyricsMessage.TextTrimming = TextTrimming.None;
-        _retryLyrics.SetBinding(ContentControl.ContentProperty, Loc("music.lyricsRetry"));
+        _retryLyrics.SetBinding(ContentControl.ContentProperty, Ui.Loc("music.lyricsRetry"));
         _retryLyrics.Click += (_, _) => _lyrics.Retry();
         var lyricsStatus = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         lyricsStatus.Children.Add(_lyricsMessage);
@@ -182,7 +182,7 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         _progress.PreviewMouseLeftButtonDown += (_, _) => _dragging = true;
         _progress.PreviewMouseLeftButtonUp += (_, _) => Dispatcher.BeginInvoke(CommitSeek, DispatcherPriority.Input);
         _progress.LostMouseCapture += (_, _) => { if (_dragging) Dispatcher.BeginInvoke(CommitSeek, DispatcherPriority.Input); };
-        _progress.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, Loc("music.progress"));
+        _progress.SetBinding(System.Windows.Automation.AutomationProperties.NameProperty, Ui.Loc("music.progress"));
         _progress.ValueChanged += (_, _) =>
         {
             if (_updatingProgress) return;
@@ -198,11 +198,9 @@ public sealed class MusicView : Grid, ITabView, IDisposable
         var icon = new Icon { Width = iconSize, Height = iconSize, Filled = true };
         icon.SetResourceReference(Icon.DataProperty, iconKey);
         b.Content = icon;
-        b.SetBinding(ToolTipProperty, Loc(tipKey));
+        b.SetBinding(ToolTipProperty, Ui.Loc(tipKey));
         return b;
     }
-
-    static System.Windows.Data.Binding Loc(string key) => new($"[{key}]") { Source = Strings.Instance };
 
     void CommitSeek()
     {

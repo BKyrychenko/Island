@@ -83,7 +83,7 @@ public class VpnDetectorTests
         try
         {
             var result = await VpnDetector.RunAsync(exe,
-                ["-NoProfile", "-NonInteractive", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile.Replace("'", "''")}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(3));
+                ["-NoProfile", "-NonInteractive", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile.Replace("'", "''")}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(8)); // PowerShell can take seconds to start on a busy machine
             Assert.False(result.Ok);
             Assert.Equal("timeout", result.Output);
             Assert.True(File.Exists(pidFile), "The harmless stub must start before the timeout.");

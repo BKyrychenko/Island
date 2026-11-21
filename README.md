@@ -202,17 +202,18 @@ A **log watcher** can also follow your log files and show the first new `ERROR` 
 
 - Windows 10 (19041) or Windows 11, x64
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- `rustc` 1.85+ with the `x86_64-pc-windows-msvc` target (for the small launcher)
-- Visual Studio C++ Build Tools with a Windows SDK
+- Optional: `rustc` 1.85+ with the `x86_64-pc-windows-msvc` target and the Visual Studio C++ Build Tools, for the
+  small `Isle.Launcher.exe`. Without them the build script skips it and you start `Isle.exe` directly.
 
 ### Build and run
 
 ```powershell
 git clone https://github.com/BKyrychenko/island.git
 cd island
-.\scripts\build.ps1                               # build, test and publish into dist\
-.\dist\Isle\Isle.Launcher.exe                     # needs the .NET 10 Desktop Runtime
-.\dist\Isle-selfcontained\Isle.Launcher.exe       # or the self-contained build
+.\scripts\build.ps1                    # build, test and publish into dist\
+.\scripts\build.ps1 -Edition Dev       # the same for the developer edition
+.\dist\Isle\Isle.exe                   # needs the .NET 10 Desktop Runtime
+.\dist\Isle-selfcontained\Isle.exe     # or the self-contained build
 ```
 
 Copy the whole `dist\Isle` (or `dist\Isle-selfcontained`) folder somewhere permanent before you enable

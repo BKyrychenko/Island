@@ -182,7 +182,8 @@ public sealed class TabBar : Grid
             var rb = new RadioButton { Content = content, Tag = label, GroupName = "IsleTabs" + GetHashCode(), ToolTip = Strings.T(tab.TitleKey) };
             rb.SetResourceReference(StyleProperty, "TabButton");
             var id = tab.Id;
-            rb.Click += (_, _) =>
+            // Checked, not Click: keyboard, mouse and UI Automation (screen readers' "select") all switch the tab
+            rb.Checked += (_, _) =>
             {
                 if (_selected == id) return;
                 _selected = id;

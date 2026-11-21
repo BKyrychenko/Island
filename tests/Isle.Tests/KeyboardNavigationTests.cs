@@ -12,6 +12,8 @@ using Isle.Views.Tools;
 
 namespace Isle.Tests;
 
+// real keyboard focus: must not run beside other WPF windows
+[Collection(nameof(GlobalSettingsTests))]
 public class KeyboardNavigationTests
 {
     [Fact]
@@ -53,9 +55,10 @@ public class KeyboardNavigationTests
                 var radios = Descendants(view).OfType<RadioButton>().Take(3).ToArray();
                 foreach (var (theme, radio) in new[] { ("Light", radios[1]), ("System", radios[2]), ("Dark", radios[0]) })
                 {
-                    Assert.True(radio.Focus());
-                    foreach (var keyEvent in new[] { Keyboard.KeyDownEvent, Keyboard.KeyUpEvent })
-                        radio.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, Key.Space) { RoutedEvent = keyEvent });
+                    Assert.True(FocusHelp.Take(source, radio));
+                    // select the way a keyboard user's screen reader does; a synthetic Space press needs mouse
+                    // capture, which Windows only grants to the foreground window, so it fails while someone works
+                    ((System.Windows.Automation.Provider.ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(radio)).Select();
                     Assert.Equal(theme, settings.Theme);
                     Assert.True(radio.IsChecked);
                     Assert.Same(radio, Keyboard.FocusedElement);

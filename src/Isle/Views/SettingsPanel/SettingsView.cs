@@ -478,7 +478,7 @@ public sealed class SettingsView : Grid, ITabView
             var r = new RadioButton { Content = text, IsChecked = string.Equals(v, current, StringComparison.OrdinalIgnoreCase), GroupName = group, Margin = new Thickness(4, 0, 0, 0) };
             r.SetResourceReference(StyleProperty, "ChipRadio");
             r.Padding = new Thickness(9, 3, 9, 3);
-            r.Click += (_, _) =>
+            r.Checked += (_, _) => // also fires for keyboard and UI Automation selection, unlike Click
             {
                 if (string.Equals(v, current, StringComparison.OrdinalIgnoreCase)) return;
                 current = v;

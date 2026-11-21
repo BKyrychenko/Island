@@ -11,6 +11,8 @@ using Isle.Views.Shelf;
 
 namespace Isle.Tests;
 
+// real keyboard focus and Settings.Current: must not run beside other WPF windows or settings tests
+[Collection(nameof(GlobalSettingsTests))]
 public class NotesShelfViewTests
 {
     [Fact]
@@ -74,17 +76,15 @@ public class NotesShelfViewTests
                 var scroll = (ScrollViewer)left.Children[2];
                 var rows = (StackPanel)scroll.Content;
                 var search = ((Grid)((DockPanel)left.Children[0]).Children[2]).Children.OfType<TextBox>().Single();
-                Keyboard.Focus(search);
+                Assert.True(FocusHelp.Take(source, search));
                 var focused = Keyboard.FocusedElement;
-                Assert.Same(search, focused);
                 view.OnShown();
                 Assert.True(sink.PumpUntil(() => scroll.VerticalOffset > 0));
                 Assert.Same(focused, Keyboard.FocusedElement);
                 var row = rows.Children.OfType<Button>().Single(b => Equals(b.Tag, active.Id));
                 Assert.InRange(row.TranslatePoint(new Point(), scroll).Y, 0, scroll.ActualHeight);
 
-                row.Focus();
-                Assert.Same(row, Keyboard.FocusedElement);
+                Assert.True(FocusHelp.Take(source, row));
                 store.SetPinned(active.Id, true);
                 Assert.NotSame(row, rows.Children.OfType<Button>().Single(b => Equals(b.Tag, active.Id)));
                 Assert.Equal(active.Id, Assert.IsType<Button>(Keyboard.FocusedElement).Tag);

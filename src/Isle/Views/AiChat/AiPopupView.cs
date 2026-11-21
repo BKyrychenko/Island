@@ -104,7 +104,11 @@ public sealed class AiPopupView : Grid, ITabView
             if (a is TextAction.TranslateEn or TextAction.TranslateUk or TextAction.TranslateNl) r.ToolTip = Strings.T("ta.translate");
             r.SetResourceReference(StyleProperty, "ChipRadio");
             var action = a;
-            r.Click += (_, _) => _ = Run(action);
+            // Checked runs a newly selected action from any input (mouse, keyboard, UI Automation); Click on the
+            // already selected chip runs it again. A click that just checked the chip is not run twice.
+            var justChecked = false;
+            r.Checked += (_, _) => { justChecked = true; Dispatcher.BeginInvoke(() => justChecked = false); _ = Run(action); };
+            r.Click += (_, _) => { if (!justChecked) _ = Run(action); };
             _chips.Children.Add(r);
         }
     }

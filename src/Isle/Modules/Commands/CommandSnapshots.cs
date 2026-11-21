@@ -23,7 +23,13 @@ static class CommandSnapshots
         ]);
         states["command-system"] = w => Show(w, "shut", new SystemProvider().QueryAsync("shut", default).Result);
         states["command-empty"] = w => Show(w, "", []);
+        const string jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MiIsIm5hbWUiOiJBZGEiLCJleHAiOjE3NjcyMjU2MDB9.sig";
+        states["command-dev-jwt"] = w => Show(w, jwt, Dev(jwt));
+        states["command-dev-color"] = w => Show(w, "#ff8800", Dev("#ff8800"));
     }
+
+    static IEnumerable<CommandItem> Dev(string text) =>
+        new DevToolsProvider(_ => { }, () => new DateTimeOffset(2026, 11, 21, 10, 0, 0, TimeSpan.Zero)).QueryAsync(text, default).Result;
 
     static IEnumerable<CommandItem> Calculate(string text) => new CalculatorProvider(_ => { }).QueryAsync(text, default).Result;
 

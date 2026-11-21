@@ -13,3 +13,4 @@ DONE.flag.tmp
 
 # local scratch copy of the audit (duplicate of docs/SOFTWARE-AUDIT.md)
 Claude outputs/
+!src/Isle/Modules/Logs/

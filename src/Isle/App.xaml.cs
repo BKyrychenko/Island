@@ -85,6 +85,10 @@ public partial class App : Application
             Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
             Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
             Host.Register("agents", () => new Modules.Agents.AgentsModule(Island!));
+            Host.Register("sysmon", () => new Modules.SystemMonitor.SystemMonitorModule(Island!), defaultEnabled: Edition.IsDev);
+            Host.Register("ports", () => new Modules.Ports.PortsModule(Island!), defaultEnabled: Edition.IsDev);
+            Host.Register("projects", () => new Modules.Projects.ProjectsModule(Island!), defaultEnabled: Edition.IsDev);
+            Host.Register("logs", () => new Modules.Logs.LogWatchModule(Island!), defaultEnabled: Edition.IsDev);
             Host.Register("characters", () => new Modules.Characters.CharactersModule(Island!));
             Host.Sync();
             if (Island is not null) Island.SettingsRequested += () => OpenSettings();

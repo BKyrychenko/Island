@@ -98,7 +98,7 @@ public class SettingsPanelTests
                 Assert.Equal(Strings.T("set.close"), System.Windows.Automation.AutomationProperties.GetName(close));
                 view.ShowSection("options");
                 var jumps = Descendants(view).OfType<System.Windows.Controls.ComboBox>().Single();
-                Assert.Equal(12, jumps.Items.Count);
+                Assert.Equal(16, jumps.Items.Count);
                 jumps.SelectedIndex = jumps.Items.Count - 1;
             }
             finally { Strings.Language = "en"; Settings.Current.Scale = savedScale; Settings.Current.Save("Scale"); }

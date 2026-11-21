@@ -33,7 +33,7 @@ public sealed class SettingsView : Grid, ITabView
 
     /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden).</summary>
     public static readonly string[] ModuleIds =
-        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "characters", "tray"];
+        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "characters", "tray"];
 
     static Core.Settings S => Core.Settings.Current;
 
@@ -259,6 +259,22 @@ public sealed class SettingsView : Grid, ITabView
 
         OptionGroup("commands");
         Row("set.cmdFolders", TextField(S.Opt("cmd.folders"), v => { S.SetOpt("cmd.folders", v.Trim()); Save("Options", restart: "commands"); }, @"C:\Users\me\Projects"), "set.cmdFolders.hint", wide: true);
+        Row("set.cmdDev", OptSwitch("cmd.devTools", Edition.IsDev, restart: "commands"), "set.cmdDev.hint");
+
+        OptionGroup("sysmon");
+        Row("set.sysmonAlerts", OptSwitch("sysmon.alerts", true, restart: "sysmon"), "set.sysmonAlerts.hint");
+
+        OptionGroup("ports");
+        Row("set.portsNotify", OptSwitch("ports.notify", true, restart: "ports"), "set.portsNotify.hint");
+
+        OptionGroup("projects");
+        Row("set.projectsPaths", TextField(S.Opt("projects.paths"), v => { S.SetOpt("projects.paths", v.Trim()); Save("Options", restart: "projects"); }, @"C:\Users\me\Projects\app"), "set.projectsPaths.hint", wide: true);
+        Row("set.projectsBuilds", OptSwitch("projects.builds", true, restart: "projects"), "set.projectsBuilds.hint");
+        Row("set.projectsToken", SecretField("projects.githubToken", restart: "projects"), "set.projectsToken.hint");
+
+        OptionGroup("logs");
+        Row("set.logsFiles", TextField(S.Opt("logs.files"), v => { S.SetOpt("logs.files", v.Trim()); Save("Options", restart: "logs"); }, @"C:\Users\me\Projects\api\logs\app.log"), "set.logsFiles.hint", wide: true);
+        Row("set.logsPattern", TextField(S.Opt("logs.pattern", Modules.Logs.LogWatchModule.DefaultPattern), v => { S.SetOpt("logs.pattern", v.Trim()); Save("Options", restart: "logs"); }, Modules.Logs.LogWatchModule.DefaultPattern), "set.logsPattern.hint", wide: true);
 
         OptionGroup("tools");
         Row("set.recAudio", OptSwitch("rec.systemAudio", true));
@@ -551,13 +567,8 @@ public sealed class SettingsView : Grid, ITabView
 
     static Button IconButton(string icon, string tipKey, Action click)
     {
-        var b = new Button { ToolTip = Strings.T(tipKey), Width = 26, Height = 26 };
-        b.SetResourceReference(StyleProperty, "IconButton");
-        var i = new Icon { Width = 13, Height = 13 };
-        i.SetResourceReference(Icon.DataProperty, icon);
-        i.SetResourceReference(Icon.ForegroundProperty, "FgDimBrush");
-        b.Content = i;
-        b.Click += (_, _) => click();
+        var b = Ui.IconButton(Ui.MakeIcon(icon, 13), 26, click, area: null);
+        b.ToolTip = Strings.T(tipKey);
         System.Windows.Automation.AutomationProperties.SetName(b, Strings.T(tipKey));
         return b;
     }

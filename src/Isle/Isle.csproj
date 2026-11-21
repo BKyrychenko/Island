@@ -20,6 +20,11 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
+  <!-- Developer edition: dotnet build -p:Edition=Dev -->
+  <PropertyGroup Condition="'$(Edition)' == 'Dev'">
+    <DefineConstants>$(DefineConstants);DEV_EDITION</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Isle.Tests" />
     <Using Include="System.IO" />

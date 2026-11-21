@@ -51,6 +51,7 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
             new SystemProvider(),
             new WebProvider(),
             new AppsProvider(_index),
+            .. Settings.Current.OptBool("cmd.devTools", Edition.IsDev) ? [new DevToolsProvider(Copy), new Ports.PortsProvider(), new DevSystemProvider(Copy, m => island.Dispatcher.BeginInvoke(() => island.ShowToast(m)))] : Array.Empty<ICommandProvider>(),
         ];
         var view = new CommandBarView(providers, Run, island);
         _index.Updated += () => island.Dispatcher.BeginInvoke(view.Requery);

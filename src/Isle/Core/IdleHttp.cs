@@ -2,7 +2,7 @@ using System.Net.Http;
 
 namespace Isle.Core;
 
-/// <summary>HttpClient created on first use and disposed after <paramref name="idle"/> without requests (spec: heavy resources are lazy).</summary>
+/// <summary>HttpClient created on first use and disposed after <paramref name="idle"/> without requests (heavy resources are created lazily).</summary>
 public sealed class IdleHttp(TimeSpan? idle = null) : Modules.Lyrics.ILyricsHttp, IDisposable
 {
     readonly TimeSpan _idle = idle ?? TimeSpan.FromMinutes(2);

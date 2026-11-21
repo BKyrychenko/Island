@@ -1,16 +1,20 @@
 bin/
-target/
 obj/
+target/
 dist/
-logs/
+TestResults/
 .vs/
 *.user
 *.suo
-TestResults/
-graphify-out/*
-!graphify-out/GRAPH_REPORT.md
-DONE.flag.tmp
 
-# local scratch copy of the audit (duplicate of docs/SOFTWARE-AUDIT.md)
-Claude outputs/
+# local run logs (the Logs module source folder is not one)
+logs/
 !src/Isle/Modules/Logs/
+
+# local agent and tooling files
+.claude/
+CLAUDE.md
+graphify-out/
+.graphifyignore
+DONE.flag*
+Claude outputs/

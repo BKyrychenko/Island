@@ -1,6 +1,0 @@
-Isle — all milestones M0–M15 done (2026-11-15).
-- dotnet build -c Release: 0 errors; dotnet test: 535 passed.
-- build.ps1 → dist\Isle\Isle.exe (framework-dependent) and dist\Isle-selfcontained\Isle.exe; both launched and show the island.
-- Every feature in SPEC §4 implemented or marked unavailable/manual-needed in VERIFICATION.md (notifications: unavailable — needs package identity).
-- Idle: 0.29 % of one core, 25 MB working set, start-up 365–527 ms. 10-min soak: 77 cycles, no errors, memory steady.
-- Docs: README, ARCHITECTURE, VERIFICATION, DECISIONS; graph report in graphify-out/.

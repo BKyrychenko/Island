@@ -152,6 +152,28 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   (Pebb / Sprig / Kubo frozen shapes), `Views/Characters/CreatureView` (OnRender drawing, own adaptive clock, paused
   while hidden). Options `chars.kind`, `chars.inPill`, `chars.sleepMin`.
 
+### Developer modules
+On by default only in the developer edition (`-p:Edition=Dev` → `DEV_EDITION` → `Core/Edition.IsDev`); the standard
+edition lists them in Settings, switched off. Shared helpers: `Core/Cli` (run a console tool, capture stdout, timeout),
+`Core/ProcessOps` (end a process if its name still matches, open with the shell).
+
+- **System** (`sysmon`, `Modules/SystemMonitor`) — `SystemSampler` (GetSystemTimes, per-core
+  `NtQuerySystemInformation`, `GlobalMemoryStatusEx`, network interface counters, PDH for GPU engines, GPU memory and
+  disk; DXGI for total VRAM), `SystemMath` (pure), `SustainedAlert` (threshold held for a while, then a cooldown).
+  View `Views/SystemMonitor/SystemMonitorView` samples once a second only while shown. Option `sysmon.alerts`.
+- **Ports** (`ports`, `Modules/Ports`) — `PortScanner` (`GetExtendedTcpTable`, owner PIDs, session-0 flag),
+  `PortFilter` (merge per port and program, filter system processes / vendor services / dynamic ports),
+  `Containers` (`docker ps`, `wsl -l -v`, stop), `PortsProvider` (command bar `port 3000`). View `Views/Ports/PortsView`.
+  Option `ports.notify`.
+- **Projects** (`projects`, `Modules/Projects`) — `RepoParse` (git porcelain v2, GitHub remotes, Actions runs, search
+  counts), `BuildWatcher` + `BuildCommand` (recognise build/test command lines via `NtQueryInformationProcess`, keep a
+  process handle for the exit code), `ProjectsModule` (git via `Cli`, GitHub REST with an optional DPAPI token, pills).
+  View `Views/Projects/ProjectsView`. Options `projects.paths`, `projects.builds`, `projects.githubToken`.
+- **Log watcher** (`logs`, `Modules/Logs`) — `LogTail` (follow a file from its end, survive rotation, first matching
+  line), `LogWatchModule` (2 s poll, pill, 15 s quiet period). Options `logs.files`, `logs.pattern`.
+- Command bar: `DevTools` / `DevToolsProvider` (encodings, hashes, JSON, UUID, time, colours, number bases, JWT) and
+  `DevSystemProvider` (`ip`, `ping`, `flushdns`, `power …`, `ssh`), registered when `cmd.devTools` is on.
+
 ## Settings panel (`Views/SettingsPanel`)
 `SettingsView` — full-panel overlay opened by `App.OpenSettings(section?)` (tab-bar gear, tray "Settings"). Sections
 General · Modules · Options · Hotkeys · About. Writes `Settings.Current` and saves (`Settings.Changed` handlers apply

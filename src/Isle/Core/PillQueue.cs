@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace Isle.Core;
 
-/// <summary>Priorities of live activities in the collapsed pill (spec 4.1, highest first).</summary>
+/// <summary>Priorities of live activities in the collapsed pill (highest first).</summary>
 public static class PillPriority
 {
     public const int Idle = 0;

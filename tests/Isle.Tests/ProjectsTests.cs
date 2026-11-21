@@ -20,7 +20,7 @@ public class ProjectsTests
     }
 
     [Theory]
-    [InlineData("https://github.com/BKyrychenko/island.git", "BKyrychenko/island")]
+    [InlineData("https://github.com/someone/island.git", "someone/island")]
     [InlineData("https://github.com/owner/repo", "owner/repo")]
     [InlineData("git@github.com:owner/my.repo.git\n", "owner/my.repo")]
     [InlineData("ssh://git@github.com/owner/repo.git", "owner/repo")]

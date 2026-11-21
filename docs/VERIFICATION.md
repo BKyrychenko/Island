@@ -29,6 +29,21 @@ Measured the arranged WPF controls at 80% in isolated English and Ukrainian snap
 | Notes | All eleven toolbar actions fit in one row at 80% and 100%. At 80%, they retain 24 × 24 DIP hit areas and pass corner hit tests. The sidebar is 8 base DIPs narrower to recover the editor's height. |
 | Display scale | At simulated 125% and 150% display DPI, the smallest button in the overflow, Notes, Tools and Hotkeys fixtures measured 24.3 and 24.0 effective DIPs respectively. Physical monitor switching remains a manual check. |
 
+## Developer edition
+
+| Feature | Method | Result |
+|---|---|---|
+| Dev edition build (`-p:Edition=Dev`) | live | builds; 20 modules start in an isolated data folder, no errors in the log, ~28 MB working set |
+| Command bar tools (encodings, hashes, JSON, UUID, time, colours, bases, JWT) | auto-test + snapshot | ok |
+| System monitor: CPU, cores, memory, GPU, VRAM, network, disk, top processes | auto-test (math + real sampler) + snapshot + live render on this machine | ok; temperatures not included (need a driver) |
+| Overload pill (CPU or memory ≥ 90% for 30 s) | auto-test (`SustainedAlert`) + snapshot | ok |
+| Ports: listeners, merge, filters, command `port N` | auto-test + live (real listeners: Herd, nginx, php, node) | ok |
+| Docker containers / WSL distributions | auto-test (output parsers) | manual-needed — not installed here: start a container, open Ports, it is listed with Stop |
+| Projects: git status, remotes, Actions runs, review count | auto-test (parsers) + live (`git status` of this repository) | ok; GitHub API calls manual-needed: add a repository with Actions and watch a run finish |
+| Build watcher (command lines, exit code, duration) | auto-test (classifier + a real child process with exit code 3) + live (`dotnet build` detected) | ok |
+| Log watcher (new lines only, rotation, pattern) | auto-test | ok |
+| `ip`, `ping`, `flushdns`, `power`, `ssh` | auto-test (parsers) | manual-needed for the actions themselves |
+
 Every feature → how it was verified and the result.
 Methods: `auto-test` (xUnit), `snapshot` (PNG looked at), `live` (ran the real app and observed/measured),
 `manual-needed` (could not be truly exercised here — steps for the owner), `unavailable` (with reason).

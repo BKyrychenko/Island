@@ -2,6 +2,14 @@
 
 One line each: decision — why.
 
+## Developer edition
+- One codebase, two editions: `-p:Edition=Dev` defines `DEV_EDITION`, which only changes module defaults (`Edition.IsDev`). Both editions ship the same code and tests, and the standard edition can switch every developer module on in Settings.
+- System monitor reads Win32 (`GetSystemTimes`, `NtQuerySystemInformation`, `GlobalMemoryStatusEx`) and PDH for GPU and disk — no driver, no admin, no NuGet package. Temperatures would need a kernel driver and are left out.
+- Sampling runs once a second only while the System tab is on screen; in the background only CPU and memory are read, every 5 s, for the overload pill.
+- Ports come from `GetExtendedTcpTable`; listeners are merged per port and program (nginx workers are one row) and filtered: system processes, session-0 services that are not known dev servers, and the dynamic range ≥ 49152.
+- Build detection reads command lines with `NtQueryInformationProcess` (class 60) only for processes not seen before, and keeps its own process handle so the exit code survives the exit.
+- CI uses the GitHub REST API directly instead of requiring the `gh` CLI; the token is optional and stored with DPAPI like other secrets.
+
 ## WPF audit repairs
 - SW-C2 publishes a per-launch endpoint and pins the executable at hook installation. Reinstall existing hooks to upgrade the helper and refresh the pin after moving the app.
 - SW-C3 / UI-H2 presents the complete tool input, requires scrolling long inputs before Allow, and defers oversized or missing inputs to the terminal.
@@ -22,7 +30,7 @@ One line each: decision — why.
 - SW dependency weight removes the Anthropic SDK using the existing HTTP/SSE transport. Brightness support still uses WMI and the packaging script already sets ReadyToRun and single-file.
 
 ## M0
-- Repo root is the solution root (`Isle.sln` next to `SPEC.md`) — the working folder already is the dedicated project folder.
+- Repo root is the solution root (`Isle.sln` at the top level).
 - `Isle.sln` in classic `.sln` format (not `.slnx`) — matches the spec's file name and older tooling.
 - Tray icon via raw `Shell_NotifyIcon` + native popup menu, not WinForms `NotifyIcon` — avoids loading WinForms (RAM budget).
 - Tray icon pixels are generated in code (`TrayIcon.Render`) — original artwork, no asset files needed.
@@ -39,7 +47,6 @@ One line each: decision — why.
   settings class and migration for every small module option.
 - No NuGet packages in the app so far. Tests: xunit, xunit.runner.visualstudio, Microsoft.NET.Test.Sdk (standard test stack).
 - `logs/` is git-ignored — it holds the owner's run logs and my verification screenshots (`logs/shots`).
-- graphify: the preinstalled CLI shim was broken and pip could not build it on Python 3.15, so it was reinstalled with `uv tool install graphifyy --python 3.12`. Graph is rebuilt with `graphify update .` (AST only, no LLM, seconds); only `GRAPH_REPORT.md` is committed, the rest of `graphify-out/` is regenerated locally. `.graphifyignore` excludes bin/obj/dist/logs.
 
 ## M1
 - Expand/collapse uses a hand-written damped spring (`Core/Spring`, semi-implicit Euler, 240 Hz sub-steps) on `CompositionTarget.Rendering`, subscribed only while moving — easier to retarget mid-flight (hover in/out quickly) than storyboards; expand k=170/c=20.5 (≈400 ms, ~2 % overshoot), collapse k=290/c=30.6 (≈260 ms).

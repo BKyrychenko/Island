@@ -91,6 +91,7 @@ public partial class IslandWindow : Window
             }
             else if (what is "Monitor" or "") Reposition();
             ApplyExStyle();
+            UpdateShapeKind();
             UpdateIdlePill();
             UpdateHousekeeping();
             CheckForeground();

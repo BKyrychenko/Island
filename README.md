@@ -3,7 +3,7 @@
 # Isle
 
 **A Dynamic Island for Windows.**<br>
-A small always-on-top pill that shows what is going on, and opens into a panel of everyday tools when you hover it.
+A small notch that hangs from the top of the screen, shows what is going on, and opens into a panel of everyday tools when you hover it.
 
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)](#getting-started)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
@@ -223,7 +223,7 @@ For development, `dotnet build` and `dotnet test` work from the repository root.
 ### Settings
 
 The gear in the panel, or right-click the tray icon → **Settings**: theme, size, language (English / Українська),
-monitor, auto-hide at the screen edge, click-through, apps to hide behind, modules on and off, per-module options and
+shape (notch or floating pill), monitor, auto-hide at the screen edge, click-through, apps to hide behind, modules on and off, per-module options and
 hotkeys. Quit from the tray icon or with Alt+F4 while the island is focused.
 
 ## Hotkeys

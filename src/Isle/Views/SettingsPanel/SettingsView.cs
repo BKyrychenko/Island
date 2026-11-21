@@ -156,6 +156,7 @@ public sealed class SettingsView : Grid, ITabView
             Row("set.monitor", Choice(ids, selectedMonitor.ToString(CultureInfo.InvariantCulture), v => { S.Monitor = int.Parse(v, CultureInfo.InvariantCulture); S.MonitorDevice = S.Monitor >= 0 ? screens[S.Monitor].Device : ""; Save("Monitor"); },
                 v => v == "-1" ? "set.monitor.primary" : null, v => (int.Parse(v, CultureInfo.InvariantCulture) + 1).ToString(CultureInfo.InvariantCulture)));
         }
+        Row("set.shape", Choice(["notch", "pill"], S.Opt("shape", "notch") == "pill" ? "pill" : "notch", v => { S.SetOpt("shape", v); Save("Options"); }, v => "set.shape." + v));
         Row("set.clock", Switch(S.ShowClock, on => { S.ShowClock = on; Save("ShowClock"); }));
 
         Group("set.behaviour");

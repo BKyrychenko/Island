@@ -17,6 +17,10 @@ public partial class IslandWindow
 
     readonly RectangleGeometry _shape = new();
     readonly RectangleGeometry _shadow1 = new(), _shadow2 = new(), _shadow3 = new();
+    bool _notch;
+
+    /// <summary>"notch" (default): hangs from the top edge of the screen like a curtain. "pill": floats below it.</summary>
+    static bool NotchSetting() => Settings.Current.Opt("shape", "notch") != "pill";
 
     public bool IsExpanded => _expanded;
 
@@ -25,12 +29,29 @@ public partial class IslandWindow
 
     void InitMotion()
     {
+        _notch = NotchSetting();
+        UseGeometries();
+        ApplyShape();
+    }
+
+    /// <summary>Switches between the pill and the notch when the setting changes.</summary>
+    void UpdateShapeKind()
+    {
+        if (_notch == NotchSetting()) return;
+        _notch = !_notch;
+        UseGeometries();
+        ApplyShape();
+    }
+
+    void UseGeometries()
+    {
+        PillLayer.Margin = new Thickness(0, _notch ? 3 : TopGap, 0, 0); // centred in the taller notch
+        if (_notch) return; // the notch builds a new path every frame in ApplyShape
         Body.Clip = _shape;
         Outline.Data = _shape;
         Shadow1.Data = _shadow1;
         Shadow2.Data = _shadow2;
         Shadow3.Data = _shadow3;
-        ApplyShape();
     }
 
     void SetTargets(bool immediate = false)
@@ -83,14 +104,28 @@ public partial class IslandWindow
         double w = Math.Max(8, _w.Value), h = Math.Max(8, _h.Value);
         var r = Math.Min(Math.Min(h / 2, w / 2), MaxRadius);
         var rect = new Rect(BaseWidth / 2 - w / 2, TopGap, w, h);
-        _shape.Rect = rect;
-        _shape.RadiusX = _shape.RadiusY = r;
-
         var p = Math.Clamp(_e.Value, 0, 1);
         var spread = 0.7 + 0.9 * p; // bigger, softer shadow when expanded
-        SetShadow(_shadow1, rect, r, 1.0 * spread, 1.0 * spread);
-        SetShadow(_shadow2, rect, r, 2.5 * spread, 2.0 * spread);
-        SetShadow(_shadow3, rect, r, 4.5 * spread, 3.5 * spread);
+        if (_notch)
+        {
+            // flush with the top edge (a little above it, so the outline's top stroke is off-screen)
+            var notch = new Rect(rect.X, -2, rect.Width, rect.Bottom + 2);
+            var ear = 9 + 7 * p;
+            var shape = NotchGeometry(notch, r, ear);
+            Body.Clip = shape;
+            Outline.Data = shape;
+            Shadow1.Data = NotchShadow(notch, r, ear, 1.0 * spread, 1.0 * spread);
+            Shadow2.Data = NotchShadow(notch, r, ear, 2.5 * spread, 2.0 * spread);
+            Shadow3.Data = NotchShadow(notch, r, ear, 4.5 * spread, 3.5 * spread);
+        }
+        else
+        {
+            _shape.Rect = rect;
+            _shape.RadiusX = _shape.RadiusY = r;
+            SetShadow(_shadow1, rect, r, 1.0 * spread, 1.0 * spread);
+            SetShadow(_shadow2, rect, r, 2.5 * spread, 2.0 * spread);
+            SetShadow(_shadow3, rect, r, 4.5 * spread, 3.5 * spread);
+        }
 
         StageShift.Y = _shift.Value;
 
@@ -133,6 +168,34 @@ public partial class IslandWindow
         g.Rect = s;
         g.RadiusX = g.RadiusY = r + inflate;
     }
+
+    /// <summary>
+    /// A curtain hanging from the top edge: straight sides, rounded bottom corners (<paramref name="r"/>) and concave
+    /// "ears" (<paramref name="ear"/>) where the sides meet the top edge, so the shape grows out of the screen border.
+    /// </summary>
+    internal static StreamGeometry NotchGeometry(Rect rect, double r, double ear)
+    {
+        double x0 = rect.Left, x1 = rect.Right, top = rect.Top, bottom = rect.Bottom;
+        r = Math.Max(0, Math.Min(r, Math.Min(rect.Width / 2, rect.Height - ear)));
+        var g = new StreamGeometry();
+        using (var c = g.Open())
+        {
+            c.BeginFigure(new Point(x0 - ear, top), isFilled: true, isClosed: true);
+            c.QuadraticBezierTo(new Point(x0, top), new Point(x0, top + ear), true, true);
+            c.LineTo(new Point(x0, bottom - r), true, true);
+            c.ArcTo(new Point(x0 + r, bottom), new Size(r, r), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(x1 - r, bottom), true, true);
+            c.ArcTo(new Point(x1, bottom - r), new Size(r, r), 0, false, SweepDirection.Counterclockwise, true, true);
+            c.LineTo(new Point(x1, top + ear), true, true);
+            c.QuadraticBezierTo(new Point(x1, top), new Point(x1 + ear, top), true, true);
+        }
+        g.Freeze();
+        return g;
+    }
+
+    /// <summary>The notch shadow spreads sideways and down only; the top stays on the screen edge.</summary>
+    static StreamGeometry NotchShadow(Rect rect, double r, double ear, double inflate, double dy) =>
+        NotchGeometry(new Rect(rect.X - inflate, rect.Y, rect.Width + 2 * inflate, rect.Height + inflate + dy), r + inflate, ear);
 
     static double Smooth(double t) => t * t * (3 - 2 * t);
 }

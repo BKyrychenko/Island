@@ -144,7 +144,7 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   (sessions keyed by agent + session_id, states idle/working/waiting/done, pending `AgentRequest`s with a reply TCS).
   View `Views/Agents/AgentsView` (cards with Allow / Deny / In terminal, question option chips, hooks panel with
   plan + confirm), pill `AgentPill` (dot: working / waiting / done check). `HookInstaller` (plan, install, remove,
-  backup; helper copied to `%AppData%\Islein`). Options `agents.approvals`, `agents.timeout`.
+  backup; helper copied to `%AppData%\Isle\bin`). Options `agents.approvals`, `agents.timeout`.
 
 - **Characters** (`characters`, `Modules/Characters`) — `CharactersModule` (panel mascot via `IslandWindow.Tabs.Mascot`,
   optional idle-pill mascot via `IdleView.LeftSlot`, gallery overlay `Views/Characters/CharacterGallery`; subscribes to

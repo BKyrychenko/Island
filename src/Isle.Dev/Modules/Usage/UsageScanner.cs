@@ -13,8 +13,9 @@ public sealed class FileState
     /// <summary>Creation time (ticks): a different value means the path now holds another file.</summary>
     public long Created { get; set; }
     public string Session { get; set; } = "";
+    /// <summary>Claude Code's folder name for the project: the encoded full project path. Kept locally in usage.json as a fallback label.</summary>
     public string Slug { get; set; } = "";
-    /// <summary>Last folder name of the working directory (never the full path).</summary>
+    /// <summary>Last folder name of the working directory (the rest of the cwd is not kept).</summary>
     public string Cwd { get; set; } = "";
     /// <summary>First / last usage timestamp, unix ms.</summary>
     public long First { get; set; }
@@ -27,7 +28,7 @@ public sealed class FileState
 
 public sealed class UsageData
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2; // 2: dedupe across files; version 1 stores are rescanned
     public int Version { get; set; } = CurrentVersion;
     public Dictionary<string, FileState> Files { get; set; } = [];
 
@@ -38,14 +39,16 @@ public sealed class UsageData
     }
 }
 
-/// <summary>One assistant usage line. Only counters, model, time and the leaf folder of cwd: never message content.</summary>
+/// <summary>One assistant usage line. Only counters, model, time and the leaf folder of cwd are kept: never message content.</summary>
 internal readonly record struct UsageLine(string Model, long Time, string Cwd, ulong Key, Tokens Tokens);
 
-internal readonly record struct ScanStats(int Files, int FilesRead, long Messages, long Bytes);
+internal readonly record struct ScanStats(int Files, int FilesChanged, long Messages, long Bytes);
 
 internal static class UsageScanner
 {
     const int ChunkSize = 1 << 20;
+    /// <summary>Longer lines are skipped unparsed (a transcript line is a few KB to a few MB).</summary>
+    public const int MaxLine = 64 << 20;
 
     public static string DefaultProjectsDir()
     {
@@ -113,55 +116,76 @@ internal static class UsageScanner
     // ---- scanning ----
 
     /// <summary>Reads what was appended to every transcript since the last scan into <paramref name="data"/>.</summary>
-    public static ScanStats Scan(string projectsDir, UsageData data, CancellationToken ct = default)
+    public static ScanStats Scan(string projectsDir, UsageData data, CancellationToken ct = default, int maxLine = MaxLine)
     {
-        int files = 0, read = 0;
+        int files = 0, changed = 0;
         long messages = 0, bytes = 0;
         var present = new HashSet<string>(StringComparer.Ordinal);
+        var complete = true;
+        // Every counted key of every file: resumed sessions copy history into a new file, so a message is counted once overall.
+        var global = new HashSet<ulong>();
+        foreach (var f in data.Files.Values) global.UnionWith(Unpack(f.Seen));
+        var buf = new byte[Math.Min(ChunkSize, maxLine)];
         if (Directory.Exists(projectsDir))
         {
-            // ponytail: one enumeration of the whole tree; fine for a few hundred files.
-            foreach (var path in Directory.EnumerateFiles(projectsDir, "*.jsonl", SearchOption.AllDirectories))
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                var parts = Path.GetRelativePath(projectsDir, path).Split(Path.DirectorySeparatorChar);
-                // <slug>/<session>.jsonl, or <slug>/<session>/subagents/agent-*.jsonl (counted for the parent session)
-                var session = parts switch
+                // ponytail: one enumeration of the whole tree; fine for a few hundred files.
+                var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+                foreach (var path in Directory.EnumerateFiles(projectsDir, "*.jsonl", options))
                 {
-                    [_, var f] => Path.GetFileNameWithoutExtension(f),
-                    [_, var s, "subagents", _] => s,
-                    _ => null,
-                };
-                if (session is null) continue;
-                var key = string.Join('/', parts);
-                present.Add(key);
-                files++;
-                try
-                {
-                    var (n, b) = ScanFile(path, key, session, parts[0], data, ct);
-                    if (b > 0) read++;
-                    messages += n;
-                    bytes += b;
+                    ct.ThrowIfCancellationRequested();
+                    var parts = Path.GetRelativePath(projectsDir, path).Split(Path.DirectorySeparatorChar);
+                    // <slug>/<session>.jsonl, or <slug>/<session>/subagents/agent-*.jsonl (counted for the parent session)
+                    var session = parts switch
+                    {
+                        [_, var f] => Path.GetFileNameWithoutExtension(f),
+                        [_, var s, "subagents", _] => s,
+                        _ => null,
+                    };
+                    if (session is null) continue;
+                    var key = string.Join('/', parts);
+                    present.Add(key);
+                    files++;
+                    try
+                    {
+                        var (n, b, reset) = ScanFile(path, key, session, parts[0], data, global, ref buf, maxLine, ct);
+                        if (b > 0 || reset) changed++;
+                        messages += n;
+                        bytes += b;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Logger.Warn($"usage: could not read a transcript ({ex.GetType().Name})"); }
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Logger.Warn($"usage: could not read a transcript ({ex.GetType().Name})"); }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                complete = false; // the file list is unreliable: keep what we have rather than forget files we did not reach
+                Logger.Warn($"usage: could not list the transcripts ({ex.GetType().Name})");
             }
         }
-        foreach (var gone in data.Files.Keys.Where(k => !present.Contains(k)).ToList()) { data.Files.Remove(gone); read++; }
-        return new ScanStats(files, read, messages, bytes);
+        if (complete)
+            foreach (var gone in data.Files.Keys.Where(k => !present.Contains(k)).ToList()) { data.Files.Remove(gone); changed++; }
+        return new ScanStats(files, changed, messages, bytes);
     }
 
-    static (long Messages, long Bytes) ScanFile(string path, string key, string session, string slug, UsageData data, CancellationToken ct)
+    static (long Messages, long Bytes, bool Reset) ScanFile(string path, string key, string session, string slug, UsageData data,
+        HashSet<ulong> global, ref byte[] buf, int maxLine, CancellationToken ct)
     {
         var info = new FileInfo(path);
         var created = info.CreationTimeUtc.Ticks;
+        var reset = false;
         if (!data.Files.TryGetValue(key, out var st) || st.Created != created || info.Length < st.Offset)
+        {
+            reset = st is not null;
+            if (st is not null) global.ExceptWith(Unpack(st.Seen)); // its keys are counted again below
             data.Files[key] = st = new FileState { Created = created, Session = session, Slug = slug };
-        if (info.Length <= st.Offset) return (0, 0);
+        }
+        if (info.Length <= st.Offset) return (0, 0, reset);
 
         HashSet<ulong>? seen = null;
         long messages = 0, consumed = 0;
-        var buf = new byte[ChunkSize];
         var have = 0;
+        var skipping = false; // inside a line longer than maxLine
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
         try
         {
@@ -169,11 +193,23 @@ internal static class UsageScanner
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                if (have == buf.Length) Array.Resize(ref buf, buf.Length * 2); // one line longer than the buffer
+                if (have == buf.Length)
+                {
+                    if (buf.Length < maxLine) Array.Resize(ref buf, (int)Math.Min((long)buf.Length * 2, maxLine));
+                    else { consumed += have; have = 0; skipping = true; } // too long for the buffer: drop it, skip to the next newline
+                }
                 var n = fs.Read(buf, have, buf.Length - have);
                 if (n == 0) break;
                 have += n;
                 var start = 0;
+                if (skipping)
+                {
+                    var end = Array.IndexOf(buf, (byte)'\n', 0, have);
+                    if (end < 0) { consumed += have; have = 0; continue; }
+                    consumed += end + 1;
+                    start = end + 1;
+                    skipping = false;
+                }
                 int nl;
                 // Only complete lines are consumed: the last one may still be being written.
                 while ((nl = Array.IndexOf(buf, (byte)'\n', start, have - start)) >= 0)
@@ -181,7 +217,7 @@ internal static class UsageScanner
                     if (Parse(buf.AsMemory(start, nl - start)) is { } line)
                     {
                         seen ??= Unpack(st.Seen);
-                        if (Apply(st, seen, line)) messages++;
+                        if (Apply(st, seen, global, line)) messages++;
                     }
                     consumed += nl + 1 - start;
                     start = nl + 1;
@@ -196,15 +232,20 @@ internal static class UsageScanner
             st.Offset += consumed;
             if (seen is not null && messages > 0) st.Seen = MemoryMarshal.AsBytes(seen.ToArray().AsSpan()).ToArray();
         }
-        return (messages, consumed);
+        return (messages, consumed, reset);
     }
 
     static HashSet<ulong> Unpack(byte[] seen) => [.. MemoryMarshal.Cast<byte, ulong>(seen)];
 
-    /// <summary>Counts the line unless its (message.id, requestId) was seen before. False when it was a duplicate.</summary>
-    static bool Apply(FileState st, HashSet<ulong> seen, UsageLine l)
+    /// <summary>Counts the line unless its (message.id, requestId) was counted before, in this or any other file.
+    /// False when it was a duplicate. Duplicate lines of one key carry identical usage (checked on real logs), so the first one wins.</summary>
+    static bool Apply(FileState st, HashSet<ulong> seen, HashSet<ulong> global, UsageLine l)
     {
-        if (l.Key != 0 && !seen.Add(l.Key)) return false;
+        if (l.Key != 0)
+        {
+            if (!global.Add(l.Key)) return false;
+            seen.Add(l.Key);
+        }
         var day = DateTimeOffset.FromUnixTimeMilliseconds(l.Time).ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (!st.Days.TryGetValue(day, out var models)) st.Days[day] = models = [];
         if (!models.TryGetValue(l.Model, out var t)) models[l.Model] = t = new Tokens();
@@ -230,9 +271,9 @@ public sealed class UsageService(string projectsDir, string storePath)
         var sw = Stopwatch.StartNew();
         _data ??= UsageData.Load(storePath);
         var stats = UsageScanner.Scan(projectsDir, _data, ct);
-        if (stats.FilesRead > 0) JsonStore.Save(storePath, _data);
+        if (stats.FilesChanged > 0) JsonStore.Save(storePath, _data);
         Report = UsageReport.Build(_data, DateTimeOffset.Now);
-        Logger.Info($"usage scan: {stats.Files} files ({stats.FilesRead} changed), {stats.Messages} new messages, {sw.ElapsedMilliseconds} ms");
+        Logger.Info($"usage scan: {stats.Files} files ({stats.FilesChanged} changed), {stats.Messages} new messages, {sw.ElapsedMilliseconds} ms");
         return Report;
     }, ct);
 }

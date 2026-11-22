@@ -33,7 +33,7 @@ public sealed class SettingsView : Grid, ITabView
 
     /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden).</summary>
     public static readonly string[] ModuleIds =
-        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "characters", "tray"];
+        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "usage", "characters", "tray"];
 
     static Core.Settings S => Core.Settings.Current;
 

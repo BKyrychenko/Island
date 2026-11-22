@@ -64,6 +64,7 @@ public partial class IslandWindow
             Modules.Ports.PortsSnapshots.Register(SnapshotStates);
             Modules.Projects.ProjectsSnapshots.Register(SnapshotStates);
             SnapshotStates["logs-pill"] = w => w.Pill.Set(new PillItem { Id = "logs.match", Priority = PillPriority.Transient, Width = 300, Peek = true, View = () => Modules.Logs.LogWatchModule.PillView("app.log", "ERROR 500 POST /api/orders: NullReferenceException in OrderService.Create") });
+            Modules.Kube.KubeSnapshots.Register(SnapshotStates);
             Modules.AiChat.AiSnapshots.Register(SnapshotStates);
             Modules.Voice.VoiceSnapshots.Register(SnapshotStates);
             Modules.Agents.AgentSnapshots.Register(SnapshotStates);

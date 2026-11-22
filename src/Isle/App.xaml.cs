@@ -89,6 +89,7 @@ public partial class App : Application
             Host.Register("ports", () => new Modules.Ports.PortsModule(Island!), defaultEnabled: Edition.IsDev);
             Host.Register("projects", () => new Modules.Projects.ProjectsModule(Island!), defaultEnabled: Edition.IsDev);
             Host.Register("logs", () => new Modules.Logs.LogWatchModule(Island!), defaultEnabled: Edition.IsDev);
+            Host.Register("kube", () => new Modules.Kube.KubeModule(Island!), defaultEnabled: Edition.IsDev);
             Host.Register("characters", () => new Modules.Characters.CharactersModule(Island!));
             Host.Sync();
             if (Island is not null) Island.SettingsRequested += () => OpenSettings();

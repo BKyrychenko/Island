@@ -33,7 +33,7 @@ public sealed class SettingsView : Grid, ITabView
 
     /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden).</summary>
     public static readonly string[] ModuleIds =
-        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "characters", "tray"];
+        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "kube", "characters", "tray"];
 
     static Core.Settings S => Core.Settings.Current;
 
@@ -276,6 +276,9 @@ public sealed class SettingsView : Grid, ITabView
         OptionGroup("logs");
         Row("set.logsFiles", TextField(S.Opt("logs.files"), v => { S.SetOpt("logs.files", v.Trim()); Save("Options", restart: "logs"); }, @"C:\Users\me\Projects\api\logs\app.log"), "set.logsFiles.hint", wide: true);
         Row("set.logsPattern", TextField(S.Opt("logs.pattern", Modules.Logs.LogWatchModule.DefaultPattern), v => { S.SetOpt("logs.pattern", v.Trim()); Save("Options", restart: "logs"); }, Modules.Logs.LogWatchModule.DefaultPattern), "set.logsPattern.hint", wide: true);
+
+        OptionGroup("kube");
+        Row("set.kubePattern", TextField(S.Opt("kube.prodPattern", Modules.Kube.KubeConfig.DefaultPattern), v => { S.SetOpt("kube.prodPattern", v.Trim()); Save("Options", restart: "kube"); }, Modules.Kube.KubeConfig.DefaultPattern), "set.kubePattern.hint", wide: true);
 
         OptionGroup("tools");
         Row("set.recAudio", OptSwitch("rec.systemAudio", true));

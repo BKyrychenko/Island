@@ -102,6 +102,12 @@ static class DevStrings
         ["usage.dur.hm"] = "{0}h {1}m",
         ["usage.dur.m"] = "{0}m",
         ["usage.dur.s"] = "<1m",
+        ["sysmon.wsl"] = "WSL",
+        ["sysmon.wslTip"] = "Memory of the WSL virtual machine (working set); Docker Desktop uses it too",
+        ["sysmon.wslStop"] = "Shut down WSL",
+        ["sysmon.wslConfirm"] = "Shut down?",
+        ["sysmon.wslDone"] = "WSL shut down",
+        ["sysmon.wslFailed"] = "Couldn't shut down WSL",
     };
 
     internal static readonly Dictionary<string, string> Uk = new()
@@ -203,5 +209,11 @@ static class DevStrings
         ["usage.dur.hm"] = "{0} год {1} хв",
         ["usage.dur.m"] = "{0} хв",
         ["usage.dur.s"] = "<1 хв",
+        ["sysmon.wsl"] = "WSL",
+        ["sysmon.wslTip"] = "Пам'ять віртуальної машини WSL (робочий набір); Docker Desktop теж її використовує",
+        ["sysmon.wslStop"] = "Вимкнути WSL",
+        ["sysmon.wslConfirm"] = "Вимкнути?",
+        ["sysmon.wslDone"] = "WSL вимкнено",
+        ["sysmon.wslFailed"] = "Не вдалося вимкнути WSL",
     };
 }

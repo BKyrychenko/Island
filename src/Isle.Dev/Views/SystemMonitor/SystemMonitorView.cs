@@ -20,7 +20,9 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
     readonly SystemSampler? _sampler;
     readonly IslandWindow _island;
     readonly Stat _cpu = new("CPU"), _mem = new("RAM"), _gpu = new("GPU"), _net = new("NET");
-    readonly StackPanel _procs = new();
+    readonly StackPanel _procs = new(), _wsl = new();
+    long? _wslBytes;
+    bool _confirmWsl;
     DispatcherTimer? _timer;
     int _ticks;
     int? _confirmPid;
@@ -33,6 +35,7 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
         _sampler = sampler;
         _island = island;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var cards = new UniformGrid { Rows = 1, Columns = 4, Margin = new Thickness(0, 0, -6, 0) };
@@ -40,7 +43,10 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
         Children.Add(cards);
 
         var scroll = new ScrollViewer { Content = _procs, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 6, 0, 0) };
-        SetRow(scroll, 1);
+        SetRow(_wsl, 1);
+        _wsl.Margin = new Thickness(0, 6, 0, 0);
+        Children.Add(_wsl);
+        SetRow(scroll, 2);
         Children.Add(scroll);
     }
 
@@ -60,6 +66,7 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
     {
         _timer?.Stop();
         _confirmPid = null;
+        _confirmWsl = false;
     }
 
     void OnTick(object? sender, EventArgs e)
@@ -68,7 +75,11 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
         try
         {
             Show(_sampler.Full());
-            if (_ticks++ % 2 == 0) ShowProcesses(_sampler.TopProcesses(5));
+            if (_ticks++ % 2 == 0)
+            {
+                ShowProcesses(_sampler.TopProcesses(5));
+                ShowWsl(_sampler.Wsl);
+            }
         }
         catch (Exception ex) { Logger.Error("sysmon tick", ex); }
     }
@@ -91,6 +102,39 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
         _lastTop = top;
         _procs.Children.Clear();
         foreach (var p in top) _procs.Children.Add(Row(p));
+    }
+
+    /// <summary>The WSL row: shown only while the VM process exists (bytes null hides it).</summary>
+    internal void ShowWsl(long? bytes)
+    {
+        _wslBytes = bytes;
+        _wsl.Children.Clear();
+        if (bytes is null) { _confirmWsl = false; return; }
+        var row = new DockPanel { Margin = new Thickness(4, 0, 0, 0), LastChildFill = true };
+        var button = _confirmWsl
+            ? Ui.TextButton(Strings.T("sysmon.wslConfirm"), "AccentButton", new Thickness(8, 1, 8, 1), () => _ = ShutDownWslAsync(), "sysmon wsl")
+            : Ui.TextButton(Strings.T("sysmon.wslStop"), "FlatButton", new Thickness(8, 1, 8, 1), () => { _confirmWsl = true; ShowWsl(_wslBytes); }, "sysmon wsl");
+        DockPanel.SetDock(button, Dock.Right);
+        row.Children.Add(button);
+        var mem = new TextBlock { Text = SystemMath.Size(bytes.Value), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        mem.SetResourceReference(StyleProperty, "TextDim");
+        DockPanel.SetDock(mem, Dock.Right);
+        row.Children.Add(mem);
+        var name = new TextBlock { Text = Strings.T("sysmon.wsl"), ToolTip = Strings.T("sysmon.wslTip"), VerticalAlignment = VerticalAlignment.Center };
+        name.SetResourceReference(StyleProperty, "Text");
+        row.Children.Add(name);
+        _wsl.Children.Add(row);
+    }
+
+    async Task ShutDownWslAsync()
+    {
+        _confirmWsl = false;
+        ShowWsl(_wslBytes);
+        var ok = false;
+        try { ok = (await Cli.RunAsync(System.IO.Path.Combine(Environment.SystemDirectory, "wsl.exe"), ["--shutdown"], null, TimeSpan.FromSeconds(30))).Code == 0; }
+        catch (Exception ex) { Logger.Warn($"sysmon: wsl --shutdown failed ({ex.GetType().Name})"); }
+        _island.ShowToast(Strings.T(ok ? "sysmon.wslDone" : "sysmon.wslFailed"));
+        if (ok) ShowWsl(null);
     }
 
     FrameworkElement Row(ProcessUsage p)

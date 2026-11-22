@@ -95,6 +95,7 @@ public partial class IslandWindow
         {
             _outsideSince = 0;
             if (_expanded) { _sticky = false; return; }
+            if (IsOverButton()) { _insideSince = 0; return; } // a button in the pill (music mini player) is for clicking
             if (down) _hoverMoved = false;
             if (_awaitLeave || !_hoverMoved) { _insideSince = 0; return; }
             if (_insideSince == 0)
@@ -241,6 +242,13 @@ public partial class IslandWindow
         {
             if (d is TextBoxBase or PasswordBox) { AcquireFocus(); return; }
         }
+    }
+
+    static bool IsOverButton()
+    {
+        for (var d = Mouse.DirectlyOver as DependencyObject; d is not null; d = GetParent(d))
+            if (d is ButtonBase) return true;
+        return false;
     }
 
     static DependencyObject? GetParent(DependencyObject d) =>

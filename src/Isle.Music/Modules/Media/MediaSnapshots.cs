@@ -11,6 +11,8 @@ static class MediaSnapshots
     public static void Register(Dictionary<string, Action<IslandWindow>> states)
     {
         states["music-pill"] = w => Pill(w, Demo(), () => null);
+        states["music-mini"] = w => Mini(w, Demo());
+        states["music-mini-short"] = w => Mini(w, Demo() with { Title = "Lua", Artist = "Bright Eyes", IsPlaying = false });
         states["music-banner"] = w =>
         {
             var s = Demo();
@@ -19,6 +21,14 @@ static class MediaSnapshots
     }
 
     internal static MediaState Demo() => FakeMediaSource.Demo(Now);
+
+    static void Mini(IslandWindow w, MediaState s)
+    {
+        Theme.SetAccent(s.Accent);
+        var pill = new MiniPlayerPill(new FakeMediaSource { Current = s });
+        pill.Update(s);
+        w.Pill.Set(new PillItem { Id = "music", Priority = PillPriority.Music, View = () => pill, Width = MiniPlayerPill.PillWidth });
+    }
 
     internal static void Pill(IslandWindow w, MediaState s, Func<LyricLine?> lyric)
     {

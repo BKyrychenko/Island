@@ -14,6 +14,7 @@ One line each: decision — why.
 - Pack dependencies are published per pack and copied loose next to Isle.exe (the shell's own copy wins); `Assembly.LoadFrom` resolves them from that folder, so no custom load context.
 - Icons stay in the shell's `Styles/Icons.xaml`: they are a few shared geometries, and XAML resources in a pack would need their own dictionary merge.
 - The developer command-bar tools (encodings, hashes, `ip`, `ping`, `port`…) were dropped.
+- Without Home the music pill is a mini player with a play/pause button. Hovering a button on the collapsed island does not start the hover-open (`IsOverButton`), the rest of the pill still opens it: an always-present pill must not switch hover-open off, and a click on the whole pill would race the 120 ms hover intent.
 
 ## Developer modules
 - System monitor reads Win32 (`GetSystemTimes`, `NtQuerySystemInformation`, `GlobalMemoryStatusEx`) and PDH for GPU and disk — no driver, no admin, no NuGet package. Temperatures would need a kernel driver and are left out.

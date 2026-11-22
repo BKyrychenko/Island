@@ -24,6 +24,7 @@ static class MusicTab
     static void Attach(MediaModule media)
     {
         if (media.Source is not { } source || App.Island is not { } island) return;
+        media.HasTab = true;
         var tracker = new LyricsTracker(source, () => App.Host.Get<LyricsModule>("lyrics")?.Service);
         string? track = null;
         void Apply()

@@ -1,6 +1,9 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Threading;
+using Isle.Core;
 using Isle.Modules.Media;
 using MediaState = Isle.Modules.Media.MediaState;
 
@@ -83,6 +86,45 @@ public sealed class MusicPill : Grid, IDisposable
     }
 
     public void Dispose() => _lyricTimer?.Stop();
+}
+
+/// <summary>
+/// Music pill without the Home pack (no Music tab): art, "title — artist" and a play/pause button. Hovering the button
+/// does not open the island (see IslandWindow.IsOverButton); the rest of the pill opens it as usual.
+/// </summary>
+public sealed class MiniPlayerPill : Grid
+{
+    public const double PillWidth = 300;
+
+    readonly ArtImage _art = new(22, 6) { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(7, 0, 0, 0) };
+    readonly TextBlock _text = new() { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(38, 0, 42, 0) };
+    readonly Views.Icon _icon = Ui.MakeIcon("Icon.Pause", 13, "FgBrush", filled: true);
+
+    public MiniPlayerPill(IMediaSource media)
+    {
+        var play = Ui.IconButton(_icon, 28, media.PlayPause, "music play/pause");
+        play.HorizontalAlignment = HorizontalAlignment.Right;
+        play.Margin = new Thickness(0, 0, 8, 0);
+        play.ToolTip = Strings.T("music.playPause");
+        AutomationProperties.SetName(play, Strings.T("music.playPause"));
+        Children.Add(_art);
+        Children.Add(_text);
+        Children.Add(play);
+    }
+
+    public void Update(MediaState s)
+    {
+        _art.Set(s);
+        _text.Inlines.Clear();
+        _text.Inlines.Add(new Run(s.Title));
+        if (s.Artist.Length > 0)
+        {
+            var artist = new Run(" — " + s.Artist);
+            artist.SetResourceReference(TextElement.ForegroundProperty, "FgDimBrush");
+            _text.Inlines.Add(artist);
+        }
+        _icon.SetResourceReference(Views.Icon.DataProperty, s.IsPlaying ? "Icon.Pause" : "Icon.Play");
+    }
 }
 
 /// <summary>Short banner shown on a track change: art, title and artist.</summary>

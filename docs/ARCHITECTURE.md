@@ -31,7 +31,7 @@ Hooks a pack registers into (all static): `ModuleHost.Register`, `Strings.Add(en
 `SettingsView.PackOptions` (option groups and rows; `Row`, `OptSwitch`, `Choice`, `TextField`, `SecretField`, `Link`,
 `Save` are internal), `App.OpenTargets` (settings links), `App.BeforeQuit` (Home: finish a recording),
 `App.DebugCommands` (Home: `--transcribe`). Music → Home: `MediaModule.Started` / `Stopping`, `Source`, `PillLyric`
-(a `LyricLine` delegate) and `RefreshPill`. Existing public window API covers the rest (idle-pill slots,
+(a `LyricLine` delegate), `HasTab` and `RefreshPill`. Existing public window API covers the rest (idle-pill slots,
 `Tabs.Mascot`, `FileDropTarget`, `Theme.SetAccent`).
 
 ## Shell
@@ -88,7 +88,8 @@ Developer modules.
 - **Media** (`media`, Music pack, `Modules/Media`) — `MediaSession` wraps GSMTC (manager + chosen session events,
   marshalled to the UI thread) and exposes `IMediaSource` (`Current: MediaState`, `Changed`, `PlayPause/Next/Previous/Seek`).
   `MediaModule` puts the `music` pill item (`Views/Music/MusicPill`, compact equalizer for the side slot), the
-  `music.track` banner and sets `Theme.SetAccent` from the art. Pure helpers: `PlaybackMath` (extrapolation, formatting,
+  `music.track` banner and sets `Theme.SetAccent` from the art. Without Home (`HasTab` false) the pill is a
+  `MiniPlayerPill` (art, title — artist, play/pause button) and no pill item or banner names the "music" tab. Pure helpers: `PlaybackMath` (extrapolation, formatting,
   app names, session choice), `ArtColors`. `FakeMediaSource` + `MediaSnapshots` provide snapshot states.
 - **Music tab** (Home pack, `Modules/Lyrics/MusicTab`) — on `MediaModule.Started`: the Music tab (`Views/Music/MusicView`),
   a `LyricsTracker`, the pill's lyric line (`PillLyric`) and prefetching. Options: `lyrics.inPill`, `lyrics.alwaysFetch`.

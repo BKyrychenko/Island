@@ -17,6 +17,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
 
     MediaSession? _session;
     MusicPill? _pill;
+    MiniPlayerPill? _mini;
     DispatcherTimer? _bannerTimer, _lingerTimer;
     string? _lastTrack, _banneredTrack;
     bool _pillShown;
@@ -30,6 +31,10 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
 
     /// <summary>Raised after a media module started / before it stops (the Home pack attaches the Music tab and lyrics).</summary>
     public static event Action<MediaModule>? Started, Stopping;
+
+    /// <summary>Set by the Home pack while its Music tab is attached. Without it the pill is a <see cref="MiniPlayerPill"/>
+    /// and nothing asks for the (missing) "music" tab.</summary>
+    public bool HasTab { get; set; }
 
     /// <summary>The pill's lyric line, set by the Home pack while "lyrics.inPill" is on; null = plain pill.</summary>
     public LyricLine? PillLyric { get; set; }
@@ -91,31 +96,34 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
             if (!_lingerTimer.IsEnabled) _lingerTimer.Start();
         }
         _pill?.Update(cur);
+        _mini?.Update(cur);
 
         if (cur.IsPlaying && cur.TrackKey != _banneredTrack)
         {
             _banneredTrack = cur.TrackKey; // a track that first shows up paused gets its banner when it starts playing
             ShowBanner(cur);
         }
-        if (newTrack) island.RequestTab(TabId); // open Music first after a track change
+        if (newTrack && HasTab) island.RequestTab(TabId); // open Music first after a track change
     }
 
     void ShowPill(bool force = false)
     {
         if (_session?.Current is not { } cur) return;
-        _pill ??= new MusicPill(_session, () => PillLyric);
+        _pill ??= new MusicPill(_session, () => PillLyric); // also the compact equalizer in mini mode
         _pill.Update(cur);
+        var mini = HasTab ? null : _mini ??= new MiniPlayerPill(_session);
+        mini?.Update(cur);
         if (_pillShown && !force) return;
         _pillShown = true;
         island.Pill.Set(new PillItem
         {
             Id = PillId,
             Priority = PillPriority.Music,
-            View = () => _pill,
+            View = mini is null ? () => _pill : () => mini,
             Compact = () => _pill.CreateCompact(),
-            Width = _pill.PillWidth,
+            Width = mini is null ? _pill.PillWidth : MiniPlayerPill.PillWidth,
             CompactWidth = 40,
-            TabId = TabId,
+            TabId = HasTab ? TabId : null,
         });
     }
 
@@ -137,7 +145,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
             Height = TrackBanner.BannerHeight,
             IsBanner = true,
             Peek = true,
-            TabId = TabId,
+            TabId = HasTab ? TabId : null,
         });
         _bannerTimer ??= NewTimer(BannerTime, () => island.Pill.Remove(BannerId));
         _bannerTimer.Stop();
@@ -166,7 +174,9 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         }
         _pill?.Dispose();
         _pill = null;
+        _mini = null;
         PillLyric = null;
+        HasTab = false;
         Theme.SetAccent(null);
         if (_playingPublished) { _playingPublished = false; EventBus.Publish(new MusicPlaying(false)); }
     }

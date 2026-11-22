@@ -176,6 +176,14 @@ inserts them into `SettingsView.ModuleIds`, and adds to `SettingsView.DevOptions
   View `Views/Projects/ProjectsView`. Options `projects.paths`, `projects.builds`, `projects.githubToken`.
 - **Log watcher** (`logs`, `Modules/Logs`) — `LogTail` (follow a file from its end, survive rotation, first matching
   line), `LogWatchModule` (2 s poll, pill, 15 s quiet period). Options `logs.files`, `logs.pattern`.
+- **Kubernetes context** (`kube`, `Modules/Kube`) — `KubeConfig` (kubectl file order from `KUBECONFIG` or
+  `~\.kube\config`, reads only the top-level `current-context:` line, prod regex with a timeout), `KubeModule`
+  (FileSystemWatcher + 300 ms debounce; persistent red indicator while the context matches, 6 s banner on a switch).
+  Option `kube.prodPattern`.
+- **Claude usage** (`usage`, `Modules/Usage`) — `UsageScanner` / `UsageService` (incremental read of Claude Code
+  transcripts under `~\.claude\projects` or `CLAUDE_CONFIG_DIR`: token counters only, deduplicated, cached in
+  `usage.json`; scans only while the tab is shown or on refresh), `UsagePrices` (API-equivalent USD per model),
+  `UsageReport` (today / 7 / 30 days, recent sessions). View `Views/Usage/UsageView`.
 - Command bar: `DevTools` / `DevToolsProvider` (encodings, hashes, JSON, UUID, time, colours, number bases, JWT) and
   `DevSystemProvider` (`ip`, `ping`, `flushdns`, `power …`, `ssh`), registered when `cmd.devTools` is on.
 

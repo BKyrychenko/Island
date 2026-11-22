@@ -121,6 +121,7 @@ public sealed class KubeModule(IslandWindow island) : IModule, IDisposable
 
     void Recheck(bool initial)
     {
+        if (_watchers.Count == 0) return; // stopped: a watcher event queued before Stop() must not re-add the pill
         var ctx = KubeConfig.Resolve(_files);
         if (ctx == _context) return;
         _context = ctx;
@@ -146,9 +147,11 @@ public sealed class KubeModule(IslandWindow island) : IModule, IDisposable
     void Banner(string ctx)
     {
         island.Pill.Set(BannerItem(ctx));
-        _bannerTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
-        _bannerTimer.Tick -= HideBanner;
-        _bannerTimer.Tick += HideBanner;
+        if (_bannerTimer is null)
+        {
+            _bannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            _bannerTimer.Tick += HideBanner;
+        }
         _bannerTimer.Stop();
         _bannerTimer.Start();
     }

@@ -193,6 +193,8 @@ JWTs, unix timestamps, ISO dates, `#colours` and `0x` numbers are decoded as you
 </table>
 
 A **log watcher** can also follow your log files and show the first new `ERROR` / `Exception` line in the pill.
+A **Kubernetes** warning keeps a red pill up while kubectl's current context looks like production (pattern in Settings).
+A **Usage** tab sums your Claude Code tokens for today, 7 and 30 days, with an API-equivalent cost estimate.
 
 ## Getting started
 

@@ -180,7 +180,7 @@ public sealed class UsageTests : IDisposable
     // ---- cost ----
 
     [Fact]
-    public void Cost_uses_the_longest_matching_model_prefix_per_token_kind()
+    public void Cost_is_priced_per_token_kind()
     {
         var t = new Tokens { In = 1_000_000, Out = 1_000_000, CacheRead = 1_000_000, Write5m = 1_000_000, Write1h = 1_000_000 };
         Assert.Equal(2m + 10m + 0.10m + 2.5m + 4m, UsagePrices.Cost("claude-sonnet-5-5", t));
@@ -197,8 +197,8 @@ public sealed class UsageTests : IDisposable
         var t = new Tokens { In = 1000 };
         Assert.Null(UsagePrices.Cost("some-other-model", t));
         Assert.Null(UsagePrices.Cost("", t));
-        Assert.Null(UsagePrices.Cost([new("claude-sonnet-5-5", t), new("mystery", t)])); // no misleading partial sum
-        Assert.Equal(0m, UsagePrices.Cost([new("mystery", new Tokens())]));
+        Assert.Equal((null, false), UsagePrices.Cost([new("mystery", t)]));
+        Assert.Equal((0m, false), UsagePrices.Cost([new("mystery", new Tokens())])); // no tokens, nothing missing
         Assert.Equal("—", UsageReport.Money(null));
 
         Write("slug/s1.jsonl", Line("m1", "r1", model: "mystery-1"));
@@ -236,5 +236,95 @@ public sealed class UsageTests : IDisposable
         Assert.Equal("$327", UsageReport.Money(326.9m));
         Assert.Equal(["Sonnet 5.5", "Opus 4.8", "Haiku 4.5", "gpt-x", "?"],
             new[] { "claude-sonnet-5-5", "claude-opus-4-8", "claude-haiku-4-5-20251001", "gpt-x", "" }.Select(UsageReport.ModelName));
+    }
+
+    // ---- fixes: cross-file dedupe, oversize lines, exact prices, partial costs, reset ----
+
+    [Fact]
+    public void A_message_copied_into_another_file_counts_once_and_dropping_a_file_is_safe()
+    {
+        var a = Write("slug/a.jsonl", Line("m1", "r1"));
+        var data = Scan();
+        var b = Write("slug/b.jsonl", Line("m1", "r1"), Line("m2", "r1")); // a resumed session replays m1
+        Scan(data);
+        Assert.Equal(60, Total(data));
+
+        File.Delete(a);
+        Scan(data);
+        Assert.Single(data.Files);
+        Assert.Equal(30, Total(data)); // b keeps its own m2
+        Append(b, Line("m3", "r1") + "\n");
+        Scan(data);
+        Assert.Equal(60, Total(data));
+    }
+
+    [Fact]
+    public void A_rescanned_file_may_count_its_own_keys_again()
+    {
+        var path = Write("slug/a.jsonl", Line("m1", "r1", input: 1000));
+        var data = Scan();
+        File.WriteAllText(path, Line("m1", "r1", input: 1) + "\n"); // shorter: reset
+        Scan(data);
+        Assert.Equal(21, Total(data));
+    }
+
+    [Fact]
+    public void A_line_longer_than_the_cap_is_skipped_without_losing_the_lines_around_it()
+    {
+        var huge = Line("big", "r1", cwd: new string('x', 20_000)); // a valid usage line, far over the cap
+        var path = Write("slug/s1.jsonl", Line("m1", "r1"), huge, Line("m2", "r1"));
+        var data = new UsageData();
+        var stats = UsageScanner.Scan(Projects, data, default, maxLine: 4096);
+        Assert.Equal(2, stats.Messages);
+        Assert.Equal(60, Total(data));
+        Assert.Equal(new FileInfo(path).Length, data.Files["slug/s1.jsonl"].Offset);
+
+        Append(path, Line("m3", "r1") + "\n");
+        UsageScanner.Scan(Projects, data, default, maxLine: 4096);
+        Assert.Equal(90, Total(data));
+    }
+
+    [Fact]
+    public void Prices_match_exact_ids_with_an_optional_date_suffix_only()
+    {
+        var t = new Tokens { In = 1_000_000 };
+        Assert.Equal(4m, UsagePrices.Cost("claude-opus-5-5", t));
+        Assert.Equal(4m, UsagePrices.Cost("claude-opus-5-5-20261101", t));
+        Assert.Null(UsagePrices.Cost("claude-opus-5-6", t));      // a future model is unknown, not priced as 5-5
+        Assert.Null(UsagePrices.Cost("claude-opus-5-5x", t));
+        Assert.Null(UsagePrices.Cost("claude-opus-5-5-2026110", t));
+        Assert.Null(UsagePrices.Cost("claude-opus-5-5-2026110a", t));
+        Assert.Equal(5m, UsagePrices.Cost("claude-opus-5", t));   // and 5 is not 5-5
+    }
+
+    [Fact]
+    public void Some_models_unpriced_gives_a_marked_partial_sum_and_nothing_priced_gives_a_dash()
+    {
+        var t = new Tokens { In = 1_000_000 };
+        Assert.Equal((2m, true), UsagePrices.Cost([new("claude-sonnet-5-5", t), new("mystery", t)]));
+        Assert.Equal((2m, false), UsagePrices.Cost([new("claude-sonnet-5-5", t)]));
+        Assert.Equal("≥ $2.00", UsageReport.Money(2m, partial: true));
+        Assert.Equal("$2.00", UsageReport.Money(2m));
+        Assert.Equal("—", UsageReport.Money(null, partial: true));
+
+        Write("slug/s1.jsonl", Line("m1", "r1", model: "mystery-1"), Line("m2", "r1", model: "claude-sonnet-5-5", input: 1_000_000, output: 0));
+        var report = UsageReport.Build(Scan(), Noon);
+        Assert.True(report.Today.Partial);
+        Assert.Equal(2m, report.Today.Cost);
+        Assert.True(report.Sessions[0].Partial);
+    }
+
+    [Fact]
+    public async Task A_reset_is_saved_even_when_no_complete_line_is_read_afterwards()
+    {
+        var path = Write("slug/s1.jsonl", Line("m1", "r1"));
+        var store = Path.Combine(_dir, "usage.json");
+        var svc = new UsageService(Projects, store);
+        await svc.RefreshAsync(default);
+        Assert.Equal(30, Total(UsageData.Load(store)));
+
+        File.WriteAllText(path, "{\"type\":\"ass"); // truncated to a partial line
+        await svc.RefreshAsync(default);
+        Assert.Equal(0, Total(UsageData.Load(store)));
     }
 }

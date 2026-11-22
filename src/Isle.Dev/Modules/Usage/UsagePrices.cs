@@ -26,9 +26,10 @@ public readonly record struct Price(decimal In, decimal Out, decimal Write5m, de
 public static class UsagePrices
 {
     // ponytail: prices are static (Anthropic API list prices, checked 2026-11) and must be updated by hand when
-    // Anthropic changes pricing or ships a model. Longest matching id prefix wins; an unknown model has no price
-    // and its cost shows as "—". Haiku 5.5 is listed at its <=100K-prompt rate (the long-prompt rate is 5x).
-    static readonly (string Prefix, Price Price)[] Table =
+    // Anthropic changes pricing or ships a model. Ids match exactly (optionally with a -YYYYMMDD date suffix), so a
+    // new model is "unknown" until it is added here; unknown models show tokens and no cost. Not priced: fast mode
+    // (usage.speed == "fast", 2x) and Haiku 5.5 prompts over 100K tokens (5x); both are counted at the standard rate.
+    static readonly (string Id, Price Price)[] Table =
     [
         ("claude-fable-5-2", new(8, 40, 10, 16, 0.20m)),
         ("claude-mythos-5-2", new(8, 40, 10, 16, 0.20m)),
@@ -50,11 +51,11 @@ public static class UsagePrices
 
     public static Price? Find(string model)
     {
-        Price? best = null;
-        var len = 0;
-        foreach (var (prefix, price) in Table)
-            if (prefix.Length > len && model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { best = price; len = prefix.Length; }
-        return best;
+        foreach (var (id, price) in Table)
+            if (model == id || (model.Length == id.Length + 9 && model.StartsWith(id, StringComparison.Ordinal) && model[id.Length] == '-'
+                && model.AsSpan(id.Length + 1).IndexOfAnyExceptInRange('0', '9') < 0))
+                return price;
+        return null;
     }
 
     /// <summary>API-equivalent cost in USD, or null when the model has no known price.</summary>
@@ -63,16 +64,18 @@ public static class UsagePrices
             ? (t.In * p.In + t.Out * p.Out + t.Write5m * p.Write5m + t.Write1h * p.Write1h + t.CacheRead * p.Read) / 1_000_000m
             : null;
 
-    /// <summary>Sum over models; null as soon as one model with tokens is unpriced (a partial sum would mislead).</summary>
-    public static decimal? Cost(IEnumerable<KeyValuePair<string, Tokens>> byModel)
+    /// <summary>Sum over models. Partial: some tokens had no known price and are missing from the sum.
+    /// Sum is null when nothing with tokens could be priced at all.</summary>
+    public static (decimal? Sum, bool Partial) Cost(IEnumerable<KeyValuePair<string, Tokens>> byModel)
     {
         decimal sum = 0;
+        bool priced = false, unpriced = false;
         foreach (var (model, t) in byModel)
         {
             if (t.Total == 0) continue;
-            if (Cost(model, t) is not { } c) return null;
-            sum += c;
+            if (Cost(model, t) is { } c) { sum += c; priced = true; }
+            else unpriced = true;
         }
-        return sum;
+        return (unpriced && !priced ? null : sum, unpriced && priced);
     }
 }

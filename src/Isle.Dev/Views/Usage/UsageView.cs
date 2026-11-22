@@ -14,7 +14,7 @@ namespace Isle.Views.Usage;
 public sealed class UsageView : Grid, ITabView
 {
     // widths of: models, started, duration, tokens, cost (the project column takes the rest)
-    static readonly double[] Cols = [104, 100, 84, 56, 60];
+    static readonly double[] Cols = [104, 100, 84, 56, 72];
 
     readonly Func<Task<UsageReport>> _scan;
     readonly ContentControl _body = new();
@@ -43,7 +43,7 @@ public sealed class UsageView : Grid, ITabView
         _failed = false;
         Render();
         try { _report = await _scan(); }
-        catch (OperationCanceledException) { _busy = false; return; }
+        catch (OperationCanceledException) { _busy = false; Render(); return; }
         catch (Exception ex) { Logger.Error("usage scan", ex); _failed = true; }
         _busy = false;
         Render();
@@ -90,7 +90,7 @@ public sealed class UsageView : Grid, ITabView
         var culture = CultureInfo.GetCultureInfo(Strings.Language == "uk" ? "uk-UA" : "en-GB");
         foreach (var s in r.Sessions)
             list.Children.Add(Row(s.Project, string.Join(", ", s.Models.Select(UsageReport.ModelName)),
-                s.Start.ToString("d MMM HH:mm", culture), Duration(s.Duration), UsageReport.Count(s.Tokens.Total), UsageReport.Money(s.Cost)));
+                s.Start.ToString("d MMM HH:mm", culture), Duration(s.Duration), UsageReport.Count(s.Tokens.Total), UsageReport.Money(s.Cost, s.Partial)));
         var scroll = new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0) };
         SetRow(scroll, 2);
         grid.Children.Add(scroll);
@@ -101,7 +101,7 @@ public sealed class UsageView : Grid, ITabView
     {
         var stack = new StackPanel();
         var head = new DockPanel();
-        var cost = new TextBlock { Text = UsageReport.Money(t.Cost) };
+        var cost = new TextBlock { Text = UsageReport.Money(t.Cost, t.Partial) };
         cost.SetResourceReference(StyleProperty, "TextTitle");
         DockPanel.SetDock(cost, Dock.Right);
         head.Children.Add(cost);

@@ -2,9 +2,10 @@ using System.Globalization;
 
 namespace Isle.Modules.Usage;
 
-public sealed record UsageTotal(Tokens Tokens, decimal? Cost);
+/// <param name="Partial">Some tokens had no known price: Cost is a lower bound.</param>
+public sealed record UsageTotal(Tokens Tokens, decimal? Cost, bool Partial = false);
 
-public sealed record SessionRow(string Project, string[] Models, DateTimeOffset Start, TimeSpan Duration, Tokens Tokens, decimal? Cost);
+public sealed record SessionRow(string Project, string[] Models, DateTimeOffset Start, TimeSpan Duration, Tokens Tokens, decimal? Cost, bool Partial = false);
 
 /// <summary>What the Usage tab shows: totals for today / 7 / 30 days and the most recent sessions.</summary>
 public sealed record UsageReport(UsageTotal Today, UsageTotal Week, UsageTotal Month, IReadOnlyList<SessionRow> Sessions, DateTimeOffset At)
@@ -42,8 +43,9 @@ public sealed record UsageReport(UsageTotal Today, UsageTotal Week, UsageTotal M
             var project = g.Select(f => f.Cwd).FirstOrDefault(c => c.Length > 0) ?? g.First().Slug;
             var all = new Tokens();
             foreach (var t in models.Values) all.Add(t);
+            var (cost, partial) = UsagePrices.Cost(models);
             return new SessionRow(project, [.. models.Keys.Order()], DateTimeOffset.FromUnixTimeMilliseconds(first).ToLocalTime(),
-                TimeSpan.FromMilliseconds(last - first), all, UsagePrices.Cost(models));
+                TimeSpan.FromMilliseconds(last - first), all, cost, partial);
         }).OrderByDescending(s => s.Start + s.Duration).Take(MaxSessions).ToList();
 
         return new UsageReport(Total(t0), Total(t7), Total(t30), sessions, now);
@@ -59,7 +61,8 @@ public sealed record UsageReport(UsageTotal Today, UsageTotal Week, UsageTotal M
     {
         var all = new Tokens();
         foreach (var t in byModel.Values) all.Add(t);
-        return new UsageTotal(all, UsagePrices.Cost(byModel));
+        var (cost, partial) = UsagePrices.Cost(byModel);
+        return new UsageTotal(all, cost, partial);
     }
 
     // ---- formatting (shared by the view and the tests) ----
@@ -73,9 +76,9 @@ public sealed record UsageReport(UsageTotal Today, UsageTotal Week, UsageTotal M
         _ => n.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>"$1.23", "$123", or "—" when some model has no known price.</summary>
-    public static string Money(decimal? cost) =>
-        cost is not { } c ? "—" : "$" + c.ToString(c >= 100 ? "N0" : "N2", CultureInfo.InvariantCulture);
+    /// <summary>"$1.23", "$123", "≥ $1.23" when some tokens have no known price, "—" when none do.</summary>
+    public static string Money(decimal? cost, bool partial = false) =>
+        cost is not { } c ? "—" : (partial ? "≥ $" : "$") + c.ToString(c >= 100 ? "N0" : "N2", CultureInfo.InvariantCulture);
 
     /// <summary>"claude-sonnet-5-5" → "Sonnet 5.5"; ids it does not recognise are shown as they are.</summary>
     public static string ModelName(string id)

@@ -13,6 +13,25 @@ public sealed record SystemSample(
 
 public sealed record ProcessUsage(int Pid, string Name, double Cpu, long Memory);
 
+/// <summary>The WSL 2 VM process: "vmmemWSL" on recent Windows, "vmmem" on older builds (pure; unit tested).</summary>
+public static class WslVm
+{
+    public static bool IsVmName(string name) =>
+        name.Equals("vmmemWSL", StringComparison.OrdinalIgnoreCase) || name.Equals("vmmem", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Working set of the VM, preferring vmmemWSL over vmmem; null when neither is present.</summary>
+    public static long? Pick(IEnumerable<(string Name, long Memory)> found)
+    {
+        long? old = null;
+        foreach (var (name, memory) in found)
+        {
+            if (name.Equals("vmmemWSL", StringComparison.OrdinalIgnoreCase)) return memory;
+            if (name.Equals("vmmem", StringComparison.OrdinalIgnoreCase)) old = memory;
+        }
+        return old;
+    }
+}
+
 /// <summary>Pure arithmetic of the sampler, kept apart so it is unit tested.</summary>
 public static class SystemMath
 {
@@ -86,6 +105,10 @@ public sealed class SystemSampler : IDisposable
     double? _vramTotal;
     Dictionary<int, (string Name, TimeSpan Cpu, long Memory)> _procs = [];
     long _procTicks;
+    bool _wslLogged;
+
+    /// <summary>Working set of the WSL VM from the latest <see cref="TopProcesses"/> pass; null when absent or unreadable.</summary>
+    public long? Wsl { get; private set; }
 
     public int CoreCount { get; } = Environment.ProcessorCount;
 
@@ -149,15 +172,29 @@ public sealed class SystemSampler : IDisposable
         var elapsed = _procTicks == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(_procTicks, now);
         _procTicks = now;
         var snapshot = new Dictionary<int, (string, TimeSpan, long)>();
+        var wsl = new List<(string, long)>();
         foreach (var p in Process.GetProcesses())
         {
             using (p)
             {
                 if (p.Id == 0 || p.Id == 4) continue; // Idle and System
-                try { snapshot[p.Id] = (p.ProcessName, p.TotalProcessorTime, p.WorkingSet64); }
+                try
+                {
+                    var name = p.ProcessName;
+                    if (WslVm.IsVmName(name)) // the VM process refuses TotalProcessorTime, so read its memory first, from this same pass
+                    {
+                        try { wsl.Add((name, p.WorkingSet64)); }
+                        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+                        {
+                            if (!_wslLogged) { _wslLogged = true; Logger.Warn($"sysmon: WSL VM unreadable ({ex.GetType().Name})"); }
+                        }
+                    }
+                    snapshot[p.Id] = (name, p.TotalProcessorTime, p.WorkingSet64);
+                }
                 catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { /* protected or exited */ }
             }
         }
+        Wsl = WslVm.Pick(wsl);
         var top = SystemMath.Top(_procs, snapshot, elapsed, CoreCount, count);
         _procs = snapshot;
         return top;

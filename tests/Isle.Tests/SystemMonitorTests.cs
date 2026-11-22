@@ -84,4 +84,14 @@ public class SystemMonitorTests
         var top = s.TopProcesses(5);
         Assert.Equal(5, top.Count);
     }
+
+    [Fact]
+    public void Wsl_vm_prefers_vmmemWSL_over_vmmem_and_is_none_without_either()
+    {
+        Assert.Equal(7, WslVm.Pick([("vmmem", 5), ("VMMEMWSL", 7)]));
+        Assert.Equal(5, WslVm.Pick([("chrome", 9), ("vmmem", 5)]));
+        Assert.Null(WslVm.Pick([("chrome", 9)]));
+        Assert.True(WslVm.IsVmName("vmmemWSL") && WslVm.IsVmName("vmmem") && !WslVm.IsVmName("vmmemCmFuncs"));
+        Assert.Equal("6.1 GB", SystemMath.Size(6_240L << 20));
+    }
 }

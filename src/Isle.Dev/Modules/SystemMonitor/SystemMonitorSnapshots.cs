@@ -27,6 +27,7 @@ static class SystemMonitorSnapshots
                 new ProcessUsage(4, "node", 2.4, 310L << 20),
                 new ProcessUsage(5, "Isle", 0.2, 24L << 20),
             ]);
+            view.ShowWsl(6_240L << 20);
             w.AddTab(new TabInfo(SystemMonitorModule.TabId, "tab.sysmon", "Icon.Gauge", () => view, 95));
             w.Expand(SystemMonitorModule.TabId);
         };

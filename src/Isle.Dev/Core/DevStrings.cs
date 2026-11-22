@@ -78,6 +78,12 @@ static class DevStrings
         ["sysmon.endFailed"] = "Couldn't end {0} (it may need administrator rights)",
         ["set.cmdDev"] = "Developer tools",
         ["set.cmdDev.hint"] = "b64, sha256, json, uuid, now, port 3000, ip, ping, ssh, power; JWTs, timestamps, colours and 0x numbers are decoded as you type",
+        ["sysmon.wsl"] = "WSL",
+        ["sysmon.wslTip"] = "Memory of the WSL virtual machine (working set); Docker Desktop uses it too",
+        ["sysmon.wslStop"] = "Shut down WSL",
+        ["sysmon.wslConfirm"] = "Shut down?",
+        ["sysmon.wslDone"] = "WSL shut down",
+        ["sysmon.wslFailed"] = "Couldn't shut down WSL",
     };
 
     internal static readonly Dictionary<string, string> Uk = new()
@@ -155,5 +161,11 @@ static class DevStrings
         ["sysmon.endFailed"] = "Не вдалося завершити {0} (можливо, потрібні права адміністратора)",
         ["set.cmdDev"] = "Інструменти розробника",
         ["set.cmdDev.hint"] = "b64, sha256, json, uuid, now, port 3000, ip, ping, ssh, power; JWT, мітки часу, кольори й 0x-числа розбираються під час введення",
+        ["sysmon.wsl"] = "WSL",
+        ["sysmon.wslTip"] = "Пам'ять віртуальної машини WSL (робочий набір); Docker Desktop теж її використовує",
+        ["sysmon.wslStop"] = "Вимкнути WSL",
+        ["sysmon.wslConfirm"] = "Вимкнути?",
+        ["sysmon.wslDone"] = "WSL вимкнено",
+        ["sysmon.wslFailed"] = "Не вдалося вимкнути WSL",
     };
 }

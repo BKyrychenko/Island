@@ -33,7 +33,7 @@ Measured the arranged WPF controls at 80% in isolated English and Ukrainian snap
 
 | Feature | Method | Result |
 |---|---|---|
-| Dev edition build (`-p:Edition=Dev`) | live | builds; 20 modules start in an isolated data folder, no errors in the log, ~28 MB working set |
+| Developer pack (`Isle.Dev.dll` next to `Isle.exe`) | live (`--snapshot sysmon-alert` from the build output and from single-file `dist\Isle-Dev` and `-selfcontained`) | pack loads; without the file dev states are unknown (exit 2) and core states render; a pack from another commit is logged and skipped. `build.ps1` repeats the `dist\Isle-Dev` check |
 | Command bar tools (encodings, hashes, JSON, UUID, time, colours, bases, JWT) | auto-test + snapshot | ok |
 | System monitor: CPU, cores, memory, GPU, VRAM, network, disk, top processes | auto-test (math + real sampler) + snapshot + live render on this machine | ok; temperatures not included (need a driver) |
 | Overload pill (CPU or memory ≥ 90% for 30 s) | auto-test (`SustainedAlert`) + snapshot | ok |

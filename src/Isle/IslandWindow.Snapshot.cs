@@ -60,15 +60,12 @@ public partial class IslandWindow
             Modules.Commands.CommandSnapshots.Register(SnapshotStates);
             Modules.Tools.ToolsSnapshots.Register(SnapshotStates);
             Modules.Weather.WeatherSnapshots.Register(SnapshotStates);
-            Modules.SystemMonitor.SystemMonitorSnapshots.Register(SnapshotStates);
-            Modules.Ports.PortsSnapshots.Register(SnapshotStates);
-            Modules.Projects.ProjectsSnapshots.Register(SnapshotStates);
-            SnapshotStates["logs-pill"] = w => w.Pill.Set(new PillItem { Id = "logs.match", Priority = PillPriority.Transient, Width = 300, Peek = true, View = () => Modules.Logs.LogWatchModule.PillView("app.log", "ERROR 500 POST /api/orders: NullReferenceException in OrderService.Create") });
             Modules.AiChat.AiSnapshots.Register(SnapshotStates);
             Modules.Voice.VoiceSnapshots.Register(SnapshotStates);
             Modules.Agents.AgentSnapshots.Register(SnapshotStates);
             Modules.Characters.CharacterSnapshots.Register(SnapshotStates);
             Views.SettingsPanel.SettingsSnapshots.Register(SnapshotStates);
+            DevPack.Load(); // adds the pack's states
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");

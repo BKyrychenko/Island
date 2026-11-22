@@ -5,8 +5,11 @@ namespace Isle.Tests;
 
 static class TestSetup
 {
-    /// <summary>Keeps tests away from the real %AppData%\Isle.</summary>
+    /// <summary>Keeps tests away from the real %AppData%\Isle and tests the developer build (pack registered).</summary>
     [ModuleInitializer]
-    public static void Init() =>
+    public static void Init()
+    {
         Paths.Root = Path.Combine(Path.GetTempPath(), "isle-tests-root-" + Environment.ProcessId);
+        Isle.Dev.Pack.Register();
+    }
 }

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Isle\Isle.csproj" />
+    <ProjectReference Include="..\..\src\Isle.Dev\Isle.Dev.csproj" />
   </ItemGroup>
 
 </Project>

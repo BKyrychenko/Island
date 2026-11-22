@@ -31,9 +31,12 @@ public sealed class SettingsView : Grid, ITabView
 {
     public static readonly string[] Sections = ["general", "modules", "options", "hotkeys", "about"];
 
-    /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden).</summary>
-    public static readonly string[] ModuleIds =
-        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "sysmon", "ports", "projects", "logs", "characters", "tray"];
+    /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden). The developer pack inserts its own.</summary>
+    internal static readonly List<string> ModuleIds =
+        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "characters", "tray"];
+
+    /// <summary>Option rows the developer pack adds after the command bar group (view, add-a-group).</summary>
+    internal static readonly List<Action<SettingsView, Action<string>>> DevOptions = [];
 
     static Core.Settings S => Core.Settings.Current;
 
@@ -260,22 +263,7 @@ public sealed class SettingsView : Grid, ITabView
 
         OptionGroup("commands");
         Row("set.cmdFolders", TextField(S.Opt("cmd.folders"), v => { S.SetOpt("cmd.folders", v.Trim()); Save("Options", restart: "commands"); }, @"C:\Users\me\Projects"), "set.cmdFolders.hint", wide: true);
-        Row("set.cmdDev", OptSwitch("cmd.devTools", Edition.IsDev, restart: "commands"), "set.cmdDev.hint");
-
-        OptionGroup("sysmon");
-        Row("set.sysmonAlerts", OptSwitch("sysmon.alerts", true, restart: "sysmon"), "set.sysmonAlerts.hint");
-
-        OptionGroup("ports");
-        Row("set.portsNotify", OptSwitch("ports.notify", true, restart: "ports"), "set.portsNotify.hint");
-
-        OptionGroup("projects");
-        Row("set.projectsPaths", TextField(S.Opt("projects.paths"), v => { S.SetOpt("projects.paths", v.Trim()); Save("Options", restart: "projects"); }, @"C:\Users\me\Projects\app"), "set.projectsPaths.hint", wide: true);
-        Row("set.projectsBuilds", OptSwitch("projects.builds", true, restart: "projects"), "set.projectsBuilds.hint");
-        Row("set.projectsToken", SecretField("projects.githubToken", restart: "projects"), "set.projectsToken.hint");
-
-        OptionGroup("logs");
-        Row("set.logsFiles", TextField(S.Opt("logs.files"), v => { S.SetOpt("logs.files", v.Trim()); Save("Options", restart: "logs"); }, @"C:\Users\me\Projects\api\logs\app.log"), "set.logsFiles.hint", wide: true);
-        Row("set.logsPattern", TextField(S.Opt("logs.pattern", Modules.Logs.LogWatchModule.DefaultPattern), v => { S.SetOpt("logs.pattern", v.Trim()); Save("Options", restart: "logs"); }, Modules.Logs.LogWatchModule.DefaultPattern), "set.logsPattern.hint", wide: true);
+        foreach (var add in DevOptions) add(this, OptionGroup);
 
         OptionGroup("tools");
         Row("set.recAudio", OptSwitch("rec.systemAudio", true));
@@ -334,7 +322,7 @@ public sealed class SettingsView : Grid, ITabView
 
     // ---- actions ----
 
-    void Save(string name, string? restart = null)
+    internal void Save(string name, string? restart = null)
     {
         S.Save(name);
         if (restart is not null) _a.RestartModule(restart);
@@ -406,7 +394,7 @@ public sealed class SettingsView : Grid, ITabView
     }
 
     /// <summary>Label (+ optional hint below it) on the left, control on the right; <paramref name="wide"/> puts the control below.</summary>
-    void Row(string labelKey, FrameworkElement control, string? hintKey = null, bool wide = false, string? hintBrush = null)
+    internal void Row(string labelKey, FrameworkElement control, string? hintKey = null, bool wide = false, string? hintBrush = null)
     {
         var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var l = Text(Strings.T(labelKey), dim: false);
@@ -463,7 +451,7 @@ public sealed class SettingsView : Grid, ITabView
         return s;
     }
 
-    ToggleButton OptSwitch(string key, bool fallback, string? restart = null) =>
+    internal ToggleButton OptSwitch(string key, bool fallback, string? restart = null) =>
         Switch(S.OptBool(key, fallback), on => { S.SetOpt(key, on); Save("Options", restart); });
 
     /// <param name="labelKey">Strings key for a value (null → <paramref name="literal"/> or the value itself).</param>
@@ -507,7 +495,7 @@ public sealed class SettingsView : Grid, ITabView
     }
 
     /// <summary>Text box that commits on Enter or when it loses focus (only when the text changed).</summary>
-    static FrameworkElement TextField(string value, Action<string> commit, string placeholder, double width = 0)
+    internal static FrameworkElement TextField(string value, Action<string> commit, string placeholder, double width = 0)
     {
         var box = new TextBox { Text = value, MinHeight = 26, Padding = new Thickness(8, 2, 8, 2), FontSize = 12 };
         if (width > 0) box.Width = width;
@@ -527,7 +515,7 @@ public sealed class SettingsView : Grid, ITabView
         return new Grid { Children = { box, hint } };
     }
 
-    FrameworkElement SecretField(string key, string? restart)
+    internal FrameworkElement SecretField(string key, string? restart)
     {
         var box = new PasswordBox { Width = 150, MinHeight = 26, Padding = new Thickness(8, 0, 8, 0), VerticalContentAlignment = VerticalAlignment.Center };
         var hint = new TextBlock { IsHitTestVisible = false, Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 11.5 };

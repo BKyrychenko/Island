@@ -3,7 +3,11 @@
 One line each: decision — why.
 
 ## Developer edition
-- One codebase, two editions: `-p:Edition=Dev` defines `DEV_EDITION`, which only changes module defaults (`Edition.IsDev`). Both editions ship the same code and tests, and the standard edition can switch every developer module on in Settings.
+- Developer modules are a separate assembly, `Isle.Dev.dll`, so the standard download ships none of their code; the developer edition is the same Isle.exe plus that file. Pack present = developer build, so its modules default to on.
+- The loader opens exactly `Isle.Dev.dll` next to Isle.exe and never scans a folder: one known file, no plug-in discovery.
+- A pack is used only when its informational version (`1.0.0+<commit>`, appended by the SDK) equals Isle's: it uses Isle internals, which change between commits.
+- Loading fails open: a missing, mismatched or throwing pack is logged and Isle starts without it.
+- Developer icons stay in core `Styles/Icons.xaml`: they are a few shared geometries, and XAML resources in a second assembly would need their own dictionary merge.
 - System monitor reads Win32 (`GetSystemTimes`, `NtQuerySystemInformation`, `GlobalMemoryStatusEx`) and PDH for GPU and disk — no driver, no admin, no NuGet package. Temperatures would need a kernel driver and are left out.
 - Sampling runs once a second only while the System tab is on screen; in the background only CPU and memory are read, every 5 s, for the overload pill.
 - Ports come from `GetExtendedTcpTable`; listeners are merged per port and program (nginx workers are one row) and filtered: system processes, session-0 services that are not known dev servers, and the dynamic range ≥ 49152.

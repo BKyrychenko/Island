@@ -153,8 +153,13 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   while hidden). Options `chars.kind`, `chars.inPill`, `chars.sleepMin`.
 
 ### Developer modules
-On by default only in the developer edition (`-p:Edition=Dev` → `DEV_EDITION` → `Core/Edition.IsDev`); the standard
-edition lists them in Settings, switched off. Shared helpers: `Core/Cli` (run a console tool, capture stdout, timeout),
+They live in `src/Isle.Dev` → `Isle.Dev.dll` (same namespaces and folder layout as `src/Isle`; Isle never references
+it). `Core/DevPack.Load()` runs after the core registrations in `App.StartModules` and in `RunSnapshot`: if exactly
+`Isle.Dev.dll` exists in `AppContext.BaseDirectory` and its `AssemblyInformationalVersion` (`1.0.0+<commit>`) equals
+Isle's, it calls `Isle.Dev.Pack.Register()` by reflection; otherwise, or on any exception, it logs and continues
+without the pack. `Pack.Register` merges `DevStrings` (`Strings.Add`), registers the four modules (on by default),
+inserts them into `SettingsView.ModuleIds`, and adds to `SettingsView.DevOptions`, `CommandModule.DevProviders` and
+`IslandWindow.SnapshotStates`. Isle exposes internals to the pack with `InternalsVisibleTo Isle.Dev`. Shared helpers: `Core/Cli` (run a console tool, capture stdout, timeout),
 `Core/ProcessOps` (end a process if its name still matches, open with the shell).
 
 - **System** (`sysmon`, `Modules/SystemMonitor`) — `SystemSampler` (GetSystemTimes, per-core

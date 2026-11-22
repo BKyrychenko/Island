@@ -138,12 +138,10 @@ that breathe, follow the cursor, dance to music and nap.
 
 ## Developer edition
 
-A build for people who live in terminals. It is the same code with the developer modules switched on; the standard
-edition lists them in **Settings → Modules**, switched off.
-
-```powershell
-dotnet build -c Release -p:Edition=Dev
-```
+A build for people who live in terminals. The developer modules live in a separate pack, `Isle.Dev.dll`; the standard
+download does not contain them. `.\scripts\build.ps1` writes both: `dist\Isle` (standard) and `dist\Isle-Dev` (the same
+plus the pack), each also as `-selfcontained`. To add the pack to an existing install, drop the `Isle.Dev.dll` built
+from the same commit next to `Isle.exe`; its modules are then on by default and listed in **Settings → Modules**.
 
 <table>
 <tr>
@@ -211,7 +209,7 @@ A **log watcher** can also follow your log files and show the first new `ERROR` 
 git clone https://github.com/BKyrychenko/island.git
 cd island
 .\scripts\build.ps1                    # build, test and publish into dist\
-.\scripts\build.ps1 -Edition Dev       # the same for the developer edition
+.\dist\Isle-Dev\Isle.exe               # the developer edition (standard + Isle.Dev.dll)
 .\dist\Isle\Isle.exe                   # needs the .NET 10 Desktop Runtime
 .\dist\Isle-selfcontained\Isle.exe     # or the self-contained build
 ```
@@ -272,6 +270,7 @@ The window is one layered, always-on-top WPF window animated with a hand-written
 ```
 src/
   Isle/            the app: Core (settings, pill queue, modules), Modules/*, Views/*
+  Isle.Dev/        developer pack (Isle.Dev.dll), loaded at start-up when it sits next to Isle.exe
   Isle.Hook/       helper the coding agents call to talk to Isle over a named pipe
   Isle.Launcher/   small Rust launcher that starts Isle.exe
 tests/Isle.Tests/  xUnit tests (logic, parsers, views, live Win32 checks)

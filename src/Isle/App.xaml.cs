@@ -85,11 +85,8 @@ public partial class App : Application
             Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
             Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
             Host.Register("agents", () => new Modules.Agents.AgentsModule(Island!));
-            Host.Register("sysmon", () => new Modules.SystemMonitor.SystemMonitorModule(Island!), defaultEnabled: Edition.IsDev);
-            Host.Register("ports", () => new Modules.Ports.PortsModule(Island!), defaultEnabled: Edition.IsDev);
-            Host.Register("projects", () => new Modules.Projects.ProjectsModule(Island!), defaultEnabled: Edition.IsDev);
-            Host.Register("logs", () => new Modules.Logs.LogWatchModule(Island!), defaultEnabled: Edition.IsDev);
             Host.Register("characters", () => new Modules.Characters.CharactersModule(Island!));
+            DevPack.Load();
             Host.Sync();
             if (Island is not null) Island.SettingsRequested += () => OpenSettings();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });

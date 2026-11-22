@@ -21,7 +21,7 @@ public sealed class UsageModule(IslandWindow island) : IModule, IDisposable
         _cts = new CancellationTokenSource();
         var token = _cts.Token; // taken now: after Stop the source is disposed
         var service = new UsageService(UsageScanner.DefaultProjectsDir(), Paths.File("usage.json"));
-        island.AddTab(new TabInfo(TabId, "tab.usage", "Icon.Code", () => new UsageView(() => service.RefreshAsync(token)), 98));
+        island.AddTab(new TabInfo(TabId, "tab.usage", "Icon.Code", () => Settings.Current.Opt("setup.agent") == "codex" ? Views.Setup.SetupView.ComingSoon() : new UsageView(() => service.RefreshAsync(token)), 98));
     }
 
     public void Stop()

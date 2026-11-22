@@ -72,7 +72,7 @@ public sealed class AgentsModule(IslandWindow island) : IModule, IDisposable
         OpenTerminal: s => _ = OpenTerminal(s),
         Answer: (r, picks) => Answer(r, AgentText.AnswerReply(r.Questions, picks)),
         Dismiss: s => { _book?.Remove(s.Key); Changed(); },
-        Targets: () => [HookTarget.Claude(), HookTarget.Codex()],
+        Targets: Targets,
         Install: Install,
         Remove: Remove,
         TimeoutSeconds: () => TimeoutSeconds);
@@ -201,7 +201,10 @@ public sealed class AgentsModule(IslandWindow island) : IModule, IDisposable
 
     // ---- hooks ----
 
-    static bool AnyHooksInstalled() => HookInstaller.IsInstalled(HookTarget.Claude()) || HookInstaller.IsInstalled(HookTarget.Codex());
+    /// <summary>Hook targets to offer: only the agent chosen in the developer setup ("setup.agent"), both when never chosen.</summary>
+    static HookTarget[] Targets() => S.Opt("setup.agent") switch { "claude" => [HookTarget.Claude()], "codex" => [HookTarget.Codex()], _ => [HookTarget.Claude(), HookTarget.Codex()] };
+
+    static bool AnyHooksInstalled() => Targets().Any(HookInstaller.IsInstalled);
 
     string Install(HookTarget t)
     {

@@ -98,7 +98,7 @@ public class SettingsPanelTests
                 Assert.Equal(Strings.T("set.close"), System.Windows.Automation.AutomationProperties.GetName(close));
                 view.ShowSection("options");
                 var jumps = Descendants(view).OfType<System.Windows.Controls.ComboBox>().Single();
-                Assert.Equal(17, jumps.Items.Count); // placeholder + 11 core groups + 5 pack groups (TestSetup registers the pack)
+                Assert.Equal(18, jumps.Items.Count); // placeholder + agents + 10 Home groups + 6 Dev groups (TestSetup registers every pack)
                 jumps.SelectedIndex = jumps.Items.Count - 1;
             }
             finally { Strings.Language = "en"; Settings.Current.Scale = savedScale; Settings.Current.Save("Scale"); }

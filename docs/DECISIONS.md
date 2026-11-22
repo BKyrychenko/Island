@@ -2,12 +2,20 @@
 
 One line each: decision — why.
 
-## Developer edition
-- Developer modules are a separate assembly, `Isle.Dev.dll`, so the standard download ships none of their code; the developer edition is the same Isle.exe plus that file. Pack present = developer build, so its modules default to on.
-- The loader opens exactly `Isle.Dev.dll` next to Isle.exe and never scans a folder: one known file, no plug-in discovery.
-- A pack is used only when its informational version (`1.0.0+<commit>`, appended by the SDK) equals Isle's: it uses Isle internals, which change between commits.
+## Packages and packs
+- Two packages from one codebase, each with only its DLLs: Community = Isle.exe + Music + Home, Developer = Isle.exe + Music + Dev. A pack present means its modules default to on.
+- The shell keeps only what it or two or more packs use (window, settings, tray, hotkeys, agents, `IndicatorPill`, `Ui`); `ClipboardOps`, `IdleHttp`, `ShellIcons` went to Home, `Cli` / `ProcessOps` to Dev.
+- The shell targets `net10.0-windows` without WinRT; only Music and Home need the Windows SDK projection (24 MB), so it is not inside Isle.exe.
+- Music is pill-only and knows nothing about lyrics: Home attaches the Music tab and the pill's lyric line through `MediaModule.Started` / `PillLyric`. Without Home no lyrics code runs.
+- The loader opens exactly `Isle.Music.dll`, `Isle.Home.dll`, `Isle.Dev.dll` next to Isle.exe in that order and never scans a folder: known files, no plug-in discovery.
+- A pack is used only when its informational version (`1.0.0+<commit>`, appended by the SDK; one `Version` in `Directory.Build.props`) equals Isle's: packs use Isle internals, which change between commits.
+- A pack that references another `Isle.*` pack loads only after that one registered (Home without Music is skipped, not half-registered): a JIT failure would only surface after Register had already mutated state.
 - Loading fails open: a missing, mismatched or throwing pack is logged and Isle starts without it.
-- Developer icons stay in core `Styles/Icons.xaml`: they are a few shared geometries, and XAML resources in a second assembly would need their own dictionary merge.
+- Pack dependencies are published per pack and copied loose next to Isle.exe (the shell's own copy wins); `Assembly.LoadFrom` resolves them from that folder, so no custom load context.
+- Icons stay in the shell's `Styles/Icons.xaml`: they are a few shared geometries, and XAML resources in a pack would need their own dictionary merge.
+- The developer command-bar tools (encodings, hashes, `ip`, `ping`, `port`…) were dropped.
+
+## Developer modules
 - System monitor reads Win32 (`GetSystemTimes`, `NtQuerySystemInformation`, `GlobalMemoryStatusEx`) and PDH for GPU and disk — no driver, no admin, no NuGet package. Temperatures would need a kernel driver and are left out.
 - Sampling runs once a second only while the System tab is on screen; in the background only CPU and memory are read, every 5 s, for the overload pill.
 - Ports come from `GetExtendedTcpTable`; listeners are merged per port and program (nginx workers are one row) and filtered: system processes, session-0 services that are not known dev servers, and the dynamic range ≥ 49152.

@@ -4,10 +4,35 @@ Hand-written module map. One paragraph per module: what it owns, public surface,
 Keep it short and current (update at the end of every milestone).
 
 ## Process shape
-One WPF process (`src/Isle`, `Isle.exe`). `App.OnStartup` installs exception handlers, takes the single-instance
-mutex, applies language and render mode, shows `IslandWindow`, and only after the first frame
-(`DispatcherPriority.ApplicationIdle`) registers modules with `ModuleHost` and calls `Sync()`.
+One WPF process: the shell `Isle.exe` (`src/Isle`, `net10.0-windows`, no WinRT) plus optional packs loaded from its
+folder. `App.OnStartup` installs exception handlers, takes the single-instance mutex, applies language and render mode,
+shows `IslandWindow`, and only after the first frame (`DispatcherPriority.ApplicationIdle`) registers the shell's
+modules (tray, agents), loads the packs and calls `ModuleHost.Sync()`.
 Static access points: `App.Host` (modules), `App.Island` (the window), `Settings.Current`.
+
+## Packs
+| Project | DLL | Contents | Needs |
+|---|---|---|---|
+| `src/Isle.Music` | `Isle.Music.dll` | `media` module: media session, music pill + track banner, accent from the art | WinRT |
+| `src/Isle.Home` | `Isle.Home.dll` | every community module, the Music tab and lyrics | Isle.Music, WinRT, NuGet (NAudio, Whisper, PdfPig, ZXing, Vortice, System.Management) |
+| `src/Isle.Dev` | `Isle.Dev.dll` | developer modules | Vortice.DXGI |
+
+Packs keep the namespaces and folder layout of `src/Isle`; Isle never references them. `Core/Packs.Load()` runs after
+the shell's registrations in `App.StartModules`, in `RunSnapshot` and for debug flags: for Music, Home, Dev in that
+order, if exactly `Isle.<Name>.dll` exists in `AppContext.BaseDirectory`, its `AssemblyInformationalVersion`
+(`1.0.0+<commit>`, one `Version` in `Directory.Build.props`) equals Isle's and every `Isle.*` pack it references has
+registered, it calls `Isle.<Name>.Pack.Register()` by reflection; otherwise, or on any exception, it logs and goes on.
+A version without `+<commit>` logs one warning. Isle exposes internals to the packs with `InternalsVisibleTo`.
+Pack dependencies sit loose next to Isle.exe; `Assembly.LoadFrom` resolves them from there. `Directory.Build.targets`
+copies each pack's build output into Isle's bin so Isle run from there loads all packs.
+
+Hooks a pack registers into (all static): `ModuleHost.Register`, `Strings.Add(en, uk)`,
+`IslandWindow.SnapshotStates`, `SettingsView.AddModules(before, ids)` (falls back to before "tray"),
+`SettingsView.PackOptions` (option groups and rows; `Row`, `OptSwitch`, `Choice`, `TextField`, `SecretField`, `Link`,
+`Save` are internal), `App.OpenTargets` (settings links), `App.BeforeQuit` (Home: finish a recording),
+`App.DebugCommands` (Home: `--transcribe`). Music → Home: `MediaModule.Started` / `Stopping`, `Source`, `PillLyric`
+(a `LyricLine` delegate) and `RefreshPill`. Existing public window API covers the rest (idle-pill slots,
+`Tabs.Mascot`, `FileDropTarget`, `Theme.SetAccent`).
 
 ## Shell
 - **App** (`App.xaml.cs`) — start-up/shutdown, single instance (`Local\Isle.SingleInstance.*` mutex), global exception
@@ -45,8 +70,9 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - **PillQueue / PillItem / PillPriority** — what the collapsed pill shows; pure `Select()` rule (tested).
 - **TabInfo / ITabView** — tab registration record and the shown/hidden callbacks for tab views.
 - **ForegroundWatcher** — `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`; `LastExternal` (paste target), `IsFullscreen`, `ProcessName`.
-- **ClipboardOps** — snapshot/restore the clipboard, `SendCtrl(vk)`, `CopySelectionAsync`, `PasteTextAsync`, and
-  `Quiet(span)` (clipboard history ignores changes meanwhile). Used by the clipboard module and AI text actions.
+- **ClipboardOps** (Home pack) — snapshot/restore the clipboard, `SendCtrl(vk)`, `CopySelectionAsync`, `PasteTextAsync`,
+  and `Quiet(span)` (clipboard history ignores changes meanwhile). Used by the clipboard module and AI text actions.
+- **Packs** — the pack loader (see Packs).
 - **Memory** — `TrimSoon()`: GC + `EmptyWorkingSet` after start-up and after heavy features.
 
 ## Styles / Views
@@ -55,13 +81,17 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
 - `Views/Icon` (draws an icon geometry), `Views/TabBar` (tab strip + sliding indicator + more + gear), `Views/IdlePillView`
   (optional clock, left/right slots for mascot and weather).
 
-## Modules (`src/Isle/Modules`)
-- **Media** (`media`, `Modules/Media`) — `MediaSession` wraps GSMTC (manager + chosen session events, marshalled to
-  the UI thread) and exposes `IMediaSource` (`Current: MediaState`, `Changed`, `PlayPause/Next/Previous/Seek`).
+## Modules
+Shell (`src/Isle/Modules`): Agents, Hotkeys, Tray. Music pack: Media. Home pack: the rest below. Developer pack: see
+Developer modules.
+
+- **Media** (`media`, Music pack, `Modules/Media`) — `MediaSession` wraps GSMTC (manager + chosen session events,
+  marshalled to the UI thread) and exposes `IMediaSource` (`Current: MediaState`, `Changed`, `PlayPause/Next/Previous/Seek`).
   `MediaModule` puts the `music` pill item (`Views/Music/MusicPill`, compact equalizer for the side slot), the
-  `music.track` banner, registers the Music tab (`Views/Music/MusicView`), sets `Theme.SetAccent` from the art, and owns
-  the `LyricsTracker`. Pure helpers: `PlaybackMath` (extrapolation, formatting, app names, session choice), `ArtColors`.
-  `FakeMediaSource` + `MediaSnapshots` provide snapshot states. Options: `lyrics.inPill`, `lyrics.alwaysFetch`.
+  `music.track` banner and sets `Theme.SetAccent` from the art. Pure helpers: `PlaybackMath` (extrapolation, formatting,
+  app names, session choice), `ArtColors`. `FakeMediaSource` + `MediaSnapshots` provide snapshot states.
+- **Music tab** (Home pack, `Modules/Lyrics/MusicTab`) — on `MediaModule.Started`: the Music tab (`Views/Music/MusicView`),
+  a `LyricsTracker`, the pill's lyric line (`PillLyric`) and prefetching. Options: `lyrics.inPill`, `lyrics.alwaysFetch`.
 - **Lyrics** (`lyrics`, `Modules/Lyrics`) — `LyricsService` (LRCLIB get→search, memory + disk cache in
   `%AppData%\Isle\lyrics\<hash>.json`, lazy HttpClient disposed after 2 min idle, `ILyricsHttp` seam), `Lrc` parser,
   `LyricsTracker` (lyrics for the current track, fetched only on demand).
@@ -153,13 +183,8 @@ Static access points: `App.Host` (modules), `App.Island` (the window), `Settings
   while hidden). Options `chars.kind`, `chars.inPill`, `chars.sleepMin`.
 
 ### Developer modules
-They live in `src/Isle.Dev` → `Isle.Dev.dll` (same namespaces and folder layout as `src/Isle`; Isle never references
-it). `Core/DevPack.Load()` runs after the core registrations in `App.StartModules` and in `RunSnapshot`: if exactly
-`Isle.Dev.dll` exists in `AppContext.BaseDirectory` and its `AssemblyInformationalVersion` (`1.0.0+<commit>`) equals
-Isle's, it calls `Isle.Dev.Pack.Register()` by reflection; otherwise, or on any exception, it logs and continues
-without the pack. `Pack.Register` merges `DevStrings` (`Strings.Add`), registers the four modules (on by default),
-inserts them into `SettingsView.ModuleIds`, and adds to `SettingsView.DevOptions`, `CommandModule.DevProviders` and
-`IslandWindow.SnapshotStates`. Isle exposes internals to the pack with `InternalsVisibleTo Isle.Dev`. Shared helpers: `Core/Cli` (run a console tool, capture stdout, timeout),
+`src/Isle.Dev` → `Isle.Dev.dll` (see Packs). `Pack.Register` merges `DevStrings`, registers the modules (on by default)
+with their settings rows and snapshot states. Helpers: `Core/Cli` (run a console tool, capture stdout, timeout),
 `Core/ProcessOps` (end a process if its name still matches, open with the shell).
 
 - **System** (`sysmon`, `Modules/SystemMonitor`) — `SystemSampler` (GetSystemTimes, per-core
@@ -168,7 +193,7 @@ inserts them into `SettingsView.ModuleIds`, and adds to `SettingsView.DevOptions
   View `Views/SystemMonitor/SystemMonitorView` samples once a second only while shown. Option `sysmon.alerts`.
 - **Ports** (`ports`, `Modules/Ports`) — `PortScanner` (`GetExtendedTcpTable`, owner PIDs, session-0 flag),
   `PortFilter` (merge per port and program, filter system processes / vendor services / dynamic ports),
-  `Containers` (`docker ps`, `wsl -l -v`, stop), `PortsProvider` (command bar `port 3000`). View `Views/Ports/PortsView`.
+  `Containers` (`docker ps`, `wsl -l -v`, stop). View `Views/Ports/PortsView`.
   Option `ports.notify`.
 - **Projects** (`projects`, `Modules/Projects`) — `RepoParse` (git porcelain v2, GitHub remotes, Actions runs, search
   counts), `BuildWatcher` + `BuildCommand` (recognise build/test command lines via `NtQueryInformationProcess`, keep a
@@ -184,8 +209,6 @@ inserts them into `SettingsView.ModuleIds`, and adds to `SettingsView.DevOptions
   transcripts under `~\.claude\projects` or `CLAUDE_CONFIG_DIR`: token counters only, deduplicated, cached in
   `usage.json`; scans only while the tab is shown or on refresh), `UsagePrices` (API-equivalent USD per model),
   `UsageReport` (today / 7 / 30 days, recent sessions). View `Views/Usage/UsageView`.
-- Command bar: `DevTools` / `DevToolsProvider` (encodings, hashes, JSON, UUID, time, colours, number bases, JWT) and
-  `DevSystemProvider` (`ip`, `ping`, `flushdns`, `power …`, `ssh`), registered when `cmd.devTools` is on.
 
 ## Settings panel (`Views/SettingsPanel`)
 `SettingsView` — full-panel overlay opened by `App.OpenSettings(section?)` (tab-bar gear, tray "Settings"). Sections
@@ -195,4 +218,4 @@ restart one module for options read at start, open the AI settings / agent hooks
 While it is open the island ignores click-through. `SettingsSnapshots` registers `settings-*` snapshot states.
 
 ## Tests (`tests/Isle.Tests`)
-xUnit; `TestSetup` redirects `Paths.Root` to a temp folder. Pure logic only; UI is checked through snapshots (from M1).
+xUnit; `TestSetup` redirects `Paths.Root` to a temp folder and registers Music, Home and Dev (the loader's order). Pure logic only; UI is checked through snapshots (from M1).

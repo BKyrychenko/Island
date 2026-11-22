@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Isle.Modules.Lyrics;
 
 namespace Isle.Modules.Media;
 
@@ -56,14 +55,4 @@ public sealed class FakeMediaSource : IMediaSource
         return bmp;
     }
 
-    public const string DemoLrc = """
-        [00:58.10]Lanterns drifting where the water bends
-        [01:05.40]Every light a letter that the evening sends
-        [01:12.80]Hold the rope a little longer, friend
-        [01:20.20]We are paper, we are flame, we are the end
-        [01:27.60]Of a long and patient summer
-        [01:34.90]Counting boats until the morning
-        """;
-
-    public static LyricsResult DemoLyrics(DateTimeOffset now) => new(LyricsStatus.Synced, Lrc.Parse(DemoLrc), "", now);
 }

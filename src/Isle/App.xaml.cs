@@ -11,13 +11,22 @@ public partial class App : Application
 {
     const string MutexName = @"Local\Isle.SingleInstance.7c1f0b52";
     Mutex? _mutex;
-    Modules.Tools.ToolsModule? _tools;
     bool _quitting;
 
     public static ModuleHost Host { get; } = new();
     public static IslandWindow? Island { get; private set; }
     /// <summary>True while running the --snapshot renderer.</summary>
     public static bool IsSnapshot { get; private set; }
+
+    /// <summary>Debug command-line flags packs add (flag → run with the arguments, returns the exit code), e.g. --transcribe.</summary>
+    internal static readonly Dictionary<string, Func<string[], Task<int>>> DebugCommands = [];
+    /// <summary>Asked before quitting; returning false cancels (Home: finish a screen recording first).</summary>
+    internal static readonly List<Func<Task<bool>>> BeforeQuit = [];
+    /// <summary>Settings links (<see cref="Views.SettingsPanel.SettingsActions.Open"/>): target → what to open, null while its module is off.</summary>
+    internal static readonly Dictionary<string, Func<Action?>> OpenTargets = new()
+    {
+        ["hooks"] = () => Host.Get<Modules.Agents.AgentsModule>("agents") is { } ag ? ag.OpenHooks : null,
+    };
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -32,11 +41,15 @@ public partial class App : Application
             return;
         }
 
-        if (e.Args.Length > 0 && e.Args[0] == "--transcribe")
+        if (e.Args.Length > 0 && e.Args[0].StartsWith("--", StringComparison.Ordinal))
         {
-            IsSnapshot = true;
-            Dispatcher.InvokeAsync(async () => Shutdown(await Modules.Voice.VoiceSelfTest.RunAsync(e.Args)));
-            return;
+            Packs.Load();
+            if (DebugCommands.TryGetValue(e.Args[0], out var command))
+            {
+                IsSnapshot = true;
+                Dispatcher.InvokeAsync(async () => Shutdown(await command(e.Args)));
+                return;
+            }
         }
 
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
@@ -71,22 +84,8 @@ public partial class App : Application
                 toggleIsland: ToggleIsland,
                 openSettings: () => OpenSettings(),
                 quit: Quit));
-            Host.Register("lyrics", () => new Modules.Lyrics.LyricsModule());
-            Host.Register("media", () => new Modules.Media.MediaModule(Island!));
-            Host.Register("timers", () => new Modules.Timers.TimersModule(Island!));
-            Host.Register("notes", () => new Modules.Notes.NotesModule(Island!));
-            Host.Register("control", () => new Modules.ControlCenter.ControlModule(Island!));
-            Host.Register("live", () => new Modules.LiveEvents.LiveEventsModule(Island!));
-            Host.Register("clipboard", () => new Modules.Clipboard.ClipboardModule(Island!));
-            Host.Register("shelf", () => new Modules.Shelf.ShelfModule(Island!));
-            Host.Register("commands", () => new Modules.Commands.CommandModule(Island!, () => Host.Get<Modules.Timers.TimersModule>("timers")?.Controller));
-            Host.Register("tools", () => _tools ??= new Modules.Tools.ToolsModule(Island!));
-            Host.Register("weather", () => new Modules.Weather.WeatherModule(Island!));
-            Host.Register("ai", () => new Modules.AiChat.AiModule(Island!));
-            Host.Register("voice", () => new Modules.Voice.VoiceModule(Island!));
             Host.Register("agents", () => new Modules.Agents.AgentsModule(Island!));
-            Host.Register("characters", () => new Modules.Characters.CharactersModule(Island!));
-            DevPack.Load();
+            Packs.Load();
             Host.Sync();
             if (Island is not null) Island.SettingsRequested += () => OpenSettings();
             Island?.Hotkeys.Register("toggle", "hotkey.toggle", "Win+Alt+Space", () => { if (Island is null) return; Island.SetHidden("user", false); Island.Toggle(); });
@@ -137,22 +136,8 @@ public partial class App : Application
     static void OpenFromSettings(string target)
     {
         if (Island is not { } w) return;
-        var done = target switch
-        {
-            "weather" => Do(Host.Get<Modules.Weather.WeatherModule>("weather") is { } weather ? weather.OpenSetup : null),
-            "ai" => Do(Host.Get<Modules.AiChat.AiModule>("ai") is { } ai ? ai.OpenSettings : null),
-            "hooks" => Do(Host.Get<Modules.Agents.AgentsModule>("agents") is { } ag ? ag.OpenHooks : null),
-            "characters" => Do(Host.Get<Modules.Characters.CharactersModule>("characters") is { } ch ? ch.OpenGallery : null),
-            _ => false,
-        };
-        if (!done) w.ShowToast(Strings.T("set.moduleOff"));
-
-        static bool Do(Action? a)
-        {
-            if (a is null) return false;
-            a();
-            return true;
-        }
+        if (OpenTargets.TryGetValue(target, out var find) && find() is { } open) open();
+        else w.ShowToast(Strings.T("set.moduleOff"));
     }
 
     void OnIslandClosing(object? sender, CancelEventArgs e)
@@ -167,7 +152,8 @@ public partial class App : Application
         _quitting = true;
         try
         {
-            if (_tools is not null && !await _tools.FinishRecordingAsync(exiting: true)) return;
+            foreach (var ask in BeforeQuit)
+                if (!await ask()) return;
             // Leave the native Closing callback before WPF begins shutting down its windows.
             await Dispatcher.Yield(DispatcherPriority.Normal);
             if (Island is not null) Island.Closing -= OnIslandClosing;

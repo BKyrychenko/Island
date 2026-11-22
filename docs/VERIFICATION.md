@@ -33,7 +33,7 @@ Measured the arranged WPF controls at 80% in isolated English and Ukrainian snap
 
 | Feature | Method | Result |
 |---|---|---|
-| Developer pack (`Isle.Dev.dll` next to `Isle.exe`) | live (`--snapshot sysmon-alert` from the build output and from single-file `dist\Isle-Dev` and `-selfcontained`) | pack loads; without the file dev states are unknown (exit 2) and core states render; a pack from another commit is logged and skipped. `build.ps1` repeats the `dist\Isle-Dev` check |
+| Packages and packs (`Isle.Music/Home/Dev.dll` next to `Isle.exe`) | `build.ps1` smoke checks on all four dist folders + live | Community has Music + Home and no Dev; Dev has Music + Dev, no Home and no Whisper natives; music pill renders in both, `timers-tab` only in Community, `sysmon-alert` only in Dev (the other exits 2). Home without Music is logged and skipped; a pack from another commit is logged and skipped |
 | Command bar tools (encodings, hashes, JSON, UUID, time, colours, bases, JWT) | auto-test + snapshot | ok |
 | System monitor: CPU, cores, memory, GPU, VRAM, network, disk, top processes | auto-test (math + real sampler) + snapshot + live render on this machine | ok; temperatures not included (need a driver) |
 | Overload pill (CPU or memory ≥ 90% for 30 s) | auto-test (`SustainedAlert`) + snapshot | ok |

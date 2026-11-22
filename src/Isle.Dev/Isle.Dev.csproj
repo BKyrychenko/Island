@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Developer pack: Isle.exe loads Isle.Dev.dll from its own folder when present (Core/DevPack.cs). -->
+  <!-- Developer pack: Isle.exe loads Isle.Dev.dll from its own folder when present (Core/Packs.cs). -->
   <PropertyGroup>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -10,8 +10,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Isle</RootNamespace>
     <AssemblyName>Isle.Dev</AssemblyName>
-    <!-- Keep equal to Isle's Version: the loader refuses a pack whose informational version differs. -->
-    <Version>1.0.0</Version>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <IslePack>true</IslePack>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,11 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Isle\Isle.csproj" Private="false" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
   </ItemGroup>
-
-  <!-- Developer convenience: running Isle from its bin after a solution build picks up the pack. -->
-  <Target Name="CopyPackToIsle" AfterTargets="Build">
-    <Copy SourceFiles="$(TargetPath);$(TargetDir)$(TargetName).pdb" DestinationFolder="$(MSBuildThisFileDirectory)..\Isle\bin\$(Configuration)\$(TargetFramework)\" SkipUnchangedFiles="true" />
-  </Target>
 
 </Project>

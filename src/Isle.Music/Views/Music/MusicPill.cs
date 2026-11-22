@@ -1,19 +1,21 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using Isle.Modules.Lyrics;
 using Isle.Modules.Media;
 using MediaState = Isle.Modules.Media.MediaState;
 
 namespace Isle.Views.Music;
 
+/// <summary>The lyric line at <paramref name="now"/> for the pill ("" between lines), or null when the track has no synced lyrics.</summary>
+public delegate string? LyricLine(MediaState track, DateTimeOffset now);
+
 /// <summary>Collapsed-pill music view: art on the left, equalizer on the right, optional current lyric line between.</summary>
 public sealed class MusicPill : Grid, IDisposable
 {
-    public const double PlainWidth = 168, LyricWidth = 340;
+    public const double PlainWidth = 200, LyricWidth = 340;
 
     readonly IMediaSource _media;
-    readonly Func<LyricsTracker?> _lyrics;
+    readonly Func<LyricLine?> _lyric;
     readonly ArtImage _art = new(22, 6) { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(7, 0, 0, 0) };
     readonly Equalizer _eq = new() { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 13, 0) };
     readonly TextBlock _line = new()
@@ -23,13 +25,13 @@ public sealed class MusicPill : Grid, IDisposable
     };
     readonly List<Equalizer> _compacts = [];
     DispatcherTimer? _lyricTimer;
-    int _lineIndex = -2;
     readonly Func<DateTimeOffset> _now;
 
-    public MusicPill(IMediaSource media, Func<LyricsTracker?> lyrics, Func<DateTimeOffset>? now = null)
+    /// <param name="lyric">Current lyric provider (Home pack), null = no lyric line.</param>
+    public MusicPill(IMediaSource media, Func<LyricLine?> lyric, Func<DateTimeOffset>? now = null)
     {
         _media = media;
-        _lyrics = lyrics;
+        _lyric = lyric;
         _now = now ?? (() => DateTimeOffset.Now);
         Children.Add(_art);
         Children.Add(_line);
@@ -38,7 +40,7 @@ public sealed class MusicPill : Grid, IDisposable
     }
 
     /// <summary>Pill width: wider when a lyric line is shown.</summary>
-    public double PillWidth => MediaModule.LyricsInPill ? LyricWidth : PlainWidth;
+    public double PillWidth => _lyric() is null ? PlainWidth : LyricWidth;
 
     public void Update(MediaState s)
     {
@@ -59,9 +61,8 @@ public sealed class MusicPill : Grid, IDisposable
 
     public void UpdateLyric()
     {
-        var show = MediaModule.LyricsInPill && _lyrics()?.ForCurrent is { Status: LyricsStatus.Synced };
+        var show = _media.Current is { } cur && _lyric()?.Invoke(cur, _now()) is not null;
         _line.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        _lineIndex = -2;
         Tick();
         UpdateLyricTimer();
     }
@@ -77,11 +78,8 @@ public sealed class MusicPill : Grid, IDisposable
 
     void Tick()
     {
-        if (_line.Visibility != Visibility.Visible || _media.Current is not { } cur || _lyrics()?.ForCurrent is not { } r) return;
-        var i = Lrc.IndexAt(r.Lines, cur.PositionAt(_now()));
-        if (i == _lineIndex) return;
-        _lineIndex = i;
-        _line.Text = i >= 0 ? r.Lines[i].Text : "";
+        if (_line.Visibility != Visibility.Visible || _media.Current is not { } cur || _lyric()?.Invoke(cur, _now()) is not { } line) return;
+        if (_line.Text != line) _line.Text = line;
     }
 
     public void Dispose() => _lyricTimer?.Stop();

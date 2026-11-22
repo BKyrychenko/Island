@@ -116,6 +116,13 @@ public class StringsTests
     }
 
     [Fact]
+    public void Each_pack_has_the_same_keys_in_both_languages()
+    {
+        Assert.Equal(Isle.Home.HomeStrings.En.Keys.Order(), Isle.Home.HomeStrings.Uk.Keys.Order());
+        Assert.Equal(Isle.Dev.DevStrings.En.Keys.Order(), Isle.Dev.DevStrings.Uk.Keys.Order());
+    }
+
+    [Fact]
     public void No_empty_strings()
     {
         Assert.DoesNotContain(Strings.English, kv => string.IsNullOrWhiteSpace(kv.Value));

@@ -1,7 +1,7 @@
 # build.ps1 - builds, tests and publishes Isle into dist\
-#   dist\Isle\                framework-dependent single file (needs .NET 10 Desktop Runtime)
-#   dist\Isle-selfcontained\  self-contained single file (no runtime needed)
-#   dist\Isle-Dev\, dist\Isle-Dev-selfcontained\  the same plus the developer pack (Isle.Dev.dll)
+#   dist\Isle-Community\  Isle.exe (framework-dependent single file, needs .NET 10 Desktop Runtime) + Music + Home packs
+#   dist\Isle-Dev\        Isle.exe + Music + Dev packs
+#   ...-selfcontained\    the same with a self-contained Isle.exe (no runtime needed)
 # Usage: .\scripts\build.ps1 [-SkipTests] [-OutputDirectory dist]
 # The small Rust launcher (Isle.Launcher.exe) is built when rustc is on PATH; without it Isle.exe is started directly.
 param([switch]$SkipTests, [string]$OutputDirectory = "dist")
@@ -10,8 +10,8 @@ $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)   # repo root
 $rustc = Get-Command rustc.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
 $output = (New-Item -ItemType Directory -Path $OutputDirectory -Force).FullName
-$framework = Join-Path $output "Isle"
-$bundled = Join-Path $output "Isle-selfcontained"
+$parts = Join-Path $output ".parts"
+if (Test-Path -LiteralPath $parts) { Remove-Item -LiteralPath $parts -Recurse -Force }
 
 function Step($name, [scriptblock]$body) {
     Write-Host "== $name" -ForegroundColor Cyan
@@ -34,62 +34,85 @@ else {
     Write-Host "== rustc not found: skipping Isle.Launcher.exe (run Isle.exe directly)" -ForegroundColor Yellow
 }
 
-$proj = "src\Isle\Isle.csproj"
-Step "publish (framework-dependent)" {
-    dotnet publish $proj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained false -o $framework -nologo -v q
+# The shell: Isle.exe as a single file, plus the hook helper.
+$shell = @{ "" = Join-Path $parts "shell"; "-selfcontained" = Join-Path $parts "shell-selfcontained" }
+Step "publish shell (framework-dependent)" {
+    dotnet publish src\Isle\Isle.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained false -o $shell[""] -nologo -v q
 }
-Step "publish (self-contained)" {
-    dotnet publish $proj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o $bundled -nologo -v q
+Step "publish shell (self-contained)" {
+    dotnet publish src\Isle\Isle.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true --self-contained true -o $shell["-selfcontained"] -nologo -v q
+}
+Step "publish hook helper (framework-dependent)" {
+    dotnet publish src\Isle.Hook\Isle.Hook.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o $shell[""] -nologo -v q
+}
+Step "publish hook helper (self-contained)" {
+    dotnet publish src\Isle.Hook\Isle.Hook.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true --self-contained true -o $shell["-selfcontained"] -nologo -v q
 }
 
-if (Test-Path "src\Isle.Hook\Isle.Hook.csproj") {
-    Step "publish hook helper (framework-dependent)" {
-        dotnet publish "src\Isle.Hook\Isle.Hook.csproj" -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o $framework -nologo -v q
+# Packs: each with its own dependencies (NuGet DLLs, the Windows SDK projection, Whisper natives), loose next to Isle.exe.
+# ponytail: packs are plain IL (no ReadyToRun); publish them with R2R if their start-up time ever shows.
+foreach ($pack in "Music", "Home", "Dev") {
+    Step "publish $pack pack" {
+        dotnet publish "src\Isle.$pack\Isle.$pack.csproj" -c Release -r win-x64 --self-contained false -o (Join-Path $parts $pack) -nologo -v q
     }
-    Step "publish hook helper (self-contained)" {
-        dotnet publish "src\Isle.Hook\Isle.Hook.csproj" -c Release -r win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true --self-contained true -o $bundled -nologo -v q
-    }
+    if (-not (Test-Path -LiteralPath (Join-Path $parts "$pack\Isle.$pack.dll"))) { throw "pack output missing: $parts\$pack\Isle.$pack.dll" }
 }
 
-# Native DLLs stay loose next to the exe (Whisper looks for runtimes\win-x64\whisper.dll there; a bundled copy is
-# extracted elsewhere and not found). Other architectures are never loaded on this machine.
-foreach ($d in $framework, $bundled) {
-    if ($launcher) { Copy-Item -LiteralPath $launcher -Destination $d -Force }
-    foreach ($arch in "win-arm64", "win-x86") {
-        $native = Join-Path $d "runtimes\$arch"
-        if (Test-Path -LiteralPath $native) { Remove-Item -LiteralPath $native -Recurse -Force }
+$packages = [ordered]@{ "Isle-Community" = "Music", "Home"; "Isle-Dev" = "Music", "Dev" }
+$folders = @()
+foreach ($package in $packages.Keys) {
+    foreach ($variant in "", "-selfcontained") {
+        $dir = Join-Path $output "$package$variant"
+        if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+        Copy-Item -LiteralPath $shell[$variant] -Destination $dir -Recurse
+        foreach ($pack in $packages[$package]) {
+            $src = Join-Path $parts $pack
+            foreach ($file in Get-ChildItem -LiteralPath $src -Recurse -File -Exclude *.deps.json, *.runtimeconfig.json, *.pdb) {
+                $target = Join-Path $dir $file.FullName.Substring($src.Length + 1)
+                if (Test-Path -LiteralPath $target) { continue }   # the shell's (or an earlier pack's) copy wins
+                New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+                Copy-Item -LiteralPath $file.FullName -Destination $target
+            }
+        }
+        # Native DLLs stay loose (Whisper looks for runtimes\win-x64\whisper.dll next to the exe). Other architectures
+        # are never loaded on this machine.
+        if ($launcher) { Copy-Item -LiteralPath $launcher -Destination $dir -Force }
+        foreach ($arch in "win-arm64", "win-x86") {
+            $native = Join-Path $dir "runtimes\$arch"
+            if (Test-Path -LiteralPath $native) { Remove-Item -LiteralPath $native -Recurse -Force }
+        }
+        $folders += $dir
     }
 }
+Remove-Item -LiteralPath $parts -Recurse -Force
 
-# Developer pack: the community folders plus Isle.Dev.dll from the solution build.
-# ponytail: the pack is copied as plain IL (no ReadyToRun); publish it with R2R if its start-up time ever shows.
-$pack = "src\Isle.Dev\bin\Release\net10.0-windows10.0.19041.0\Isle.Dev.dll"
-$devFramework = Join-Path $output "Isle-Dev"
-$devBundled = Join-Path $output "Isle-Dev-selfcontained"
-foreach ($pair in @(@($framework, $devFramework), @($bundled, $devBundled))) {
-    if (Test-Path -LiteralPath $pair[1]) { Remove-Item -LiteralPath $pair[1] -Recurse -Force }
-    Copy-Item -LiteralPath $pair[0] -Destination $pair[1] -Recurse
-    Copy-Item -LiteralPath $pack -Destination $pair[1]
-}
-
-if (-not $SkipTests) {
-    # --snapshot without arguments prints usage and exits with 2: proves the published app starts
-    $entry = if ($launcher) { "Isle.Launcher.exe" } else { "Isle.exe" }
-    $smoke = Start-Process -FilePath (Join-Path $framework $entry) -ArgumentList "--snapshot" -PassThru
-    if (-not $smoke.WaitForExit(30000) -or $smoke.ExitCode -ne 2) {
-        throw "$entry failed to return the snapshot usage exit code."
-    }
-    if (Test-Path (Join-Path $framework "Isle.Dev.dll")) { throw "the community build contains Isle.Dev.dll." }
-
-    # A developer-pack state renders only when the single-file exe loaded Isle.Dev.dll.
-    $png = Join-Path ([IO.Path]::GetTempPath()) "isle-dev-smoke-$PID.png"
+# Smoke checks on every folder: the right packs, and each pack really loads inside the single-file Isle.exe.
+function Snapshot($dir, $state, [int]$expected = 0) {
+    $png = Join-Path ([IO.Path]::GetTempPath()) "isle-smoke-$PID.png"
     Remove-Item -LiteralPath $png -ErrorAction SilentlyContinue
-    $smoke = Start-Process -FilePath (Join-Path $devFramework "Isle.exe") -ArgumentList "--snapshot", "sysmon-alert", "`"$png`"" -PassThru
-    if (-not $smoke.WaitForExit(60000) -or $smoke.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $png)) {
-        throw "Isle-Dev\Isle.exe did not load the developer pack (sysmon-alert snapshot failed)."
-    }
-    Remove-Item -LiteralPath $png
+    $p = Start-Process -FilePath (Join-Path $dir "Isle.exe") -ArgumentList "--snapshot", $state, "`"$png`"" -PassThru
+    if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "$dir`: --snapshot $state timed out" }
+    $ok = $p.ExitCode -eq $expected -and ($expected -ne 0 -or (Test-Path -LiteralPath $png))
+    Remove-Item -LiteralPath $png -ErrorAction SilentlyContinue
+    if (-not $ok) { throw "$dir`: --snapshot $state exited $($p.ExitCode), expected $expected" }
+}
+function Require($dir, $file, [bool]$present) {
+    if ((Test-Path -Path (Join-Path $dir $file)) -ne $present) { throw "$dir`: $file should $(if ($present) { 'be there' } else { 'not be there' })" }
+}
+Write-Host "== smoke checks" -ForegroundColor Cyan
+foreach ($dir in $folders) {
+    $dev = (Split-Path $dir -Leaf).StartsWith("Isle-Dev")
+    Require $dir "Isle.Music.dll" $true
+    Require $dir "Isle.Home.dll" (-not $dev)
+    Require $dir "Isle.Dev.dll" $dev
+    Require $dir "runtimes\win-x64\*whisper*" (-not $dev)
+    Snapshot $dir "music-pill"
+    if ($dev) { Snapshot $dir "sysmon-alert"; Snapshot $dir "timers-tab" 2 }   # 2 = unknown state: no Home code here
+    else { Snapshot $dir "timers-tab"; Snapshot $dir "sysmon-alert" 2 }
 }
 
 Write-Host "Done:" -ForegroundColor Green
-Get-ChildItem -LiteralPath $framework, $bundled, $devFramework, $devBundled -Recurse -Filter *.exe | ForEach-Object { "  {0}  ({1:N1} MB)" -f $_.FullName, ($_.Length / 1MB) }
+foreach ($dir in $folders) {
+    $size = (Get-ChildItem -LiteralPath $dir -Recurse -File | Measure-Object Length -Sum).Sum
+    "  {0}  ({1:N1} MB)" -f $dir, ($size / 1MB)
+}

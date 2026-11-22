@@ -13,9 +13,6 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
 
     public string Id => "commands";
 
-    /// <summary>Providers the developer pack adds (island, copy → providers); used while option <c>cmd.devTools</c> is on.</summary>
-    internal static readonly List<Func<IslandWindow, Action<string>, IEnumerable<ICommandProvider>>> DevProviders = [];
-
     readonly HashSet<string> _reportedConflicts = [];
 
     public void Start()
@@ -54,7 +51,6 @@ public sealed class CommandModule(IslandWindow island, Func<TimersController?> t
             new SystemProvider(),
             new WebProvider(),
             new AppsProvider(_index),
-            .. Settings.Current.OptBool("cmd.devTools", true) ? DevProviders.SelectMany(f => f(island, Copy)) : [],
         ];
         var view = new CommandBarView(providers, Run, island);
         _index.Updated += () => island.Dispatcher.BeginInvoke(view.Requery);

@@ -51,21 +51,9 @@ public partial class IslandWindow
         try
         {
             if (args.Length < 3) { Console.Error.WriteLine("usage: --snapshot <state|all> <out.png|dir> [--theme Dark|Light] [--lang en|uk] [--scale s]"); return 2; }
-            Modules.Media.MediaSnapshots.Register(SnapshotStates);
-            Modules.Timers.TimersSnapshots.Register(SnapshotStates);
-            Modules.Notes.NotesSnapshots.Register(SnapshotStates);
-            Modules.ControlCenter.ControlSnapshots.Register(SnapshotStates);
-            Modules.LiveEvents.LiveSnapshots.Register(SnapshotStates);
-            Modules.Clipboard.ClipSnapshots.Register(SnapshotStates);
-            Modules.Commands.CommandSnapshots.Register(SnapshotStates);
-            Modules.Tools.ToolsSnapshots.Register(SnapshotStates);
-            Modules.Weather.WeatherSnapshots.Register(SnapshotStates);
-            Modules.AiChat.AiSnapshots.Register(SnapshotStates);
-            Modules.Voice.VoiceSnapshots.Register(SnapshotStates);
             Modules.Agents.AgentSnapshots.Register(SnapshotStates);
-            Modules.Characters.CharacterSnapshots.Register(SnapshotStates);
             Views.SettingsPanel.SettingsSnapshots.Register(SnapshotStates);
-            DevPack.Load(); // adds the pack's states
+            Packs.Load(); // adds the packs' states
             var state = args[1];
             var output = args[2];
             string? theme = Arg(args, "--theme"), lang = Arg(args, "--lang");

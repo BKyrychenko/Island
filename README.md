@@ -138,10 +138,16 @@ that breathe, follow the cursor, dance to music and nap.
 
 ## Developer edition
 
-A build for people who live in terminals. The developer modules live in a separate pack, `Isle.Dev.dll`; the standard
-download does not contain them. `.\scripts\build.ps1` writes both: `dist\Isle` (standard) and `dist\Isle-Dev` (the same
-plus the pack), each also as `-selfcontained`. To add the pack to an existing install, drop the `Isle.Dev.dll` built
-from the same commit next to `Isle.exe`; its modules are then on by default and listed in **Settings → Modules**.
+A build for people who live in terminals. Isle ships as two packages from one codebase, each with only the files it
+needs:
+
+| Package | Contents |
+|---|---|
+| **Community** (`dist\Isle-Community`) | `Isle.exe` (window, settings, tray, hotkeys, agents) + `Isle.Music.dll` (now playing in the pill) + `Isle.Home.dll` (everything in [Features](#features), the Music tab and lyrics) |
+| **Developer** (`dist\Isle-Dev`) | `Isle.exe` + `Isle.Music.dll` + `Isle.Dev.dll` (the tools below) |
+
+Packs are DLLs next to `Isle.exe`, loaded at start-up when present and built from the same commit; their modules are on
+by default and listed in **Settings → Modules**.
 
 <table>
 <tr>
@@ -179,17 +185,6 @@ Pills when CI finishes and when a local build or test run ends —
 </td>
 <td><img src="docs/images/dev-projects.png" alt="Projects tab"></td>
 </tr>
-<tr>
-<td valign="top">
-
-### 🧰 Command bar tools
-`b64` / `b64d`, `url` / `urld`, `sha256` and other hashes, `json` (format or minify), `uuid` (v4 and v7), `now`,
-`hex` / `bin`, `port 3000`, `ip`, `ping host`, `flushdns`, `power saver|balanced|performance`, `ssh <host>`.
-JWTs, unix timestamps, ISO dates, `#colours` and `0x` numbers are decoded as you type.
-
-</td>
-<td><img src="docs/images/dev-command.png" alt="JWT decoded in the command bar"></td>
-</tr>
 </table>
 
 A **log watcher** can also follow your log files and show the first new `ERROR` / `Exception` line in the pill.
@@ -210,14 +205,14 @@ A **Usage** tab sums your Claude Code tokens for today, 7 and 30 days, with an A
 ```powershell
 git clone https://github.com/BKyrychenko/island.git
 cd island
-.\scripts\build.ps1                    # build, test and publish into dist\
-.\dist\Isle-Dev\Isle.exe               # the developer edition (standard + Isle.Dev.dll)
-.\dist\Isle\Isle.exe                   # needs the .NET 10 Desktop Runtime
-.\dist\Isle-selfcontained\Isle.exe     # or the self-contained build
+.\scripts\build.ps1                              # build, test and publish into dist\
+.\dist\Isle-Community\Isle.exe                  # needs the .NET 10 Desktop Runtime
+.\dist\Isle-Community-selfcontained\Isle.exe    # or the self-contained build
+.\dist\Isle-Dev\Isle.exe                        # the developer package (also -selfcontained)
 ```
 
-Copy the whole `dist\Isle` (or `dist\Isle-selfcontained`) folder somewhere permanent before you enable
-**Start with Windows** — the `runtimes` folder next to the exe is needed for voice to text.
+Copy the whole package folder somewhere permanent before you enable **Start with Windows** — the packs and the
+`runtimes` folder next to the exe are part of the app.
 
 For development, `dotnet build` and `dotnet test` work from the repository root.
 
@@ -271,8 +266,10 @@ The window is one layered, always-on-top WPF window animated with a hand-written
 
 ```
 src/
-  Isle/            the app: Core (settings, pill queue, modules), Modules/*, Views/*
-  Isle.Dev/        developer pack (Isle.Dev.dll), loaded at start-up when it sits next to Isle.exe
+  Isle/            the shell (Isle.exe): Core (settings, pill queue, modules, pack loader), window, settings, tray, agents
+  Isle.Music/      Music pack: media session and music pill
+  Isle.Home/       Home pack: community modules, Music tab, lyrics (needs Isle.Music)
+  Isle.Dev/        developer pack
   Isle.Hook/       helper the coding agents call to talk to Isle over a named pipe
   Isle.Launcher/   small Rust launcher that starts Isle.exe
 tests/Isle.Tests/  xUnit tests (logic, parsers, views, live Win32 checks)
@@ -286,7 +283,7 @@ are the way they are) and [`docs/VERIFICATION.md`](docs/VERIFICATION.md) (how ea
 | Flag | What it does |
 |---|---|
 | `--snapshot <state\|all> <out.png\|dir> [--theme Dark\|Light] [--lang en\|uk] [--scale 1.5]` | renders UI states to PNG (every screenshot in this README comes from it) |
-| `--transcribe <in.wav> <out.txt> [--lang en\|uk\|nl\|auto]` | runs the voice engine on a file |
+| `--transcribe <in.wav> <out.txt> [--lang en\|uk\|nl\|auto]` | runs the voice engine on a file (Community package) |
 | `ISLE_DATA_DIR=<folder>` | uses another data folder, handy for trying things without touching your data |
 
 ## Contributing
@@ -299,7 +296,8 @@ dotnet test -c Release
 ```
 
 If you change the UI, render the affected states with `--snapshot` in both themes and both languages and check them.
-New user-facing text goes into both the English and Ukrainian tables in `src/Isle/Core/Strings.Data.cs` (a test checks
+New user-facing text goes into both the English and Ukrainian tables of the project that uses it
+(`src/Isle/Core/Strings.Data.cs`, `src/Isle.Home/Core/HomeStrings.cs`, `src/Isle.Dev/Core/DevStrings.cs`; tests check
 they match).
 
 ## License

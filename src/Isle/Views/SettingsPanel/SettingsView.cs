@@ -6,7 +6,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Isle.Core;
-using Isle.Modules.AiChat;
 using Isle.Modules.Hotkeys;
 
 namespace Isle.Views.SettingsPanel;
@@ -31,12 +30,19 @@ public sealed class SettingsView : Grid, ITabView
 {
     public static readonly string[] Sections = ["general", "modules", "options", "hotkeys", "about"];
 
-    /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden). The developer pack inserts its own.</summary>
-    internal static readonly List<string> ModuleIds =
-        ["media", "lyrics", "timers", "notes", "control", "live", "clipboard", "shelf", "commands", "tools", "weather", "ai", "voice", "agents", "characters", "tray"];
+    /// <summary>Module ids in the order shown (tray last: it is the way back when the island is hidden). Packs add theirs with <see cref="AddModules"/>.</summary>
+    internal static readonly List<string> ModuleIds = ["agents", "tray"];
 
-    /// <summary>Option rows the developer pack adds after the command bar group (view, add-a-group).</summary>
-    internal static readonly List<Action<SettingsView, Action<string>>> DevOptions = [];
+    /// <summary>Option groups and rows the packs add (view, add-a-group), shown before the shell's own.</summary>
+    internal static readonly List<Action<SettingsView, Action<string>>> PackOptions = [];
+
+    /// <summary>Inserts module ids before <paramref name="before"/>, or before "tray" when that id is absent (another pack missing).</summary>
+    internal static void AddModules(string before, params string[] ids)
+    {
+        var i = ModuleIds.IndexOf(before);
+        if (i < 0) i = Math.Max(0, ModuleIds.IndexOf("tray"));
+        ModuleIds.InsertRange(i, ids);
+    }
 
     static Core.Settings S => Core.Settings.Current;
 
@@ -89,6 +95,7 @@ public sealed class SettingsView : Grid, ITabView
     }
 
     public string Section => _section;
+    internal SettingsActions Actions => _a;
 
     public void ShowSection(string section)
     {
@@ -222,69 +229,13 @@ public sealed class SettingsView : Grid, ITabView
                 _scroll.ScrollToVerticalOffset(group.TranslatePoint(new Point(), _page).Y);
             }
         };
-        OptionGroup("media");
-        Row("set.lyricsInPill", OptSwitch("lyrics.inPill", false));
-        Row("set.lyricsAlways", OptSwitch("lyrics.alwaysFetch", false));
-
-        OptionGroup("weather");
-        var city = S.Opt("weather.city");
-        Row("set.wxPlace", Link(city.Length > 0 ? city : Strings.T(S.OptBool("weather.ip") ? "set.wxIp" : "set.wxNone"), "set.change", () => _a.Open("weather")));
-        Row("set.wxUnits", Choice(["C", "F"], S.Opt("weather.units", "C") == "F" ? "F" : "C", v => { S.SetOpt("weather.units", v); Save("Options", restart: "weather"); }, null, v => "°" + v));
-        Row("set.wxInPill", OptSwitch("weather.inPill", true, restart: "weather"));
-        Row("set.wxRain", OptSwitch("weather.rainAlerts", true, restart: "weather"));
-
-        OptionGroup("live");
-        foreach (var name in Modules.LiveEvents.LiveEventsModule.SourceNames)
-        {
-            if (name == "notifications")
-            {
-                var off = Switch(false, _ => { });
-                off.IsEnabled = false;
-                Row("set.live." + name, off, "set.live.notifications.hint");
-                continue;
-            }
-            Row("set.live." + name, OptSwitch("live." + name, true));
-        }
-        Row("set.obsPort", TextField(S.OptInt("live.obsPort", 4455).ToString(CultureInfo.InvariantCulture), v =>
-        {
-            if (int.TryParse(v, out var p) && p is > 0 and < 65536) { S.SetOpt("live.obsPort", p.ToString(CultureInfo.InvariantCulture)); Save("Options", restart: "live"); }
-            else Render();
-        }, "4455", width: 70));
-        Row("set.obsPassword", SecretField("live.obsPassword", restart: "live"));
-        Row("set.downloads", TextField(S.Opt("live.downloadsFolder"), v => { S.SetOpt("live.downloadsFolder", v.Trim()); Save("Options", restart: "live"); }, Strings.T("set.default")), wide: true);
-
-        OptionGroup("clipboard");
-        Row("set.clipLimit", Choice(["50", "100", "200", "500", "1000"], S.OptInt("clip.limit", 200).ToString(CultureInfo.InvariantCulture),
-            v => { S.SetOpt("clip.limit", v); Save("Options", restart: "clipboard"); }, null, v => v));
-        Row("set.clipExcluded", TextField(S.Opt("clip.excludedApps"), v => { S.SetOpt("clip.excludedApps", v.Trim()); Save("Options"); }, "keepass, 1password"), "set.clipExcluded.hint", wide: true);
-
-        OptionGroup("shelf");
-        Row("set.shelfRemove", OptSwitch("shelf.removeAfterDrop", false));
-
-        OptionGroup("commands");
-        Row("set.cmdFolders", TextField(S.Opt("cmd.folders"), v => { S.SetOpt("cmd.folders", v.Trim()); Save("Options", restart: "commands"); }, @"C:\Users\me\Projects"), "set.cmdFolders.hint", wide: true);
-        foreach (var add in DevOptions) add(this, OptionGroup);
-
-        OptionGroup("tools");
-        Row("set.recAudio", OptSwitch("rec.systemAudio", true));
-        Row("set.recMic", OptSwitch("rec.mic", false));
-
-        OptionGroup("ai");
-        Row("set.aiProvider", Link(AiSummary(), "set.open", () => _a.Open("ai")));
-
-        OptionGroup("voice");
-        Row("set.voiceModel", Choice(["base", "small"], S.Opt("voice.model", "base") == "small" ? "small" : "base", v => { S.SetOpt("voice.model", v); Save("Options"); }, v => "set.voice." + v));
-        Row("set.voiceLang", Choice(["auto", "en", "uk", "nl"], S.Opt("voice.lang", "auto") is "en" or "uk" or "nl" ? S.Opt("voice.lang") : "auto",
-            v => { S.SetOpt("voice.lang", v); Save("Options"); }, v => "set.voiceLang." + v));
+        foreach (var add in PackOptions) add(this, OptionGroup);
 
         OptionGroup("agents");
         Row("set.agentsApprovals", OptSwitch("agents.approvals", true), "set.agentsApprovals.hint");
         Row("set.agentsTimeout", Choice(["30", "60", "120", "300"], Modules.Agents.AgentsModule.TimeoutSeconds.ToString(CultureInfo.InvariantCulture),
             v => { S.SetOpt("agents.timeout", v); Save("Options"); }, null, v => Strings.T("set.seconds", v)));
         Row("set.hooks", Link("", "set.manage", () => _a.Open("hooks")), "set.hooks.hint");
-
-        OptionGroup("characters");
-        Row("set.gallery", Link(Strings.T("chars." + S.Opt("chars.kind", "pebb")), "set.open", () => _a.Open("characters")));
     }
 
     void HotkeysPage()
@@ -348,7 +299,6 @@ public sealed class SettingsView : Grid, ITabView
         catch (Exception ex) { Logger.Error("open path", ex); }
     }
 
-    static string AiSummary() => Strings.T(AiProviders.TitleKey(AiProviders.FromSettings(S)));
 
     static List<ScreenInfo> SafeScreens()
     {
@@ -443,7 +393,7 @@ public sealed class SettingsView : Grid, ITabView
         return t;
     }
 
-    static ToggleButton Switch(bool on, Action<bool> changed)
+    internal static ToggleButton Switch(bool on, Action<bool> changed)
     {
         var s = new ToggleButton { IsChecked = on };
         s.SetResourceReference(StyleProperty, "Switch");
@@ -455,7 +405,7 @@ public sealed class SettingsView : Grid, ITabView
         Switch(S.OptBool(key, fallback), on => { S.SetOpt(key, on); Save("Options", restart); });
 
     /// <param name="labelKey">Strings key for a value (null → <paramref name="literal"/> or the value itself).</param>
-    WrapPanel Choice(IReadOnlyList<string> values, string current, Action<string> picked, Func<string, string?>? labelKey = null, Func<string, string>? literal = null)
+    internal WrapPanel Choice(IReadOnlyList<string> values, string current, Action<string> picked, Func<string, string?>? labelKey = null, Func<string, string>? literal = null)
     {
         var panel = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         var group = "set" + Guid.NewGuid().ToString("N");
@@ -536,7 +486,7 @@ public sealed class SettingsView : Grid, ITabView
         return new StackPanel { Orientation = Orientation.Horizontal, Children = { clear, new Grid { Children = { box, hint } } } };
     }
 
-    static FrameworkElement Link(string value, string buttonKey, Action click)
+    internal static FrameworkElement Link(string value, string buttonKey, Action click)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         if (value.Length > 0)

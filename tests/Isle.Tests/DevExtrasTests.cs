@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Isle.Modules.Commands;
 using Isle.Modules.Logs;
 using Isle.Modules.Ports;
 
@@ -29,29 +28,6 @@ public class DevExtrasTests
         Assert.Equal(["Ubuntu-24.04", "Debian"], rows.Select(r => r.Name));
         Assert.Equal("WSL 2", rows[0].Detail);
     }
-
-    [Fact]
-    public void Ssh_config_hosts_skip_patterns()
-    {
-        const string config = "Host *\n  ServerAlias 60\nHost prod prod-eu\n  HostName 10.0.0.5\nHost\tbastion\nHost !bad dev-*\n# Host commented\nMatch host x\n";
-        Assert.Equal(["prod", "prod-eu", "bastion"], DevSystem.SshHosts(config));
-    }
-
-    [Theory]
-    [InlineData("power saver", DevSystem.PowerPlan.Saver)]
-    [InlineData("power balanced", DevSystem.PowerPlan.Balanced)]
-    [InlineData("power performance", DevSystem.PowerPlan.Performance)]
-    [InlineData("живлення економія", DevSystem.PowerPlan.Saver)]
-    [InlineData("режим продуктивний", DevSystem.PowerPlan.Performance)]
-    public void Power_plans(string q, DevSystem.PowerPlan expected) => Assert.Equal(expected, DevSystem.ParsePower(q));
-
-    [Theory]
-    [InlineData("ping github.com", "github.com")]
-    [InlineData("ping 1.1.1.1", "1.1.1.1")]
-    [InlineData("ping localhost", "localhost")]
-    [InlineData("ping gith", null)]
-    [InlineData("ping", null)]
-    public void Ping_queries(string q, string? host) => Assert.Equal(host, DevSystem.ParsePing(q));
 
     [Fact]
     public void Log_tail_reports_only_new_matching_lines_and_survives_rotation()

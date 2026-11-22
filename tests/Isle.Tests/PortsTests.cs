@@ -50,20 +50,6 @@ public class PortsTests
     }
 
     [Fact]
-    public async Task Command_bar_answers_port_queries()
-    {
-        var p = new PortsProvider(() => [new Listener(5173, 42, "node", true)]);
-        var busy = (await p.QueryAsync("port 5173", default)).ToList();
-        Assert.Equal(2, busy.Count);
-        Assert.Contains("node", busy[0].Title);
-        Assert.True(busy[1].Confirm);
-        Assert.Single(await p.QueryAsync(":3000", default)); // free
-        Assert.Empty(await p.QueryAsync("port", default));
-        Assert.Empty(await p.QueryAsync("3000", default));
-        Assert.Empty(await p.QueryAsync("port 99999", default));
-    }
-
-    [Fact]
     public void Scanner_reads_this_machine()
     {
         var all = PortScanner.Scan(interestingOnly: false);

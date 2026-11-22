@@ -1,13 +1,13 @@
 using System.Windows.Threading;
 using Isle.Core;
-using Isle.Modules.Lyrics;
 using Isle.Views.Music;
 
 namespace Isle.Modules.Media;
 
 /// <summary>
 /// Music (module id "media"): follows the system media session, shows it in the pill (art + equalizer, title banner on
-/// track change, optional lyric line), provides the Music tab, and tints the accent from the album art.
+/// track change) and tints the accent from the album art. The Home pack adds the Music tab and the pill's lyric line
+/// through <see cref="Started"/> / <see cref="Stopping"/> and <see cref="PillLyric"/>.
 /// </summary>
 public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
 {
@@ -17,7 +17,6 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
 
     MediaSession? _session;
     MusicPill? _pill;
-    LyricsTracker? _lyrics;
     DispatcherTimer? _bannerTimer, _lingerTimer;
     string? _lastTrack, _banneredTrack;
     bool _pillShown;
@@ -28,34 +27,38 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
     /// <summary>True while a media session is playing (characters dance).</summary>
     public bool IsPlaying => _session?.Current?.IsPlaying == true;
     public IMediaSource? Source => _session;
-    public LyricsTracker? Lyrics => _lyrics;
 
-    public static bool LyricsInPill => Settings.Current.OptBool("lyrics.inPill");
-    public static bool LyricsAlwaysFetch => Settings.Current.OptBool("lyrics.alwaysFetch") || LyricsInPill;
+    /// <summary>Raised after a media module started / before it stops (the Home pack attaches the Music tab and lyrics).</summary>
+    public static event Action<MediaModule>? Started, Stopping;
+
+    /// <summary>The pill's lyric line, set by the Home pack while "lyrics.inPill" is on; null = plain pill.</summary>
+    public LyricLine? PillLyric { get; set; }
 
     public void Start()
     {
         _session = new MediaSession(island.Dispatcher);
-        _lyrics = new LyricsTracker(_session, () => App.Host.Get<LyricsModule>("lyrics")?.Service);
         _session.Changed += OnChanged;
-        _lyrics.Updated += () => _pill?.UpdateLyric();
-        island.AddTab(new TabInfo(TabId, "tab.music", "Icon.Music", () => new MusicView(_session, _lyrics), 10));
-        Settings.Changed += OnSettingsChanged;
+        Raise(Started);
         _ = StartSessionAsync(_session);
+    }
+
+    void Raise(Action<MediaModule>? e)
+    {
+        try { e?.Invoke(this); }
+        catch (Exception ex) { Logger.Error("media extension", ex); }
+    }
+
+    /// <summary>The lyric line or <see cref="PillLyric"/> changed; <paramref name="resize"/> also re-measures the pill.</summary>
+    public void RefreshPill(bool resize)
+    {
+        _pill?.UpdateLyric();
+        if (resize) ShowPill(force: true);
     }
 
     static async Task StartSessionAsync(MediaSession s)
     {
         try { await s.StartAsync(); }
         catch (Exception ex) { Logger.Error("media start (GSMTC unavailable?)", ex); }
-    }
-
-    void OnSettingsChanged(string what)
-    {
-        if (_session?.Current is null) return;
-        if (LyricsAlwaysFetch) _lyrics?.Ensure();
-        _pill?.UpdateLyric();
-        ShowPill(force: true);
     }
 
     void OnChanged()
@@ -94,17 +97,13 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
             _banneredTrack = cur.TrackKey; // a track that first shows up paused gets its banner when it starts playing
             ShowBanner(cur);
         }
-        if (newTrack)
-        {
-            island.RequestTab(TabId); // open Music first after a track change
-            if (LyricsAlwaysFetch) _lyrics?.Ensure();
-        }
+        if (newTrack) island.RequestTab(TabId); // open Music first after a track change
     }
 
     void ShowPill(bool force = false)
     {
         if (_session?.Current is not { } cur) return;
-        _pill ??= new MusicPill(_session, () => _lyrics);
+        _pill ??= new MusicPill(_session, () => PillLyric);
         _pill.Update(cur);
         if (_pillShown && !force) return;
         _pillShown = true;
@@ -154,12 +153,11 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
 
     public void Stop()
     {
-        Settings.Changed -= OnSettingsChanged;
+        Raise(Stopping);
         _bannerTimer?.Stop();
         _lingerTimer?.Stop();
         island.Pill.Remove(PillId);
         island.Pill.Remove(BannerId);
-        island.RemoveTab(TabId);
         if (_session is not null)
         {
             _session.Changed -= OnChanged;
@@ -168,7 +166,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         }
         _pill?.Dispose();
         _pill = null;
-        _lyrics = null;
+        PillLyric = null;
         Theme.SetAccent(null);
         if (_playingPublished) { _playingPublished = false; EventBus.Publish(new MusicPlaying(false)); }
     }

@@ -3,24 +3,42 @@ using System.Reflection;
 namespace Isle.Core;
 
 /// <summary>
-/// Loads the optional developer pack: exactly <c>Isle.Dev.dll</c> next to Isle.exe, only when it was built from the
-/// same commit, then calls <c>Isle.Dev.Pack.Register()</c>. Any failure is logged and Isle runs without the pack.
+/// Loads the optional packs in a fixed order: exactly <c>Isle.Music.dll</c>, <c>Isle.Home.dll</c>, <c>Isle.Dev.dll</c>
+/// next to Isle.exe, each only when built from the same commit, then calls <c>Isle.&lt;Name&gt;.Pack.Register()</c>.
+/// A pack that references another pack (Home → Music) loads only after that one registered. A failing pack (missing
+/// dependency, mismatch, exception) is logged and skipped; Isle runs with the rest.
 /// </summary>
-static class DevPack
+static class Packs
 {
+    static readonly string[] Names = ["Music", "Home", "Dev"];
+    static bool _loaded;
+
+    /// <summary>Loads once; later calls do nothing (a debug flag may load the packs before start-up does).</summary>
     public static void Load()
     {
-        try
+        if (_loaded) return;
+        _loaded = true;
+        var mine = Version(typeof(Packs).Assembly);
+        if (mine?.Contains('+') != true) Logger.Warn($"packs: Isle has no commit in its version ({mine}); packs from other commits are not detected");
+        var registered = new HashSet<string>();
+        foreach (var name in Names)
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "Isle.Dev.dll");
-            if (!File.Exists(path)) return;
-            var pack = Assembly.LoadFrom(path);
-            string? Version(Assembly a) => a.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            string? mine = Version(typeof(DevPack).Assembly), theirs = Version(pack);
-            if (mine != theirs) { Logger.Warn($"developer pack skipped: built from {theirs}, Isle is {mine}"); return; }
-            pack.GetType("Isle.Dev.Pack", throwOnError: true)!.GetMethod("Register")!.Invoke(null, null);
-            Logger.Info("developer pack loaded");
+            try
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, $"Isle.{name}.dll");
+                if (!File.Exists(path)) continue;
+                var pack = Assembly.LoadFrom(path);
+                var theirs = Version(pack);
+                if (mine != theirs) { Logger.Warn($"pack {name} skipped: built from {theirs}, Isle is {mine}"); continue; }
+                var missing = pack.GetReferencedAssemblies().Select(r => r.Name ?? "").FirstOrDefault(n => n.StartsWith("Isle.", StringComparison.Ordinal) && !registered.Contains(n));
+                if (missing is not null) { Logger.Warn($"pack {name} skipped: needs {missing}"); continue; }
+                pack.GetType($"Isle.{name}.Pack", throwOnError: true)!.GetMethod("Register")!.Invoke(null, null);
+                registered.Add($"Isle.{name}");
+                Logger.Info($"pack {name} loaded");
+            }
+            catch (Exception ex) { Logger.Error($"pack {name}", ex is TargetInvocationException { InnerException: { } inner } ? inner : ex); }
         }
-        catch (Exception ex) { Logger.Error("developer pack", ex); }
     }
+
+    static string? Version(Assembly a) => a.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 }

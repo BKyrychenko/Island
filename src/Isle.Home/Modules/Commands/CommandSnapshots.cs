@@ -27,7 +27,7 @@ static class CommandSnapshots
 
     static IEnumerable<CommandItem> Calculate(string text) => new CalculatorProvider(_ => { }).QueryAsync(text, default).Result;
 
-    internal static void Show(IslandWindow w, string text, IEnumerable<CommandItem> items)
+    static void Show(IslandWindow w, string text, IEnumerable<CommandItem> items)
     {
         var v = new CommandBarView([], _ => { }, w);
         v.SetResultsForSnapshot(text, items);

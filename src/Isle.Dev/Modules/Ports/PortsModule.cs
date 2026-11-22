@@ -1,9 +1,7 @@
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Isle.Core;
-using Isle.Modules.Commands;
 using Isle.Views.Ports;
 
 namespace Isle.Modules.Ports;
@@ -84,36 +82,4 @@ public sealed class PortsModule(IslandWindow island) : IModule, IDisposable
     }
 
     public void Dispose() => Stop();
-}
-
-/// <summary>"port 3000", ":3000" in the command bar: who listens there, open it, or end that process.</summary>
-public sealed partial class PortsProvider(Func<IReadOnlyList<Listener>>? scan = null) : ICommandProvider
-{
-    [GeneratedRegex(@"^(?:port\s+|порт\s+|:)(\d{1,5})$", RegexOptions.IgnoreCase)]
-    private static partial Regex Query();
-
-    public Task<IEnumerable<CommandItem>> QueryAsync(string text, CancellationToken ct)
-    {
-        var m = Query().Match(text.Trim());
-        if (!m.Success || !int.TryParse(m.Groups[1].Value, out var port) || port is < 1 or > 65535) return Task.FromResult(Enumerable.Empty<CommandItem>());
-        var hits = (scan ?? (() => PortScanner.Scan(interestingOnly: false)))().Where(l => l.Port == port).ToList();
-        if (hits.Count == 0)
-            return Task.FromResult<IEnumerable<CommandItem>>([new CommandItem { Title = Strings.T("ports.free", port), Subtitle = Strings.T("ports.freeHint"), IconKey = "Icon.Server", Score = 4700 }]);
-        var items = new List<CommandItem>();
-        foreach (var l in hits)
-        {
-            items.Add(new CommandItem
-            {
-                Title = Strings.T("ports.listening", l.Process, l.Pid, port), Subtitle = PortsView.Url(port), IconKey = "Icon.Server", Score = 4700,
-                Run = () => ProcessOps.Open(PortsView.Url(port)),
-            });
-            items.Add(new CommandItem
-            {
-                Title = Strings.T("sysmon.end", l.Process), Subtitle = Strings.T("ports.endHint", port), IconKey = "Icon.Close", Score = 4690,
-                Confirm = true, Confirmation = Strings.T("ports.endHint", port),
-                Run = () => ProcessOps.TryEnd(l.Pid, l.Process),
-            });
-        }
-        return Task.FromResult<IEnumerable<CommandItem>>(items);
-    }
 }

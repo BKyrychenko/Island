@@ -20,7 +20,7 @@ public sealed class UsageModule(IslandWindow island) : IModule, IDisposable
     {
         var cts = _cts = new CancellationTokenSource();
         var service = new UsageService(UsageScanner.DefaultProjectsDir(), Paths.File("usage.json"));
-        island.AddTab(new TabInfo(TabId, "tab.usage", "Icon.Code", () => new UsageView(() => service.RefreshAsync(cts.Token)), 98));
+        island.AddTab(new TabInfo(TabId, "tab.usage", "Icon.Code", () => Settings.Current.Opt("setup.agent") == "codex" ? Views.Setup.SetupView.ComingSoon() : new UsageView(() => service.RefreshAsync(cts.Token)), 98));
     }
 
     public void Stop()

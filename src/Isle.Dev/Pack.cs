@@ -22,6 +22,7 @@ public static class Pack
         App.Host.Register("usage", () => new Modules.Usage.UsageModule(App.Island!));
         SettingsView.ModuleIds.InsertRange(SettingsView.ModuleIds.IndexOf("characters"), ["sysmon", "ports", "projects", "logs", "kube", "usage"]);
         SettingsView.DevOptions.Add(Options);
+        if (App.Island is { } island) Modules.Setup.SetupFlow.ShowOnFirstExpand(island);
         CommandModule.DevProviders.Add((island, copy) =>
             [new DevToolsProvider(copy), new Modules.Ports.PortsProvider(), new DevSystemProvider(copy, m => island.Dispatcher.BeginInvoke(() => island.ShowToast(m)))]);
 
@@ -31,6 +32,7 @@ public static class Pack
         Modules.Projects.ProjectsSnapshots.Register(states);
         Modules.Kube.KubeSnapshots.Register(states);
         Modules.Usage.UsageSnapshots.Register(states);
+        Modules.Setup.SetupSnapshots.Register(states);
         states["logs-pill"] = w => w.Pill.Set(new PillItem { Id = "logs.match", Priority = PillPriority.Transient, Width = 300, Peek = true, View = () => Modules.Logs.LogWatchModule.PillView("app.log", "ERROR 500 POST /api/orders: NullReferenceException in OrderService.Create") });
         const string jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MiIsIm5hbWUiOiJBZGEiLCJleHAiOjE3NjcyMjU2MDB9.sig";
         states["command-dev-jwt"] = w => CommandSnapshots.Show(w, jwt, DevResults(jwt));
@@ -44,6 +46,8 @@ public static class Pack
     {
         var s = Settings.Current;
         v.Row("set.cmdDev", v.OptSwitch("cmd.devTools", true, restart: "commands"), "set.cmdDev.hint");
+
+        v.Row("set.setupAgain", Views.Ui.TextButton(Strings.T("set.setupAgain.run"), "FlatButton", new System.Windows.Thickness(12, 4, 12, 4), () => { if (App.Island is { } w) Modules.Setup.SetupFlow.Show(w); }, "setup again"), "set.setupAgain.hint");
 
         group("sysmon");
         v.Row("set.sysmonAlerts", v.OptSwitch("sysmon.alerts", true, restart: "sysmon"), "set.sysmonAlerts.hint");

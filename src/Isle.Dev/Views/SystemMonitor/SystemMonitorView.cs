@@ -114,6 +114,7 @@ public sealed class SystemMonitorView : Grid, ITabView, IDisposable
         var button = _confirmWsl
             ? Ui.TextButton(Strings.T("sysmon.wslConfirm"), "AccentButton", new Thickness(8, 1, 8, 1), () => _ = ShutDownWslAsync(), "sysmon wsl")
             : Ui.TextButton(Strings.T("sysmon.wslStop"), "FlatButton", new Thickness(8, 1, 8, 1), () => { _confirmWsl = true; ShowWsl(_wslBytes); }, "sysmon wsl");
+        button.ToolTip = Strings.T("sysmon.wslWarn");
         DockPanel.SetDock(button, Dock.Right);
         row.Children.Add(button);
         var mem = new TextBlock { Text = SystemMath.Size(bytes.Value), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };

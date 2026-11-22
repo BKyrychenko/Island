@@ -133,7 +133,8 @@ public sealed class KubeModule(IslandWindow island) : IModule, IDisposable
 
     internal static PillItem Indicator(string ctx) => new()
     {
-        Id = IndicatorId, Priority = PillPriority.MicCamera, Width = 240,
+        Id = IndicatorId, Priority = PillPriority.MicCamera - 1, // just below the mic/camera privacy indicator, which must win
+        Width = 240,
         View = () => new IndicatorPill("Icon.Server", ctx, Strings.T("kube.prod"), "DangerBrush"),
         Compact = () => new IndicatorPill("Icon.Server", "", "", "DangerBrush", center: true), CompactWidth = 40,
     };

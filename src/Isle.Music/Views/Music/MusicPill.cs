@@ -94,7 +94,7 @@ public sealed class MusicPill : Grid, IDisposable
 /// </summary>
 public sealed class MiniPlayerPill : Grid
 {
-    public const double PillWidth = 550;
+    public const double PillWidth = 390;
 
     readonly ArtImage _art = new(22, 6) { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(7, 0, 0, 0) };
     readonly TextBlock _text = new() { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(38, 0, 42, 0) };

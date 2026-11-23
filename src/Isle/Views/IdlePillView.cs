@@ -41,7 +41,7 @@ public sealed class IdlePillView : Grid
     public object? LeftSlot { get => _left.Content; set { _left.Content = value; RefreshHint(); } }
     public object? RightSlot { get => _right.Content; set { _right.Content = value; RefreshHint(); } }
 
-    public double DesiredPillWidth => 120;
+    public double DesiredPillWidth { get; set; } = 120; // the Music pack widens it to the mini player in the Dev package
 
     public void Refresh()
     {

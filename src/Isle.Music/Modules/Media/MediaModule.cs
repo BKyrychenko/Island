@@ -44,8 +44,11 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         _session = new MediaSession(island.Dispatcher);
         _session.Changed += OnChanged;
         Raise(Started);
+        if (!HasTab) SetIdleWidth(MiniPlayerPill.PillWidth); // same width when nothing plays
         _ = StartSessionAsync(_session);
     }
+
+    void SetIdleWidth(double w) { island.IdleView.DesiredPillWidth = w; island.Pill.Remove("idle"); island.UpdateIdlePill(); }
 
     void Raise(Action<MediaModule>? e)
     {
@@ -162,6 +165,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
     public void Stop()
     {
         Raise(Stopping);
+        if (!HasTab) SetIdleWidth(120);
         _bannerTimer?.Stop();
         _lingerTimer?.Stop();
         island.Pill.Remove(PillId);

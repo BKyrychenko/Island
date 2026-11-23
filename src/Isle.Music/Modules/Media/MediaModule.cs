@@ -84,7 +84,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         var newTrack = cur.TrackKey != _lastTrack;
         _lastTrack = cur.TrackKey;
 
-        if (cur.IsPlaying)
+        if (cur.IsPlaying || !HasTab) // the mini player stays while paused so play/pause can resume
         {
             _lingerTimer?.Stop();
             ShowPill();

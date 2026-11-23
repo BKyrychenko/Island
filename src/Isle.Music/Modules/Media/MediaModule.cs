@@ -44,7 +44,7 @@ public sealed class MediaModule(IslandWindow island) : IModule, IDisposable
         _session = new MediaSession(island.Dispatcher);
         _session.Changed += OnChanged;
         Raise(Started);
-        if (!HasTab) SetIdleWidth(MiniPlayerPill.PillWidth); // same width when nothing plays
+        if (!HasTab) SetIdleWidth(MiniPlayerPill.PillWidth * 0.8); // idle notch 20% narrower than the mini player
         _ = StartSessionAsync(_session);
     }
 

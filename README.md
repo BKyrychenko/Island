@@ -15,6 +15,8 @@ A small notch that hangs from the top of the screen, shows what is going on, and
 
 <sub>No accounts · no telemetry · no ads · about 20–30 MB of memory and under 0.5% of one CPU core when idle</sub>
 
+<sub>Looking for the developer tools (System, Ports, Projects)? They live in the [developer fork](https://github.com/Va1Geny/island).</sub>
+
 [Features](#features) · [Getting started](#getting-started) · [Hotkeys](#hotkeys) · [Privacy](#privacy) · [Architecture](#architecture)
 
 </div>

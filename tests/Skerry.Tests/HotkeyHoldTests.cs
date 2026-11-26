@@ -1,0 +1,60 @@
+using Skerry.Modules.Hotkeys;
+
+namespace Skerry.Tests;
+
+public class HotkeyHoldTests
+{
+    // Send WM_HOTKEY ids directly. Empty gestures prevent native registration on the dummy handle.
+    const int HoldId = 0x4000;
+
+    [Fact]
+    public void Shortcut_recorder_finishes_active_hold_once_and_ignores_queued_presses()
+    {
+        FakeSink.Run(sink =>
+        {
+            var hotkeys = new HotkeyService();
+            int presses = 0, releases = 0, shortcuts = 0;
+            hotkeys.Register("hold", "", "", () => presses++, () => releases++);
+            hotkeys.Register("shortcut", "", "", () => shortcuts++);
+            hotkeys.Attach(new IntPtr(1));
+
+            Assert.True(hotkeys.HandleHotkey(HoldId));
+            hotkeys.Suspend(false); // Settings can close without ever focusing the shortcut recorder.
+            Assert.Equal(0, releases);
+            Assert.True(hotkeys.HandleHotkey(HoldId + 1));
+            hotkeys.Suspend(true);
+            Assert.Equal(1, releases);
+            Assert.False(hotkeys.HandleHotkey(HoldId));
+            Assert.False(hotkeys.HandleHotkey(HoldId + 1));
+            hotkeys.Suspend(true);
+            hotkeys.Suspend(false);
+            Assert.Equal((1, 1, 1), (presses, releases, shortcuts));
+
+            Assert.True(hotkeys.HandleHotkey(HoldId + 1));
+            Assert.True(hotkeys.HandleHotkey(HoldId));
+            // The empty gesture has virtual key zero, so its next poll sees key-up.
+            Assert.True(sink.PumpUntil(() => releases == 2));
+            hotkeys.Suspend(true);
+            Assert.Equal((2, 2, 2), (presses, releases, shortcuts));
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Teardown_discards_the_pending_release(bool detach)
+    {
+        FakeSink.Run(_ =>
+        {
+            var hotkeys = new HotkeyService();
+            int releases = 0;
+            hotkeys.Register("hold", "", "", () => { }, () => releases++);
+            hotkeys.Attach(new IntPtr(1));
+            Assert.True(hotkeys.HandleHotkey(HoldId));
+            if (detach) hotkeys.Detach();
+            else hotkeys.Unregister("hold");
+            hotkeys.Suspend(true);
+            Assert.Equal(0, releases);
+        });
+    }
+}

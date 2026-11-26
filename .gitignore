@@ -1,0 +1,19 @@
+bin/
+obj/
+target/
+dist/
+TestResults/
+.vs/
+*.user
+*.suo
+
+# local run logs
+logs/
+
+# local agent and tooling files
+.claude/
+CLAUDE.md
+graphify-out/
+.graphifyignore
+DONE.flag*
+Claude outputs/

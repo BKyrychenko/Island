@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>14</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>Skerry</RootNamespace>
+    <AssemblyName>Skerry</AssemblyName>
+    <Version>1.0.0</Version>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TieredPGO>true</TieredPGO>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Skerry.Tests" />
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <!-- Agents (M13): the pipe protocol is shared with the hook helper; the helper is built first and copied next to Skerry.exe. -->
+  <ItemGroup>
+    <Compile Include="..\Skerry.Hook\HookProtocol.cs" Link="Modules\Agents\HookProtocol.cs" />
+    <ProjectReference Include="..\Skerry.Hook\Skerry.Hook.csproj" ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+  <Target Name="CopyHookHelper" AfterTargets="Build">
+    <PropertyGroup>
+      <HookOut>..\Skerry.Hook\bin\$(Configuration)\net10.0\</HookOut>
+    </PropertyGroup>
+    <ItemGroup>
+      <HookFiles Include="$(HookOut)Skerry.Hook.exe;$(HookOut)Skerry.Hook.dll;$(HookOut)Skerry.Hook.runtimeconfig.json;$(HookOut)Skerry.Hook.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HookFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(HookOut)Skerry.Hook.exe')" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="11.0.0" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+  </ItemGroup>
+
+</Project>
